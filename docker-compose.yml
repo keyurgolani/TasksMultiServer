@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: task-manager-postgres
+    environment:
+      POSTGRES_DB: taskmanager
+      POSTGRES_USER: taskmanager
+      POSTGRES_PASSWORD: taskmanager
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - task-manager-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskmanager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rest-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: task-manager-api
+    environment:
+      DATA_STORE_TYPE: ${DATA_STORE_TYPE:-postgresql}
+      POSTGRES_URL: ${POSTGRES_URL:-postgresql://taskmanager:taskmanager@postgres:5432/taskmanager}
+      FILESYSTEM_PATH: ${FILESYSTEM_PATH:-/data/tasks}
+    ports:
+      - "8000:8000"
+    volumes:
+      - filesystem_data:/data/tasks
+    networks:
+      - task-manager-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn task_manager.interfaces.rest.server:app --host 0.0.0.0 --port 8000
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    container_name: task-manager-ui
+    ports:
+      - "3000:80"
+    networks:
+      - task-manager-network
+    depends_on:
+      - rest-api
+
+volumes:
+  postgres_data:
+  filesystem_data:
+
+networks:
+  task-manager-network:
+    driver: bridge
