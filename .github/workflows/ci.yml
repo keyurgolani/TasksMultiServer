@@ -1,0 +1,234 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Format check
+      run: |
+        black --check src tests
+        isort --check-only src tests
+    
+    - name: Security audit
+      run: pip-audit
+      continue-on-error: true  # Don't fail build on audit warnings
+    
+    - name: Lint
+      run: |
+        pylint src
+        flake8 src
+    
+    - name: Type check
+      run: mypy src
+    
+    - name: Run unit tests with coverage
+      run: timeout 120s pytest --cov --cov-report=xml --cov-report=term-missing
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      if: matrix.python-version == '3.10'
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+    
+    - name: Build distribution packages
+      run: timeout 180s python -m build
+    
+    - name: Check distribution packages
+      run: |
+        pip install twine
+        twine check dist/*
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      if: matrix.python-version == '3.10'
+      with:
+        name: dist-packages
+        path: dist/
+        retention-days: 7
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Run integration tests
+      env:
+        POSTGRES_URL: postgresql://testuser:testpass@localhost:5432/testdb
+        DATA_STORE_TYPE: postgresql
+      run: timeout 180s pytest tests/integration/ -v --cov --cov-report=xml
+    
+    - name: Upload integration test coverage
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: integration
+        name: codecov-integration
+        fail_ci_if_error: false
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Run end-to-end tests
+      run: timeout 180s pytest tests/e2e/ -v
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: e2e-test-results
+        path: htmlcov/
+        retention-days: 7
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [build-and-test, integration-tests, e2e-tests]
+    if: github.event_name == 'release' && github.event.action == 'published'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+    
+    - name: Build distribution packages
+      run: timeout 180s python -m build
+    
+    - name: Publish to PyPI
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: twine upload dist/*
+    
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-packages
+        path: dist/
+        retention-days: 90
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build REST API Docker image
+      run: docker build -f Dockerfile.api -t task-manager-api:${{ github.sha }} .
+    
+    - name: Build UI Docker image
+      run: docker build -f ui/Dockerfile -t task-manager-ui:${{ github.sha }} ui/
+    
+    - name: Test Docker Compose setup
+      run: |
+        docker-compose -f docker-compose.test.yml up -d
+        sleep 10
+        docker-compose -f docker-compose.test.yml ps
+        docker-compose -f docker-compose.test.yml down
+    
+    - name: Log in to Docker Hub
+      if: github.event_name == 'release' && github.event.action == 'published'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    
+    - name: Push Docker images
+      if: github.event_name == 'release' && github.event.action == 'published'
+      run: |
+        docker tag task-manager-api:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/task-manager-api:latest
+        docker tag task-manager-api:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/task-manager-api:${{ github.event.release.tag_name }}
+        docker tag task-manager-ui:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/task-manager-ui:latest
+        docker tag task-manager-ui:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/task-manager-ui:${{ github.event.release.tag_name }}
+        docker push ${{ secrets.DOCKER_USERNAME }}/task-manager-api:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/task-manager-api:${{ github.event.release.tag_name }}
+        docker push ${{ secrets.DOCKER_USERNAME }}/task-manager-ui:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/task-manager-ui:${{ github.event.release.tag_name }}
