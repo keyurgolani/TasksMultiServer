@@ -5,6 +5,8 @@ import { Task, Status, Priority, ExitCriteriaStatus } from '../types';
 import ReadyTasksPanel from '../components/ReadyTasksPanel';
 import DependencyGraph from '../components/DependencyGraph';
 import FormError from '../components/FormError';
+import TagInput from '../components/TagInput';
+import TagFilter from '../components/TagFilter';
 
 const TasksPage: React.FC = () => {
   const { taskListId } = useParams<{ taskListId: string }>();
@@ -32,7 +34,9 @@ const TasksPage: React.FC = () => {
     status: Status.NOT_STARTED,
     priority: Priority.MEDIUM,
     exit_criteria: [''],
+    tags: [] as string[],
   });
+  const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
 
   // Load data on mount
   useEffect(() => {
@@ -44,7 +48,23 @@ const TasksPage: React.FC = () => {
   const currentTaskList = taskLists.find((tl) => tl.id === taskListId);
 
   // Filter tasks for current task list
-  const taskListTasks = tasks.filter((t) => t.task_list_id === taskListId);
+  let taskListTasks = tasks.filter((t) => t.task_list_id === taskListId);
+  
+  // Apply tag filters
+  if (selectedTagFilters.length > 0) {
+    taskListTasks = taskListTasks.filter((task) =>
+      selectedTagFilters.every((filterTag) => task.tags.includes(filterTag))
+    );
+  }
+  
+  // Get all unique tags from tasks in this task list
+  const allTags = Array.from(
+    new Set(
+      tasks
+        .filter((t) => t.task_list_id === taskListId)
+        .flatMap((t) => t.tags)
+    )
+  ).sort();
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -104,6 +124,7 @@ const TasksPage: React.FC = () => {
           status: ExitCriteriaStatus.INCOMPLETE,
         })),
         notes: [],
+        tags: formData.tags,
       });
       setFormData({
         title: '',
@@ -111,6 +132,7 @@ const TasksPage: React.FC = () => {
         status: Status.NOT_STARTED,
         priority: Priority.MEDIUM,
         exit_criteria: [''],
+        tags: [],
       });
       setShowCreateForm(false);
     } catch (error) {
@@ -149,6 +171,7 @@ const TasksPage: React.FC = () => {
             comment: existingCriteria?.comment,
           };
         }),
+        tags: formData.tags,
       });
       setFormData({
         title: '',
@@ -156,6 +179,7 @@ const TasksPage: React.FC = () => {
         status: Status.NOT_STARTED,
         priority: Priority.MEDIUM,
         exit_criteria: [''],
+        tags: [],
       });
       setEditingTask(null);
     } catch (error) {
@@ -183,6 +207,7 @@ const TasksPage: React.FC = () => {
       status: task.status,
       priority: task.priority,
       exit_criteria: task.exit_criteria.map((ec) => ec.criteria),
+      tags: task.tags || [],
     });
     setShowCreateForm(false);
   };
@@ -196,6 +221,7 @@ const TasksPage: React.FC = () => {
       status: Status.NOT_STARTED,
       priority: Priority.MEDIUM,
       exit_criteria: [''],
+      tags: [],
     });
   };
 
@@ -209,6 +235,7 @@ const TasksPage: React.FC = () => {
       status: Status.NOT_STARTED,
       priority: Priority.MEDIUM,
       exit_criteria: [''],
+      tags: [],
     });
   };
 
@@ -221,6 +248,7 @@ const TasksPage: React.FC = () => {
       status: Status.NOT_STARTED,
       priority: Priority.MEDIUM,
       exit_criteria: [''],
+      tags: [],
     });
   };
 
@@ -436,6 +464,16 @@ const TasksPage: React.FC = () => {
             </div>
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                Tags (optional)
+              </label>
+              <TagInput
+                tags={formData.tags}
+                onChange={(tags) => setFormData((prev) => ({ ...prev, tags }))}
+                placeholder="Add tags to organize tasks..."
+              />
+            </div>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
                 Exit Criteria * (at least one required)
               </label>
               {formData.exit_criteria.map((criteria, index) => (
@@ -622,6 +660,16 @@ const TasksPage: React.FC = () => {
             </div>
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                Tags (optional)
+              </label>
+              <TagInput
+                tags={formData.tags}
+                onChange={(tags) => setFormData((prev) => ({ ...prev, tags }))}
+                placeholder="Add tags to organize tasks..."
+              />
+            </div>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
                 Exit Criteria * (at least one required)
               </label>
               {formData.exit_criteria.map((criteria, index) => (
@@ -726,6 +774,19 @@ const TasksPage: React.FC = () => {
         </div>
       )}
 
+      {/* Tag Filter */}
+      {allTags.length > 0 && !showCreateForm && !editingTask && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <TagFilter
+            availableTags={allTags}
+            selectedTags={selectedTagFilters}
+            onTagSelect={(tag) => setSelectedTagFilters([...selectedTagFilters, tag])}
+            onTagDeselect={(tag) => setSelectedTagFilters(selectedTagFilters.filter((t) => t !== tag))}
+            onClearAll={() => setSelectedTagFilters([])}
+          />
+        </div>
+      )}
+
       {/* Loading State */}
       {loading && taskListTasks.length === 0 && (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
@@ -734,9 +795,16 @@ const TasksPage: React.FC = () => {
       )}
 
       {/* Empty State */}
-      {!loading && taskListTasks.length === 0 && (
+      {!loading && taskListTasks.length === 0 && selectedTagFilters.length === 0 && (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
           No tasks found. Create your first task to get started.
+        </div>
+      )}
+
+      {/* Empty State with Filters */}
+      {!loading && taskListTasks.length === 0 && selectedTagFilters.length > 0 && (
+        <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
+          No tasks match the selected filters. Try adjusting your tag selection.
         </div>
       )}
 
@@ -788,6 +856,25 @@ const TasksPage: React.FC = () => {
                     <p style={{ margin: '0 0 0.5rem 0', color: '#666' }}>
                       {task.description}
                     </p>
+                    {task.tags && task.tags.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.5rem' }}>
+                        {task.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            style={{
+                              fontSize: '0.75rem',
+                              padding: '0.25rem 0.5rem',
+                              backgroundColor: '#e3f2fd',
+                              color: '#1976d2',
+                              borderRadius: '12px',
+                              fontWeight: '500',
+                            }}
+                          >
+                            🏷️ {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '0.5rem' }}>
                       <div>Exit Criteria: {completedCriteria} / {totalCriteria} completed</div>
                       <div>Dependencies: {task.dependencies.length}</div>

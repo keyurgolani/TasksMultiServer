@@ -229,6 +229,7 @@ class FilesystemStore(DataStore):
                     else None
                 ),
                 "agent_instructions_template": entity.agent_instructions_template,
+                "tags": entity.tags,
             }
         else:
             raise FilesystemStoreError(f"Unknown entity type: {type(entity)}")
@@ -332,6 +333,7 @@ class FilesystemStore(DataStore):
                 else None
             ),
             agent_instructions_template=data.get("agent_instructions_template"),
+            tags=data.get("tags", []),
         )
 
     def _write_json_atomic(self, file_path: pathlib.Path, data: dict) -> None:

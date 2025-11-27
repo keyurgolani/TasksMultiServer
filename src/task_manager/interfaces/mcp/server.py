@@ -28,11 +28,14 @@ from task_manager.data.access.filesystem_store import FilesystemStoreError
 from task_manager.data.access.postgresql_store import StorageError
 from task_manager.data.config import ConfigurationError, create_data_store
 from task_manager.data.delegation.data_store import DataStore
+from task_manager.formatting.error_formatter import ErrorFormatter
 from task_manager.orchestration.dependency_orchestrator import DependencyOrchestrator
 from task_manager.orchestration.project_orchestrator import ProjectOrchestrator
+from task_manager.orchestration.tag_orchestrator import TagOrchestrator
 from task_manager.orchestration.task_list_orchestrator import TaskListOrchestrator
 from task_manager.orchestration.task_orchestrator import TaskOrchestrator
 from task_manager.orchestration.template_engine import TemplateEngine
+from task_manager.preprocessing.parameter_preprocessor import ParameterPreprocessor
 
 
 class TaskManagerMCPServer:
@@ -79,7 +82,14 @@ class TaskManagerMCPServer:
         self.task_list_orchestrator = TaskListOrchestrator(self.data_store)
         self.task_orchestrator = TaskOrchestrator(self.data_store)
         self.dependency_orchestrator = DependencyOrchestrator(self.data_store)
+        self.tag_orchestrator = TagOrchestrator(self.data_store)
         self.template_engine = TemplateEngine(self.data_store)
+
+        # Initialize preprocessing layer
+        self.preprocessor = ParameterPreprocessor()
+
+        # Initialize error formatter
+        self.error_formatter = ErrorFormatter()
 
         # Register MCP tool handlers
         self._register_handlers()
@@ -88,7 +98,7 @@ class TaskManagerMCPServer:
         """Format an exception into an MCP error response.
 
         This method transforms different types of errors into appropriate
-        MCP error messages with consistent formatting.
+        MCP error messages with enhanced formatting using ErrorFormatter.
 
         Args:
             error: The exception to format
@@ -102,27 +112,124 @@ class TaskManagerMCPServer:
             - StorageError/FilesystemStoreError: Storage operation failures
             - Other exceptions: Unexpected errors
 
-        Requirements: 11.1-11.13
+        Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 11.1-11.13
         """
+        error_msg = str(error)
+
         # Validation errors (business logic and input validation)
         if isinstance(error, ValueError):
-            error_msg = f"Validation error in {context}: {str(error)}"
+            # Try to parse the error message to provide enhanced formatting
+            # Common patterns: "field_name: error description" or "error description"
+            if ": " in error_msg:
+                parts = error_msg.split(": ", 1)
+                field = parts[0].strip()
+                description = parts[1].strip()
+
+                # Determine error type based on description
+                error_type = "invalid_value"
+                if "required" in description.lower() or "missing" in description.lower():
+                    error_type = "missing"
+                elif "invalid type" in description.lower() or "must be" in description.lower():
+                    error_type = "invalid_type"
+                elif "invalid format" in description.lower():
+                    error_type = "invalid_format"
+                elif (
+                    "invalid enum" in description.lower() or "must be one of" in description.lower()
+                ):
+                    error_type = "invalid_enum"
+
+                # Format using ErrorFormatter
+                formatted_error = self.error_formatter.format_validation_error(
+                    field=field,
+                    error_type=error_type,
+                    received_value=description,
+                )
+                error_msg = f"Validation error in {context}:\n\n{formatted_error}"
+            else:
+                # Generic validation error - include original message with enhanced formatting
+                error_msg = f"Validation error in {context}:\n\n❌ {error_msg}\n💡 Check the input parameters and try again\n\n🔧 Common fixes:\n1. Verify all required fields are provided\n2. Check that values match expected types\n3. Review the API documentation for correct usage"
+
             return [TextContent(type="text", text=error_msg)]
 
         # Storage errors (PostgreSQL)
         elif isinstance(error, StorageError):
-            error_msg = f"Storage error in {context}: {str(error)}"
+            # Format storage errors with visual indicators
+            error_msg = f"Storage error in {context}:\n\n❌ Database operation failed: {error_msg}\n💡 Check database connectivity and configuration\n\n🔧 Common fixes:\n1. Verify database is running and accessible\n2. Check database credentials\n3. Ensure database schema is up to date"
             return [TextContent(type="text", text=error_msg)]
 
         # Filesystem storage errors
         elif isinstance(error, FilesystemStoreError):
-            error_msg = f"Filesystem storage error in {context}: {str(error)}"
+            # Format filesystem errors with visual indicators
+            error_msg = f"Filesystem storage error in {context}:\n\n❌ Filesystem operation failed: {error_msg}\n💡 Check file permissions and paths\n\n🔧 Common fixes:\n1. Verify file permissions are correct\n2. Ensure filesystem path exists\n3. Check for sufficient disk space"
             return [TextContent(type="text", text=error_msg)]
 
         # Unexpected errors
         else:
-            error_msg = f"Unexpected error in {context}: {str(error)}"
+            # Format unexpected errors with visual indicators
+            error_msg = f"❌ Unexpected error in {context}: {error_msg}\n💡 Review the error details and try again\n\n🔧 Common fixes:\n1. Check the operation parameters\n2. Review the error message for details\n3. Contact support if the issue persists"
             return [TextContent(type="text", text=error_msg)]
+
+    def _preprocess_arguments(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Preprocess tool arguments for agent-friendly type conversion.
+
+        This method applies automatic type conversion to common agent input patterns:
+        - String numbers → Numbers
+        - JSON strings → Arrays/Objects
+        - Boolean strings → Booleans
+
+        Args:
+            tool_name: The name of the tool being called
+            arguments: The raw arguments from the agent
+
+        Returns:
+            Preprocessed arguments with converted types
+
+        Requirements: 1.1, 1.2, 1.3, 1.4
+        """
+        # Define preprocessing rules for each tool
+        # Map field names to expected types for preprocessing
+        preprocessing_rules = {
+            "create_task_list": {
+                "repeatable": bool,
+            },
+            "create_task": {
+                "dependencies": list,
+                "exit_criteria": list,
+                "notes": list,
+                "research_notes": list,
+                "action_plan": list,
+                "execution_notes": list,
+                "tags": list,
+            },
+            "update_task_dependencies": {
+                "dependencies": list,
+            },
+            "update_action_plan": {
+                "action_plan": list,
+            },
+            "update_exit_criteria": {
+                "exit_criteria": list,
+            },
+            "add_task_tags": {
+                "tags": list,
+            },
+            "remove_task_tags": {
+                "tags": list,
+            },
+        }
+
+        # Get rules for this tool
+        rules = preprocessing_rules.get(tool_name, {})
+
+        # Apply preprocessing
+        preprocessed = {}
+        for key, value in arguments.items():
+            if key in rules:
+                preprocessed[key] = self.preprocessor.preprocess(value, rules[key])
+            else:
+                preprocessed[key] = value
+
+        return preprocessed
 
     def _register_handlers(self) -> None:
         """Register MCP tool handlers.
@@ -197,7 +304,7 @@ class TaskManagerMCPServer:
                 ),
                 Tool(
                     name="create_task",
-                    description="Create a new task with all required fields (title, description, status, dependencies, exit_criteria, priority, notes) and optional fields (research_notes, action_plan, execution_notes, agent_instructions_template)",
+                    description="Create a new task with all required fields (title, description, status, dependencies, exit_criteria, priority, notes) and optional fields (research_notes, action_plan, execution_notes, agent_instructions_template, tags)",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -317,6 +424,16 @@ class TaskManagerMCPServer:
                             "agent_instructions_template": {
                                 "type": "string",
                                 "description": "Optional template for generating agent instructions",
+                            },
+                            "tags": {
+                                "description": "Optional list of tags for categorization - JSON string or array",
+                                "oneOf": [
+                                    {"type": "string"},
+                                    {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
+                                ],
                             },
                         },
                         "required": [
@@ -519,6 +636,54 @@ class TaskManagerMCPServer:
                         "required": ["scope_type", "scope_id"],
                     },
                 ),
+                Tool(
+                    name="add_task_tags",
+                    description="Add tags to a task with validation and deduplication. Tags are labels for categorization and filtering.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "task_id": {
+                                "type": "string",
+                                "description": "The UUID of the task to add tags to",
+                            },
+                            "tags": {
+                                "description": "List of tag strings to add - JSON string or array",
+                                "oneOf": [
+                                    {"type": "string"},
+                                    {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
+                                ],
+                            },
+                        },
+                        "required": ["task_id", "tags"],
+                    },
+                ),
+                Tool(
+                    name="remove_task_tags",
+                    description="Remove tags from a task. Tags that don't exist on the task are silently ignored.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "task_id": {
+                                "type": "string",
+                                "description": "The UUID of the task to remove tags from",
+                            },
+                            "tags": {
+                                "description": "List of tag strings to remove - JSON string or array",
+                                "oneOf": [
+                                    {"type": "string"},
+                                    {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
+                                ],
+                            },
+                        },
+                        "required": ["task_id", "tags"],
+                    },
+                ),
             ]
 
         @self.server.call_tool()
@@ -541,6 +706,9 @@ class TaskManagerMCPServer:
             print(f"[MCP DEBUG] Arguments type: {type(arguments)}", file=sys.stderr)
             for key, value in arguments.items():
                 print(f"[MCP DEBUG]   {key}: {value} (type: {type(value)})", file=sys.stderr)
+
+            # Apply preprocessing to arguments
+            arguments = self._preprocess_arguments(name, arguments)
 
             if name == "list_projects":
                 return await self._handle_list_projects()
@@ -570,6 +738,10 @@ class TaskManagerMCPServer:
                 return await self._handle_update_task_status(arguments)
             elif name == "get_ready_tasks":
                 return await self._handle_get_ready_tasks(arguments)
+            elif name == "add_task_tags":
+                return await self._handle_add_task_tags(arguments)
+            elif name == "remove_task_tags":
+                return await self._handle_remove_task_tags(arguments)
 
             raise ValueError(f"Unknown tool: {name}")
 
@@ -811,17 +983,19 @@ class TaskManagerMCPServer:
             except ValueError:
                 return [TextContent(type="text", text=f"Error: Invalid priority: {priority_str}")]
 
-            # Parse dependencies (default to empty list if not provided, handle JSON string)
+            # Parse dependencies (default to empty list if not provided)
+            # Preprocessing has already converted JSON strings to arrays
             dependencies_data = (
                 arguments.get("dependencies") if arguments.get("dependencies") is not None else []
             )
-            if isinstance(dependencies_data, str):
-                import json
-
-                try:
-                    dependencies_data = json.loads(dependencies_data)
-                except json.JSONDecodeError:
-                    dependencies_data = []
+            # Ensure dependencies_data is a list
+            if not isinstance(dependencies_data, list):
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Error: dependencies must be an array, got {type(dependencies_data).__name__}",
+                    )
+                ]
             dependencies = []
             for dep_data in dependencies_data:
                 try:
@@ -833,22 +1007,23 @@ class TaskManagerMCPServer:
                 except (KeyError, ValueError) as e:
                     return [TextContent(type="text", text=f"Error: Invalid dependency format: {e}")]
 
-            # Parse exit criteria (handle both array and JSON string)
+            # Parse exit criteria
+            # Preprocessing has already converted JSON strings to arrays
             exit_criteria_data = arguments.get("exit_criteria", [])
-            if isinstance(exit_criteria_data, str):
-                import json
-
-                try:
-                    exit_criteria_data = json.loads(exit_criteria_data)
-                except json.JSONDecodeError as e:
-                    return [
-                        TextContent(type="text", text=f"Error: Invalid JSON in exit_criteria: {e}")
-                    ]
 
             if not exit_criteria_data:
                 return [
                     TextContent(
                         type="text", text="Error: exit_criteria is required and must not be empty"
+                    )
+                ]
+
+            # Ensure exit_criteria_data is a list
+            if not isinstance(exit_criteria_data, list):
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Error: exit_criteria must be an array, got {type(exit_criteria_data).__name__}",
                     )
                 ]
 
@@ -866,15 +1041,17 @@ class TaskManagerMCPServer:
                         TextContent(type="text", text=f"Error: Invalid exit criteria format: {e}")
                     ]
 
-            # Parse notes (default to empty list if not provided, handle JSON string)
+            # Parse notes (default to empty list if not provided)
+            # Preprocessing has already converted JSON strings to arrays
             notes_data = arguments.get("notes") if arguments.get("notes") is not None else []
-            if isinstance(notes_data, str):
-                import json
-
-                try:
-                    notes_data = json.loads(notes_data)
-                except json.JSONDecodeError:
-                    notes_data = []
+            # Ensure notes_data is a list
+            if not isinstance(notes_data, list):
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Error: notes must be an array, got {type(notes_data).__name__}",
+                    )
+                ]
             notes = []
             for note_data in notes_data:
                 try:
@@ -942,6 +1119,21 @@ class TaskManagerMCPServer:
 
             agent_instructions_template = arguments.get("agent_instructions_template")
 
+            # Parse tags (optional)
+            # Preprocessing has already converted JSON strings to arrays
+            tags_data = arguments.get("tags")
+            tags = []
+            if tags_data:
+                # Ensure tags_data is a list
+                if not isinstance(tags_data, list):
+                    return [
+                        TextContent(
+                            type="text",
+                            text=f"Error: tags must be an array, got {type(tags_data).__name__}",
+                        )
+                    ]
+                tags = tags_data
+
             # Create task through orchestrator
             task = self.task_orchestrator.create_task(
                 task_list_id=task_list_id,
@@ -956,6 +1148,7 @@ class TaskManagerMCPServer:
                 action_plan=action_plan,
                 execution_notes=execution_notes,
                 agent_instructions_template=agent_instructions_template,
+                tags=tags,
             )
 
             # Format result
@@ -1263,20 +1456,20 @@ class TaskManagerMCPServer:
             except ValueError:
                 return [TextContent(type="text", text=f"Error: Invalid UUID format: {task_id_str}")]
 
-            # Parse exit criteria (handle both array and JSON string)
+            # Parse exit criteria
+            # Preprocessing has already converted JSON strings to arrays
             exit_criteria_data = arguments.get("exit_criteria")
             if not exit_criteria_data:
                 return [TextContent(type="text", text="Error: exit_criteria is required")]
 
-            if isinstance(exit_criteria_data, str):
-                import json
-
-                try:
-                    exit_criteria_data = json.loads(exit_criteria_data)
-                except json.JSONDecodeError as e:
-                    return [
-                        TextContent(type="text", text=f"Error: Invalid JSON in exit_criteria: {e}")
-                    ]
+            # Ensure exit_criteria_data is a list
+            if not isinstance(exit_criteria_data, list):
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Error: exit_criteria must be an array, got {type(exit_criteria_data).__name__}",
+                    )
+                ]
 
             exit_criteria = []
             for ec_data in exit_criteria_data:
@@ -1429,6 +1622,104 @@ class TaskManagerMCPServer:
             return [TextContent(type="text", text=result)]
         except Exception as e:
             return self._format_error_response(e, "get_ready_tasks")
+
+    async def _handle_add_task_tags(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle add_task_tags tool call.
+
+        Adds tags to a task with validation and deduplication.
+
+        Args:
+            arguments: Dictionary containing 'task_id' and 'tags' keys
+
+        Returns:
+            List containing a single TextContent with confirmation
+
+        Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
+        """
+        try:
+            from uuid import UUID
+
+            # Parse task ID
+            task_id_str = arguments.get("task_id")
+            if not task_id_str:
+                return [TextContent(type="text", text="Error: task_id is required")]
+
+            try:
+                task_id = UUID(task_id_str)
+            except ValueError:
+                return [TextContent(type="text", text=f"Error: Invalid UUID format: {task_id_str}")]
+
+            # Parse tags
+            # Preprocessing has already converted JSON strings to arrays
+            tags_data = arguments.get("tags")
+            if not tags_data:
+                return [TextContent(type="text", text="Error: tags is required")]
+
+            # Ensure tags_data is a list
+            if not isinstance(tags_data, list):
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Error: tags must be an array, got {type(tags_data).__name__}",
+                    )
+                ]
+
+            # Add tags through orchestrator
+            task = self.tag_orchestrator.add_tags(task_id, tags_data)
+
+            result = f"Tags added successfully. Task now has {len(task.tags)} tags: {', '.join(task.tags)}"
+            return [TextContent(type="text", text=result)]
+        except Exception as e:
+            return self._format_error_response(e, "add_task_tags")
+
+    async def _handle_remove_task_tags(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle remove_task_tags tool call.
+
+        Removes tags from a task.
+
+        Args:
+            arguments: Dictionary containing 'task_id' and 'tags' keys
+
+        Returns:
+            List containing a single TextContent with confirmation
+
+        Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
+        """
+        try:
+            from uuid import UUID
+
+            # Parse task ID
+            task_id_str = arguments.get("task_id")
+            if not task_id_str:
+                return [TextContent(type="text", text="Error: task_id is required")]
+
+            try:
+                task_id = UUID(task_id_str)
+            except ValueError:
+                return [TextContent(type="text", text=f"Error: Invalid UUID format: {task_id_str}")]
+
+            # Parse tags
+            # Preprocessing has already converted JSON strings to arrays
+            tags_data = arguments.get("tags")
+            if not tags_data:
+                return [TextContent(type="text", text="Error: tags is required")]
+
+            # Ensure tags_data is a list
+            if not isinstance(tags_data, list):
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Error: tags must be an array, got {type(tags_data).__name__}",
+                    )
+                ]
+
+            # Remove tags through orchestrator
+            task = self.tag_orchestrator.remove_tags(task_id, tags_data)
+
+            result = f"Tags removed successfully. Task now has {len(task.tags)} tags: {', '.join(task.tags) if task.tags else 'none'}"
+            return [TextContent(type="text", text=result)]
+        except Exception as e:
+            return self._format_error_response(e, "remove_task_tags")
 
     async def run(self) -> None:
         """Run the MCP server.

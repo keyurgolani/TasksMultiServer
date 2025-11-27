@@ -3,6 +3,16 @@
 These tests simulate complete user workflows through the REST API,
 which is what the React UI uses. They test the full stack integration
 including error handling and data flow.
+
+IMPORTANT: These tests connect to http://localhost:8000 and will create
+test data in the connected database. They are excluded from regular test
+runs and should only be run manually against a dedicated test environment.
+
+To run these tests:
+    pytest tests/e2e/ -v
+
+To run with the regular test suite:
+    pytest -m e2e
 """
 
 import time
@@ -13,7 +23,10 @@ import pytest
 import requests
 
 # Base URL for the REST API
+# WARNING: This connects to the actual running instance on localhost:8000
 API_BASE_URL = "http://localhost:8000"
+
+pytestmark = pytest.mark.e2e
 
 
 @pytest.fixture(scope="module")

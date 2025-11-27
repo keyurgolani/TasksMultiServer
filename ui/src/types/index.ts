@@ -79,6 +79,7 @@ export interface Task {
   action_plan?: ActionPlanItem[];
   execution_notes?: Note[];
   agent_instructions_template?: string;
+  tags: string[];
   created_at: string;
   updated_at: string;
 }

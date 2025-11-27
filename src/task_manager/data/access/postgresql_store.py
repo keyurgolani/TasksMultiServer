@@ -467,6 +467,7 @@ class PostgreSQLStore(DataStore):
                 status=task.status,
                 priority=task.priority,
                 agent_instructions_template=task.agent_instructions_template,
+                tags=task.tags,
                 created_at=task.created_at,
                 updated_at=task.updated_at,
             )
@@ -594,6 +595,7 @@ class PostgreSQLStore(DataStore):
             task_model.status = task.status
             task_model.priority = task.priority
             task_model.agent_instructions_template = task.agent_instructions_template
+            task_model.tags = task.tags
             task_model.updated_at = datetime.now(timezone.utc)
 
             # Update dependencies - delete all and recreate
@@ -837,4 +839,5 @@ class PostgreSQLStore(DataStore):
             action_plan=action_plan,
             execution_notes=execution_notes if execution_notes else None,
             agent_instructions_template=model.agent_instructions_template,
+            tags=model.tags if model.tags else [],
         )

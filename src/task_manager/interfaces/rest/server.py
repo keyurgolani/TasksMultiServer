@@ -22,11 +22,14 @@ from fastapi.responses import JSONResponse
 
 from task_manager.data.config import ConfigurationError, create_data_store
 from task_manager.data.delegation.data_store import DataStore
+from task_manager.formatting.error_formatter import ErrorFormatter
 from task_manager.orchestration.dependency_orchestrator import DependencyOrchestrator
 from task_manager.orchestration.project_orchestrator import ProjectOrchestrator
+from task_manager.orchestration.tag_orchestrator import TagOrchestrator
 from task_manager.orchestration.task_list_orchestrator import TaskListOrchestrator
 from task_manager.orchestration.task_orchestrator import TaskOrchestrator
 from task_manager.orchestration.template_engine import TemplateEngine
+from task_manager.preprocessing.parameter_preprocessor import ParameterPreprocessor
 
 # ============================================================================
 # Custom Exception Classes
@@ -105,6 +108,9 @@ task_list_orchestrator: TaskListOrchestrator = None  # type: ignore
 task_orchestrator: TaskOrchestrator = None  # type: ignore
 dependency_orchestrator: DependencyOrchestrator = None  # type: ignore
 template_engine: TemplateEngine = None  # type: ignore
+preprocessor: ParameterPreprocessor = None  # type: ignore
+error_formatter: ErrorFormatter = None  # type: ignore
+tag_orchestrator: "TagOrchestrator" = None  # type: ignore
 
 
 @asynccontextmanager
@@ -126,7 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Requirements: 15.1, 15.2
     """
     global data_store, project_orchestrator, task_list_orchestrator
-    global task_orchestrator, dependency_orchestrator, template_engine
+    global task_orchestrator, dependency_orchestrator, template_engine, preprocessor, error_formatter, tag_orchestrator
 
     # Startup: Initialize backing store from environment variables
     logger.info("Initializing Task Management System REST API...")
@@ -145,7 +151,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         task_orchestrator = TaskOrchestrator(data_store)
         dependency_orchestrator = DependencyOrchestrator(data_store)
         template_engine = TemplateEngine(data_store)
+        tag_orchestrator = TagOrchestrator(data_store)
         logger.info("Orchestrators initialized successfully")
+
+        # Initialize preprocessing layer
+        preprocessor = ParameterPreprocessor()
+        logger.info("Preprocessing layer initialized successfully")
+
+        # Initialize error formatter
+        error_formatter = ErrorFormatter()
+        logger.info("Error formatter initialized successfully")
 
         logger.info("REST API startup complete")
 
@@ -174,6 +189,97 @@ app = FastAPI(
 
 
 # ============================================================================
+# Error Formatting Helper
+# ============================================================================
+
+
+def format_error_with_formatter(
+    error_code: str,
+    error_message: str,
+    details: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Format an error using the ErrorFormatter for enhanced error messages.
+
+    This function attempts to parse error messages and apply enhanced formatting
+    with visual indicators, guidance, and examples using the ErrorFormatter.
+
+    Args:
+        error_code: The error code (e.g., "VALIDATION_ERROR")
+        error_message: The error message to format
+        details: Optional error details
+
+    Returns:
+        Dictionary with formatted error information
+
+    Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6
+    """
+    details = details or {}
+
+    # Try to extract field name and error type from the message
+    # Common patterns: "field_name: error description" or "Missing required field: field_name"
+    formatted_message = error_message
+
+    # Check if we can apply enhanced formatting
+    if error_formatter is not None:
+        # Pattern 1: "Missing required field: field_name"
+        if "Missing required field:" in error_message:
+            field = error_message.split("Missing required field:")[-1].strip()
+            formatted_message = error_formatter.format_validation_error(
+                field=field,
+                error_type="missing",
+                received_value=None,
+            )
+        # Pattern 2: "Invalid X value: value"
+        elif "Invalid" in error_message and "value:" in error_message:
+            parts = error_message.split(":")
+            if len(parts) >= 2:
+                field_part = parts[0].replace("Invalid", "").replace("value", "").strip()
+                received_value = parts[1].strip() if len(parts) > 1 else "unknown"
+                valid_values = details.get("valid_values")
+
+                formatted_message = error_formatter.format_validation_error(
+                    field=field_part,
+                    error_type="invalid_enum" if valid_values else "invalid_value",
+                    received_value=received_value,
+                    valid_values=valid_values,
+                )
+        # Pattern 3: "field: error description"
+        elif ": " in error_message and not error_message.startswith("Error"):
+            parts = error_message.split(": ", 1)
+            field = parts[0].strip()
+            description = parts[1].strip()
+
+            # Determine error type based on description
+            error_type = "invalid_value"
+            if "required" in description.lower() or "missing" in description.lower():
+                error_type = "missing"
+            elif "invalid type" in description.lower() or "must be" in description.lower():
+                error_type = "invalid_type"
+            elif "invalid format" in description.lower():
+                error_type = "invalid_format"
+            elif "invalid enum" in description.lower() or "must be one of" in description.lower():
+                error_type = "invalid_enum"
+
+            formatted_message = error_formatter.format_validation_error(
+                field=field,
+                error_type=error_type,
+                received_value=description,
+                valid_values=details.get("valid_values"),
+            )
+        # Generic error - add visual indicators
+        else:
+            formatted_message = f"❌ {error_message}\n💡 Check the input parameters and try again\n\n🔧 Common fixes:\n1. Verify all required fields are provided\n2. Check that values match expected types\n3. Review the API documentation for correct usage"
+
+    return {
+        "error": {
+            "code": error_code,
+            "message": formatted_message,
+            "details": details,
+        }
+    }
+
+
+# ============================================================================
 # Global Exception Handlers
 # ============================================================================
 
@@ -182,7 +288,7 @@ app = FastAPI(
 async def validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
     """Handle validation errors.
 
-    Transforms validation errors to HTTP 400 with error details.
+    Transforms validation errors to HTTP 400 with error details using ErrorFormatter.
 
     Args:
         request: The HTTP request that caused the error
@@ -191,14 +297,12 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
     Returns:
         JSON response with HTTP 400 status code
 
-    Requirements: 12.5
+    Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 12.5
     """
     logger.warning(f"Validation error: {exc.message}")
     return JSONResponse(
         status_code=400,
-        content={
-            "error": {"code": "VALIDATION_ERROR", "message": exc.message, "details": exc.details}
-        },
+        content=format_error_with_formatter("VALIDATION_ERROR", exc.message, exc.details),
     )
 
 
@@ -206,7 +310,7 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
 async def business_logic_error_handler(request: Request, exc: BusinessLogicError) -> JSONResponse:
     """Handle business logic errors.
 
-    Transforms business logic errors to HTTP 409 with error details.
+    Transforms business logic errors to HTTP 409 with error details using ErrorFormatter.
 
     Args:
         request: The HTTP request that caused the error
@@ -215,18 +319,12 @@ async def business_logic_error_handler(request: Request, exc: BusinessLogicError
     Returns:
         JSON response with HTTP 409 status code
 
-    Requirements: 12.5
+    Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 12.5
     """
     logger.warning(f"Business logic error: {exc.message}")
     return JSONResponse(
         status_code=409,
-        content={
-            "error": {
-                "code": "BUSINESS_LOGIC_ERROR",
-                "message": exc.message,
-                "details": exc.details,
-            }
-        },
+        content=format_error_with_formatter("BUSINESS_LOGIC_ERROR", exc.message, exc.details),
     )
 
 
@@ -234,7 +332,7 @@ async def business_logic_error_handler(request: Request, exc: BusinessLogicError
 async def not_found_error_handler(request: Request, exc: NotFoundError) -> JSONResponse:
     """Handle not found errors.
 
-    Transforms not found errors to HTTP 404 with error details.
+    Transforms not found errors to HTTP 404 with error details using ErrorFormatter.
 
     Args:
         request: The HTTP request that caused the error
@@ -243,12 +341,12 @@ async def not_found_error_handler(request: Request, exc: NotFoundError) -> JSONR
     Returns:
         JSON response with HTTP 404 status code
 
-    Requirements: 12.5
+    Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 12.5
     """
     logger.info(f"Not found: {exc.message}")
     return JSONResponse(
         status_code=404,
-        content={"error": {"code": "NOT_FOUND", "message": exc.message, "details": exc.details}},
+        content=format_error_with_formatter("NOT_FOUND", exc.message, exc.details),
     )
 
 
@@ -256,7 +354,7 @@ async def not_found_error_handler(request: Request, exc: NotFoundError) -> JSONR
 async def storage_error_handler(request: Request, exc: StorageError) -> JSONResponse:
     """Handle storage errors.
 
-    Transforms storage errors to HTTP 500 with error details.
+    Transforms storage errors to HTTP 500 with error details using ErrorFormatter.
 
     Args:
         request: The HTTP request that caused the error
@@ -265,13 +363,15 @@ async def storage_error_handler(request: Request, exc: StorageError) -> JSONResp
     Returns:
         JSON response with HTTP 500 status code
 
-    Requirements: 12.5
+    Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 12.5
     """
     logger.error(f"Storage error: {exc.message}")
+    # Add visual indicators for storage errors
+    formatted_message = f"❌ Storage operation failed: {exc.message}\n💡 Check database connectivity and configuration\n\n🔧 Common fixes:\n1. Verify database is running and accessible\n2. Check database credentials\n3. Ensure database schema is up to date"
     return JSONResponse(
         status_code=500,
         content={
-            "error": {"code": "STORAGE_ERROR", "message": exc.message, "details": exc.details}
+            "error": {"code": "STORAGE_ERROR", "message": formatted_message, "details": exc.details}
         },
     )
 
@@ -280,7 +380,7 @@ async def storage_error_handler(request: Request, exc: StorageError) -> JSONResp
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle unexpected exceptions.
 
-    Catches any unhandled exceptions and returns HTTP 500.
+    Catches any unhandled exceptions and returns HTTP 500 with enhanced formatting.
 
     Args:
         request: The HTTP request that caused the error
@@ -289,15 +389,17 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     Returns:
         JSON response with HTTP 500 status code
 
-    Requirements: 12.5
+    Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 12.5
     """
     logger.error(f"Unexpected error: {exc}", exc_info=True)
+    # Add visual indicators for unexpected errors
+    formatted_message = f"❌ An unexpected error occurred: {str(exc)}\n💡 Review the error details and try again\n\n🔧 Common fixes:\n1. Check the operation parameters\n2. Review the error message for details\n3. Contact support if the issue persists"
     return JSONResponse(
         status_code=500,
         content={
             "error": {
                 "code": "INTERNAL_ERROR",
-                "message": "An unexpected error occurred",
+                "message": formatted_message,
                 "details": {"error": str(exc)},
             }
         },
@@ -368,6 +470,57 @@ def classify_value_error(error: ValueError, context: Optional[Dict[str, Any]] = 
 
     # Default to validation error
     return ValidationError(error_message, details)
+
+
+def preprocess_request_body(body: Dict[str, Any], endpoint: str) -> Dict[str, Any]:
+    """Preprocess request body for agent-friendly type conversion.
+
+    This function applies automatic type conversion to common agent input patterns:
+    - String numbers → Numbers
+    - JSON strings → Arrays/Objects
+    - Boolean strings → Booleans
+
+    Args:
+        body: The raw request body from the agent
+        endpoint: The endpoint being called (for determining preprocessing rules)
+
+    Returns:
+        Preprocessed body with converted types
+
+    Requirements: 1.1, 1.2, 1.3, 1.4
+    """
+    # Define preprocessing rules for each endpoint
+    # Map field names to expected types for preprocessing
+    preprocessing_rules = {
+        "create_task_list": {
+            "repeatable": bool,
+        },
+        "create_task": {
+            "dependencies": list,
+            "exit_criteria": list,
+            "notes": list,
+            "research_notes": list,
+            "action_plan": list,
+            "execution_notes": list,
+            "tags": list,
+        },
+        "add_tags": {
+            "tags": list,
+        },
+    }
+
+    # Get rules for this endpoint
+    rules = preprocessing_rules.get(endpoint, {})
+
+    # Apply preprocessing
+    preprocessed = {}
+    for key, value in body.items():
+        if key in rules:
+            preprocessed[key] = preprocessor.preprocess(value, rules[key])
+        else:
+            preprocessed[key] = value
+
+    return preprocessed
 
 
 # Request/Response logging middleware
@@ -524,17 +677,16 @@ async def create_project(request: Request) -> Dict[str, Any]:
     try:
         body = await request.json()
 
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "create_project")
+
         # Validate required fields
         if "name" not in body:
             return JSONResponse(
                 status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Missing required field: name",
-                        "details": {"field": "name"},
-                    }
-                },
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: name", {"field": "name"}
+                ),
             )
 
         name = body["name"]
@@ -586,13 +738,9 @@ async def get_project(project_id: str) -> Dict[str, Any]:
         except ValueError:
             return JSONResponse(
                 status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid project ID format",
-                        "details": {"field": "project_id"},
-                    }
-                },
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Invalid project ID format", {"field": "project_id"}
+                ),
             )
 
         # Get project
@@ -601,13 +749,11 @@ async def get_project(project_id: str) -> Dict[str, Any]:
         if project is None:
             return JSONResponse(
                 status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": f"Project with id '{project_id}' not found",
-                        "details": {"project_id": project_id},
-                    }
-                },
+                content=format_error_with_formatter(
+                    "NOT_FOUND",
+                    f"Project with id '{project_id}' not found",
+                    {"project_id": project_id},
+                ),
             )
 
         return {
@@ -670,6 +816,9 @@ async def update_project(project_id: str, request: Request) -> Dict[str, Any]:
             )
 
         body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "update_project")
 
         # Extract update fields
         name = body.get("name")
@@ -770,25 +919,17 @@ async def delete_project(project_id: str) -> Dict[str, Any]:
         if "does not exist" in str(e):
             return JSONResponse(
                 status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": str(e),
-                        "details": {"project_id": project_id},
-                    }
-                },
+                content=format_error_with_formatter(
+                    "NOT_FOUND", str(e), {"project_id": project_id}
+                ),
             )
         else:
             # Business logic error (e.g., trying to delete default project)
             return JSONResponse(
                 status_code=409,
-                content={
-                    "error": {
-                        "code": "BUSINESS_LOGIC_ERROR",
-                        "message": str(e),
-                        "details": {"project_id": project_id},
-                    }
-                },
+                content=format_error_with_formatter(
+                    "BUSINESS_LOGIC_ERROR", str(e), {"project_id": project_id}
+                ),
             )
     except Exception as e:
         logger.error(f"Error deleting project: {e}")
@@ -894,17 +1035,16 @@ async def create_task_list(request: Request) -> Dict[str, Any]:
     try:
         body = await request.json()
 
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "create_task_list")
+
         # Validate required fields
         if "name" not in body:
             return JSONResponse(
                 status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Missing required field: name",
-                        "details": {"field": "name"},
-                    }
-                },
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: name", {"field": "name"}
+                ),
             )
 
         name = body["name"]
@@ -935,7 +1075,7 @@ async def create_task_list(request: Request) -> Dict[str, Any]:
         logger.warning(f"Validation error creating task list: {e}")
         return JSONResponse(
             status_code=400,
-            content={"error": {"code": "VALIDATION_ERROR", "message": str(e), "details": {}}},
+            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
         )
     except Exception as e:
         logger.error(f"Error creating task list: {e}")
@@ -1056,6 +1196,9 @@ async def update_task_list(task_list_id: str, request: Request) -> Dict[str, Any
             )
 
         body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "update_task_list")
 
         # Extract update fields
         name = body.get("name")
@@ -1328,6 +1471,7 @@ def _serialize_task(task) -> Dict[str, Any]:
             else None
         ),
         "agent_instructions_template": task.agent_instructions_template,
+        "tags": task.tags if task.tags else [],
         "created_at": task.created_at.isoformat(),
         "updated_at": task.updated_at.isoformat(),
     }
@@ -1413,6 +1557,9 @@ async def create_task(request: Request) -> Dict[str, Any]:
         from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
 
         body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "create_task")
 
         # Validate required fields
         required_fields = [
@@ -1634,6 +1781,23 @@ async def create_task(request: Request) -> Dict[str, Any]:
                         },
                     )
 
+        # Parse optional tags
+        tags = None
+        if "tags" in body and body["tags"] is not None:
+            # Ensure tags is a list
+            if not isinstance(body["tags"], list):
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "message": "Tags must be a list",
+                            "details": {"field": "tags"},
+                        }
+                    },
+                )
+            tags = body["tags"]
+
         # Create task
         task = task_orchestrator.create_task(
             task_list_id=task_list_id,
@@ -1648,6 +1812,7 @@ async def create_task(request: Request) -> Dict[str, Any]:
             action_plan=action_plan,
             execution_notes=execution_notes,
             agent_instructions_template=body.get("agent_instructions_template"),
+            tags=tags,
         )
 
         return {"task": _serialize_task(task)}
@@ -1656,7 +1821,7 @@ async def create_task(request: Request) -> Dict[str, Any]:
         logger.warning(f"Validation error creating task: {e}")
         return JSONResponse(
             status_code=400,
-            content={"error": {"code": "VALIDATION_ERROR", "message": str(e), "details": {}}},
+            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
         )
     except Exception as e:
         logger.error(f"Error creating task: {e}")
@@ -1775,6 +1940,9 @@ async def update_task(task_id: str, request: Request) -> Dict[str, Any]:
             )
 
         body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "update_task")
 
         # Parse status if provided
         status = None
@@ -1935,6 +2103,153 @@ async def delete_task(task_id: str) -> Dict[str, Any]:
                 }
             },
         )
+
+
+# ============================================================================
+# Tag Management Endpoints
+# ============================================================================
+
+
+@app.post("/tasks/{task_id}/tags")
+async def add_task_tags(task_id: str, request: Request) -> Dict[str, Any]:
+    """Add tags to a task.
+
+    Request body should contain:
+    - tags (required): List of tag strings to add
+
+    Tags are validated and deduplicated. Maximum 10 tags per task.
+
+    Args:
+        task_id: UUID of the task to add tags to
+
+    Returns:
+        Dictionary with updated task
+
+    Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
+    """
+    try:
+        from uuid import UUID
+
+        # Parse UUID
+        try:
+            task_uuid = UUID(task_id)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Invalid task ID format", {"field": "task_id"}
+                ),
+            )
+
+        body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "add_tags")
+
+        # Validate required fields
+        if "tags" not in body:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: tags", {"field": "tags"}
+                ),
+            )
+
+        # Ensure tags is a list
+        if not isinstance(body["tags"], list):
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
+                ),
+            )
+
+        tags = body["tags"]
+
+        # Add tags using tag orchestrator
+        task = tag_orchestrator.add_tags(task_uuid, tags)
+
+        return {"task": _serialize_task(task)}
+
+    except ValueError as e:
+        logger.warning(f"Validation error adding tags: {e}")
+        # Classify the error
+        classified_error = classify_value_error(e, {"operation": "add_tags", "task_id": task_id})
+        raise classified_error
+    except Exception as e:
+        logger.error(f"Error adding tags: {e}")
+        raise StorageError("Failed to add tags", {"error": str(e)})
+
+
+@app.delete("/tasks/{task_id}/tags")
+async def remove_task_tags(task_id: str, request: Request) -> Dict[str, Any]:
+    """Remove tags from a task.
+
+    Request body should contain:
+    - tags (required): List of tag strings to remove
+
+    Tags that don't exist on the task are silently ignored.
+
+    Args:
+        task_id: UUID of the task to remove tags from
+
+    Returns:
+        Dictionary with updated task
+
+    Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
+    """
+    try:
+        from uuid import UUID
+
+        # Parse UUID
+        try:
+            task_uuid = UUID(task_id)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Invalid task ID format", {"field": "task_id"}
+                ),
+            )
+
+        body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "add_tags")
+
+        # Validate required fields
+        if "tags" not in body:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: tags", {"field": "tags"}
+                ),
+            )
+
+        # Ensure tags is a list
+        if not isinstance(body["tags"], list):
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
+                ),
+            )
+
+        tags = body["tags"]
+
+        # Remove tags using tag orchestrator
+        task = tag_orchestrator.remove_tags(task_uuid, tags)
+
+        return {"task": _serialize_task(task)}
+
+    except ValueError as e:
+        logger.warning(f"Validation error removing tags: {e}")
+        # Classify the error
+        classified_error = classify_value_error(e, {"operation": "remove_tags", "task_id": task_id})
+        raise classified_error
+    except Exception as e:
+        logger.error(f"Error removing tags: {e}")
+        raise StorageError("Failed to remove tags", {"error": str(e)})
 
 
 # ============================================================================

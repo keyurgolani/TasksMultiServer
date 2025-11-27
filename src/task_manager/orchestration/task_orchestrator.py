@@ -56,6 +56,7 @@ class TaskOrchestrator:
         action_plan: Optional[list[ActionPlanItem]] = None,
         execution_notes: Optional[list[Note]] = None,
         agent_instructions_template: Optional[str] = None,
+        tags: Optional[list[str]] = None,
     ) -> Task:
         """Create a new task with validation and timestamp setting.
 
@@ -78,6 +79,7 @@ class TaskOrchestrator:
             action_plan: Optional ordered list of action items
             execution_notes: Optional list of execution notes
             agent_instructions_template: Optional template for agent instructions
+            tags: Optional list of tags for categorization
 
         Returns:
             The created task with all fields populated
@@ -86,7 +88,7 @@ class TaskOrchestrator:
             ValueError: If validation fails (empty required fields, empty exit criteria,
                        invalid dependencies, circular dependencies)
 
-        Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
+        Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 3.1
         """
         # Validate required fields
         if not title or not title.strip():
@@ -130,6 +132,7 @@ class TaskOrchestrator:
             action_plan=action_plan,
             execution_notes=execution_notes,
             agent_instructions_template=agent_instructions_template,
+            tags=tags if tags else [],
             created_at=now,
             updated_at=now,
         )

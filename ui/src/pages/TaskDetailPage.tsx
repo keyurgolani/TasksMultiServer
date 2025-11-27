@@ -13,6 +13,7 @@ import {
 } from '../types';
 import DependencyGraph from '../components/DependencyGraph';
 import FormError from '../components/FormError';
+import TagInput from '../components/TagInput';
 
 const TaskDetailPage: React.FC = () => {
   const { taskId } = useParams<{ taskId: string }>();
@@ -36,6 +37,7 @@ const TaskDetailPage: React.FC = () => {
   const [researchNotes, setResearchNotes] = useState<Note[]>([]);
   const [executionNotes, setExecutionNotes] = useState<Note[]>([]);
   const [actionPlan, setActionPlan] = useState<ActionPlanItem[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
   const [showDependencyGraph, setShowDependencyGraph] = useState(false);
 
   // New item inputs
@@ -70,6 +72,7 @@ const TaskDetailPage: React.FC = () => {
         setResearchNotes(foundTask.research_notes || []);
         setExecutionNotes(foundTask.execution_notes || []);
         setActionPlan(foundTask.action_plan || []);
+        setTags(foundTask.tags || []);
       }
     }
   }, [taskId, tasks]);
@@ -98,6 +101,7 @@ const TaskDetailPage: React.FC = () => {
         research_notes: researchNotes.length > 0 ? researchNotes : undefined,
         execution_notes: executionNotes.length > 0 ? executionNotes : undefined,
         action_plan: actionPlan.length > 0 ? actionPlan : undefined,
+        tags,
       });
       setEditMode(false);
     } catch (error) {
@@ -480,6 +484,50 @@ const TaskDetailPage: React.FC = () => {
               <div>Created: {new Date(task.created_at).toLocaleString()}</div>
               <div>Updated: {new Date(task.updated_at).toLocaleString()}</div>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Tags */}
+      <div style={{
+        padding: '1.5rem',
+        backgroundColor: 'white',
+        border: '1px solid #ddd',
+        borderRadius: '8px',
+        marginBottom: '1.5rem',
+      }}>
+        <h2 style={{ marginTop: 0 }}>Tags</h2>
+        {editMode ? (
+          <div>
+            <TagInput
+              tags={tags}
+              onChange={setTags}
+              placeholder="Add tags to organize this task..."
+            />
+          </div>
+        ) : (
+          <div>
+            {tags.length === 0 ? (
+              <p style={{ color: '#666' }}>No tags</p>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      backgroundColor: '#e3f2fd',
+                      color: '#1976d2',
+                      borderRadius: '16px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                    }}
+                  >
+                    🏷️ {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

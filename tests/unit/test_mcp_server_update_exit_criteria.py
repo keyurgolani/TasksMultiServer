@@ -37,7 +37,7 @@ class TestUpdateExitCriteriaHandler:
             return server
 
     def test_update_exit_criteria_with_json_string(self, mcp_server):
-        """Test updating exit criteria with JSON string format."""
+        """Test updating exit criteria with JSON string format (after preprocessing)."""
         # Create test data
         task_id = uuid4()
         task = Task(
@@ -69,8 +69,11 @@ class TestUpdateExitCriteriaHandler:
 
         arguments = {"task_id": str(task_id), "exit_criteria": exit_criteria_json}
 
-        # Call handler
-        result = asyncio.run(mcp_server._handle_update_exit_criteria(arguments))
+        # Apply preprocessing (simulating what happens in call_tool)
+        preprocessed_args = mcp_server._preprocess_arguments("update_exit_criteria", arguments)
+
+        # Call handler with preprocessed arguments
+        result = asyncio.run(mcp_server._handle_update_exit_criteria(preprocessed_args))
 
         # Verify
         assert len(result) == 1
@@ -148,16 +151,20 @@ class TestUpdateExitCriteriaHandler:
         assert "exit_criteria is required" in result[0].text
 
     def test_update_exit_criteria_invalid_json(self, mcp_server):
-        """Test error when exit_criteria JSON is invalid."""
+        """Test error when exit_criteria JSON is invalid (preprocessing fallback)."""
         arguments = {
             "task_id": str(uuid4()),
             "exit_criteria": "{invalid json}",
         }
 
-        result = asyncio.run(mcp_server._handle_update_exit_criteria(arguments))
+        # Apply preprocessing (which will fallback to original string for invalid JSON)
+        preprocessed_args = mcp_server._preprocess_arguments("update_exit_criteria", arguments)
+
+        result = asyncio.run(mcp_server._handle_update_exit_criteria(preprocessed_args))
 
         assert len(result) == 1
-        assert "Invalid JSON in exit_criteria" in result[0].text
+        # After preprocessing fallback, the handler sees a string and rejects it
+        assert "exit_criteria must be an array" in result[0].text
 
     def test_update_exit_criteria_invalid_format(self, mcp_server):
         """Test error when exit criteria format is invalid."""

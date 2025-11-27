@@ -7,7 +7,7 @@ used for both initial setup and future migrations.
 Requirements: 1.3
 """
 
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
@@ -126,3 +126,38 @@ def get_session_factory(engine: Engine):
         SQLAlchemy sessionmaker that can be used to create sessions
     """
     return sessionmaker(bind=engine)
+
+
+def migrate_add_tags_column(engine: Engine) -> None:
+    """Add tags column to tasks table if it doesn't exist.
+
+    This migration adds the tags column as an array of strings with a GIN index
+    for efficient tag-based queries. It is idempotent - safe to run multiple times.
+
+    Args:
+        engine: SQLAlchemy engine connected to the database
+
+    Raises:
+        MigrationError: If migration fails
+    """
+    try:
+        inspector = inspect(engine)
+
+        # Check if tasks table exists
+        if "tasks" not in inspector.get_table_names():
+            raise MigrationError("Tasks table does not exist. Run initialize_database first.")
+
+        # Check if tags column already exists
+        columns = [col["name"] for col in inspector.get_columns("tasks")]
+
+        if "tags" not in columns:
+            # Add tags column
+            with engine.begin() as conn:
+                # Add column with default empty array
+                conn.execute(text("ALTER TABLE tasks ADD COLUMN tags TEXT[] NOT NULL DEFAULT '{}'"))
+
+                # Create GIN index for efficient tag queries
+                conn.execute(text("CREATE INDEX ix_tasks_tags ON tasks USING gin(tags)"))
+
+    except Exception as e:
+        raise MigrationError(f"Failed to add tags column: {e}") from e

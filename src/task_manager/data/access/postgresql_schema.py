@@ -12,6 +12,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
@@ -25,8 +26,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.types import TypeDecorator
 
 from task_manager.models.enums import (
     ExitCriteriaStatus,
@@ -36,6 +39,38 @@ from task_manager.models.enums import (
 )
 
 Base = declarative_base()
+
+
+class StringArray(TypeDecorator):  # pylint: disable=too-many-ancestors
+    """Custom type that uses ARRAY for PostgreSQL and JSON for SQLite."""
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(ARRAY(String))
+        else:
+            return dialect.type_descriptor(JSON)
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return []
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return []
+        return value
+
+    def process_literal_param(self, value, dialect):
+        """Process literal parameter - required by TypeDecorator."""
+        return value
+
+    @property
+    def python_type(self):
+        """Return the Python type - required by TypeEngine."""
+        return list
 
 
 class ProjectModel(Base):
@@ -123,6 +158,7 @@ class TaskModel(Base):
         default=Priority.MEDIUM,
     )
     agent_instructions_template = Column(Text, nullable=True)
+    tags = Column(StringArray, nullable=False, default=list, server_default="{}")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -157,6 +193,7 @@ class TaskModel(Base):
         Index("ix_tasks_task_list_id", "task_list_id"),
         Index("ix_tasks_status", "status"),
         Index("ix_tasks_priority", "priority"),
+        Index("ix_tasks_tags", "tags", postgresql_using="gin"),
     )
 
 

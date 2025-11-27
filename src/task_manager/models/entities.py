@@ -1,6 +1,6 @@
 """Basic entity models for the task management system."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -150,6 +150,7 @@ class Task:
         action_plan: Optional ordered list of action items
         execution_notes: Optional list of execution notes
         agent_instructions_template: Optional template for generating agent instructions
+        tags: List of tags for categorization and filtering
     """
 
     id: UUID
@@ -167,6 +168,7 @@ class Task:
     action_plan: Optional[list[ActionPlanItem]] = None
     execution_notes: Optional[list[Note]] = None
     agent_instructions_template: Optional[str] = None
+    tags: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Validate required fields after initialization.
