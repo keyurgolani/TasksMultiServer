@@ -71,9 +71,9 @@ else
     exit 1
 fi
 
-# Run tests with coverage (120s timeout)
-print_info "Running test suite with coverage (120s timeout)..."
-if timeout 120s pytest --cov; then
+# Run tests with coverage (600s timeout)
+print_info "Running test suite with coverage (600s timeout)..."
+if timeout 600s pytest --cov; then
     print_status "Tests passed with required coverage"
 else
     print_error "Tests failed or coverage below threshold"

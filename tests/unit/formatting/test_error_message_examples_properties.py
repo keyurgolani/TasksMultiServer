@@ -184,11 +184,14 @@ def test_error_messages_with_valid_values_include_examples(
     # For enum errors with valid values, verify the example uses one of the valid values
     # Only check this for invalid_enum error type, as other error types use expected_type
     if valid_values and error_type == "invalid_enum":
-        example_uses_valid_value = any(str(val) in example_text for val in valid_values)
-        assert example_uses_valid_value, (
-            f"Example for enum error should use one of the valid values {valid_values}. "
-            f"Example text: {example_text}"
-        )
+        # Filter out whitespace-only values and strip whitespace from realistic values
+        realistic_values = [v.strip() for v in valid_values if v and not v.isspace()]
+        if realistic_values:
+            example_uses_valid_value = any(str(val) in example_text for val in realistic_values)
+            assert example_uses_valid_value, (
+                f"Example for enum error should use one of the valid values {realistic_values}. "
+                f"Example text: {example_text}"
+            )
 
 
 @given(

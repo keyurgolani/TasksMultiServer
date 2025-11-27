@@ -787,3 +787,108 @@ class TestTask:
         assert task.action_plan[0].content == "First step"
         assert task.action_plan[1].content == "Second step"
         assert task.action_plan[2].content == "Third step"
+
+
+class TestSearchCriteria:
+    """Tests for SearchCriteria entity."""
+
+    def test_search_criteria_creation_with_defaults(self):
+        """Test that SearchCriteria can be created with default values."""
+        from task_manager.models import SearchCriteria
+
+        criteria = SearchCriteria()
+
+        assert criteria.query is None
+        assert criteria.status is None
+        assert criteria.priority is None
+        assert criteria.tags is None
+        assert criteria.project_name is None
+        assert criteria.limit == 50
+        assert criteria.offset == 0
+        assert criteria.sort_by == "relevance"
+
+    def test_search_criteria_creation_with_query(self):
+        """Test that SearchCriteria can be created with a text query."""
+        from task_manager.models import SearchCriteria
+
+        criteria = SearchCriteria(query="test task")
+
+        assert criteria.query == "test task"
+        assert criteria.limit == 50
+        assert criteria.offset == 0
+
+    def test_search_criteria_creation_with_status_filter(self):
+        """Test that SearchCriteria can be created with status filter."""
+        from task_manager.models import SearchCriteria
+
+        criteria = SearchCriteria(status=[Status.NOT_STARTED, Status.IN_PROGRESS])
+
+        assert criteria.status == [Status.NOT_STARTED, Status.IN_PROGRESS]
+        assert len(criteria.status) == 2
+
+    def test_search_criteria_creation_with_priority_filter(self):
+        """Test that SearchCriteria can be created with priority filter."""
+        from task_manager.models import SearchCriteria
+
+        criteria = SearchCriteria(priority=[Priority.HIGH, Priority.CRITICAL])
+
+        assert criteria.priority == [Priority.HIGH, Priority.CRITICAL]
+        assert len(criteria.priority) == 2
+
+    def test_search_criteria_creation_with_tags_filter(self):
+        """Test that SearchCriteria can be created with tags filter."""
+        from task_manager.models import SearchCriteria
+
+        criteria = SearchCriteria(tags=["bug", "urgent"])
+
+        assert criteria.tags == ["bug", "urgent"]
+        assert len(criteria.tags) == 2
+
+    def test_search_criteria_creation_with_project_filter(self):
+        """Test that SearchCriteria can be created with project filter."""
+        from task_manager.models import SearchCriteria
+
+        criteria = SearchCriteria(project_name="MyProject")
+
+        assert criteria.project_name == "MyProject"
+
+    def test_search_criteria_creation_with_pagination(self):
+        """Test that SearchCriteria can be created with custom pagination."""
+        from task_manager.models import SearchCriteria
+
+        criteria = SearchCriteria(limit=100, offset=50)
+
+        assert criteria.limit == 100
+        assert criteria.offset == 50
+
+    def test_search_criteria_creation_with_sort_by(self):
+        """Test that SearchCriteria can be created with custom sort criteria."""
+        from task_manager.models import SearchCriteria
+
+        criteria = SearchCriteria(sort_by="created_at")
+
+        assert criteria.sort_by == "created_at"
+
+    def test_search_criteria_creation_with_all_fields(self):
+        """Test that SearchCriteria can be created with all fields populated."""
+        from task_manager.models import SearchCriteria
+
+        criteria = SearchCriteria(
+            query="test",
+            status=[Status.NOT_STARTED],
+            priority=[Priority.HIGH],
+            tags=["bug"],
+            project_name="MyProject",
+            limit=25,
+            offset=10,
+            sort_by="priority",
+        )
+
+        assert criteria.query == "test"
+        assert criteria.status == [Status.NOT_STARTED]
+        assert criteria.priority == [Priority.HIGH]
+        assert criteria.tags == ["bug"]
+        assert criteria.project_name == "MyProject"
+        assert criteria.limit == 25
+        assert criteria.offset == 10
+        assert criteria.sort_by == "priority"

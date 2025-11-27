@@ -1,10 +1,12 @@
 # Getting Started with TasksMultiServer
 
+This guide covers installation and basic usage for end users. For development setup, see [CONTRIBUTING.md](../.github/CONTRIBUTING.md).
+
 ## Installation
 
 ### Using uvx (Recommended)
 
-The easiest way to run TasksMultiServer:
+The easiest way to run TasksMultiServer - no installation required:
 
 ```bash
 uvx tasks-multiserver
@@ -14,21 +16,29 @@ This automatically manages dependencies in an isolated environment.
 
 ### Using pip
 
-Install in your Python environment:
+For regular use, install in a virtual environment:
 
 ```bash
+# Create and activate virtual environment (recommended)
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install TasksMultiServer
 pip install tasks-multiserver
+
+# Run the MCP server
 tasks-multiserver
 ```
 
-### From Source
+**Why use a virtual environment?**
 
-```bash
-git clone https://github.com/YOUR_USERNAME/tasks-multiserver
-cd tasks-multiserver
-pip install -e ".[dev]"
-tasks-multiserver
-```
+- Isolates dependencies from other Python projects
+- Prevents version conflicts
+- Makes it easy to remove (just delete the `.venv` folder)
+
+### From Source (Development)
+
+See [CONTRIBUTING.md](../.github/CONTRIBUTING.md) for development setup instructions.
 
 ## Configuration
 
@@ -136,8 +146,44 @@ Access UI at http://localhost:3000
 | `FILESYSTEM_PATH` | `/tmp/tasks` | Path for filesystem storage                            |
 | `POSTGRES_URL`    | -            | PostgreSQL connection string (required for PostgreSQL) |
 
+## Troubleshooting
+
+### MCP Server Not Starting
+
+```bash
+# Check if uvx is installed
+uvx --version
+
+# If not, install uv (includes uvx)
+# macOS/Linux:
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or using pip:
+pip install uv
+```
+
+### Import Errors with pip Installation
+
+```bash
+# Ensure virtual environment is active
+source .venv/bin/activate
+
+# Reinstall
+pip install --upgrade tasks-multiserver
+```
+
+### PostgreSQL Connection Issues
+
+```bash
+# Verify PostgreSQL is running
+psql -U postgres -c "SELECT version();"
+
+# Check connection string format
+export POSTGRES_URL=postgresql://user:password@localhost:5432/dbname
+```
+
 ## Next Steps
 
-- Read the [Development Guide](DEVELOPMENT.md) to contribute
 - See [Deployment Guide](DEPLOYMENT.md) for production setup
 - Check the [API documentation](http://localhost:8000/docs) for REST endpoints
+- Read [CONTRIBUTING.md](../.github/CONTRIBUTING.md) to contribute to development

@@ -84,6 +84,30 @@ export interface Task {
   updated_at: string;
 }
 
+// Search criteria
+export interface SearchCriteria {
+  query?: string;
+  status?: Status[];
+  priority?: Priority[];
+  tags?: string[];
+  project_name?: string;
+  limit?: number;
+  offset?: number;
+  sort_by?: 'relevance' | 'created_at' | 'updated_at' | 'priority';
+}
+
+export interface SearchResults {
+  results: Task[];
+  metadata: {
+    total_count: number;
+    returned_count: number;
+    limit: number;
+    offset: number;
+    sort_by: string;
+    has_more: boolean;
+  };
+}
+
 // API Error response
 export interface ApiError {
   error: {

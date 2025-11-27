@@ -517,3 +517,184 @@ class TestUpdateActionPlanErrorPaths:
         )
         assert len(result) == 1
         assert "Invalid action plan item format" in result[0].text
+
+
+class TestAnalyzeDependenciesErrorPaths:
+    """Test error handling in analyze_dependencies handler."""
+
+    @pytest.mark.asyncio
+    async def test_handle_analyze_dependencies_missing_scope_type(self, mcp_server):
+        """Test analyze_dependencies handler with missing scope_type."""
+        result = await mcp_server._handle_analyze_dependencies({})
+        assert len(result) == 1
+        assert "scope_type is required" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_analyze_dependencies_invalid_scope_type(self, mcp_server):
+        """Test analyze_dependencies handler with invalid scope_type."""
+        result = await mcp_server._handle_analyze_dependencies({"scope_type": "invalid"})
+        assert len(result) == 1
+        assert "Invalid scope_type" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_analyze_dependencies_missing_scope_id(self, mcp_server):
+        """Test analyze_dependencies handler with missing scope_id."""
+        result = await mcp_server._handle_analyze_dependencies({"scope_type": "project"})
+        assert len(result) == 1
+        assert "scope_id is required" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_analyze_dependencies_invalid_scope_id_uuid(self, mcp_server):
+        """Test analyze_dependencies handler with invalid scope_id UUID."""
+        result = await mcp_server._handle_analyze_dependencies(
+            {"scope_type": "project", "scope_id": "invalid"}
+        )
+        assert len(result) == 1
+        assert "Invalid UUID format" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_analyze_dependencies_success(self, mcp_server):
+        """Test analyze_dependencies handler with valid inputs."""
+        from task_manager.models.entities import DependencyAnalysis
+
+        # Mock the dependency analyzer
+        mock_analysis = DependencyAnalysis(
+            critical_path=[uuid4(), uuid4()],
+            critical_path_length=2,
+            bottleneck_tasks=[(uuid4(), 3)],
+            leaf_tasks=[uuid4()],
+            completion_progress=50.0,
+            total_tasks=10,
+            completed_tasks=5,
+            circular_dependencies=[],
+        )
+        mcp_server.dependency_analyzer.analyze = Mock(return_value=mock_analysis)
+        mcp_server.data_store.get_task = Mock(return_value=None)
+
+        scope_id = str(uuid4())
+        result = await mcp_server._handle_analyze_dependencies(
+            {"scope_type": "project", "scope_id": scope_id}
+        )
+
+        assert len(result) == 1
+        assert "Dependency Analysis" in result[0].text
+        assert "Overall Progress" in result[0].text
+        assert "Critical Path" in result[0].text
+        assert "Bottleneck Tasks" in result[0].text
+        assert "Leaf Tasks" in result[0].text
+        assert "Circular Dependencies" in result[0].text
+
+
+class TestVisualizeDependenciesErrorPaths:
+    """Test error handling in visualize_dependencies handler."""
+
+    @pytest.mark.asyncio
+    async def test_handle_visualize_dependencies_missing_scope_type(self, mcp_server):
+        """Test visualize_dependencies handler with missing scope_type."""
+        result = await mcp_server._handle_visualize_dependencies({"format": "ascii"})
+        assert len(result) == 1
+        assert "scope_type is required" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_visualize_dependencies_invalid_scope_type(self, mcp_server):
+        """Test visualize_dependencies handler with invalid scope_type."""
+        result = await mcp_server._handle_visualize_dependencies(
+            {"scope_type": "invalid", "format": "ascii"}
+        )
+        assert len(result) == 1
+        assert "Invalid scope_type" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_visualize_dependencies_missing_scope_id(self, mcp_server):
+        """Test visualize_dependencies handler with missing scope_id."""
+        result = await mcp_server._handle_visualize_dependencies(
+            {"scope_type": "project", "format": "ascii"}
+        )
+        assert len(result) == 1
+        assert "scope_id is required" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_visualize_dependencies_invalid_scope_id_uuid(self, mcp_server):
+        """Test visualize_dependencies handler with invalid scope_id UUID."""
+        result = await mcp_server._handle_visualize_dependencies(
+            {"scope_type": "project", "scope_id": "invalid", "format": "ascii"}
+        )
+        assert len(result) == 1
+        assert "Invalid UUID format" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_visualize_dependencies_invalid_format(self, mcp_server):
+        """Test visualize_dependencies handler with invalid format."""
+        scope_id = str(uuid4())
+        result = await mcp_server._handle_visualize_dependencies(
+            {"scope_type": "project", "scope_id": scope_id, "format": "invalid"}
+        )
+        assert len(result) == 1
+        assert "Invalid format" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_visualize_dependencies_ascii_success(self, mcp_server):
+        """Test visualize_dependencies handler with ASCII format."""
+        # Mock the dependency analyzer
+        mock_visualization = "Dependency Graph:\n\n○ Task 1\n  └── ● Task 2"
+        mcp_server.dependency_analyzer.visualize_ascii = Mock(return_value=mock_visualization)
+
+        scope_id = str(uuid4())
+        result = await mcp_server._handle_visualize_dependencies(
+            {"scope_type": "project", "scope_id": scope_id, "format": "ascii"}
+        )
+
+        assert len(result) == 1
+        assert "Dependency Graph" in result[0].text
+        assert "Task 1" in result[0].text
+        assert "Task 2" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_visualize_dependencies_dot_success(self, mcp_server):
+        """Test visualize_dependencies handler with DOT format."""
+        # Mock the dependency analyzer
+        mock_visualization = 'digraph G {\n  node1 [label="Task 1"];\n  node2 [label="Task 2"];\n  node1 -> node2;\n}'
+        mcp_server.dependency_analyzer.visualize_dot = Mock(return_value=mock_visualization)
+
+        scope_id = str(uuid4())
+        result = await mcp_server._handle_visualize_dependencies(
+            {"scope_type": "project", "scope_id": scope_id, "format": "dot"}
+        )
+
+        assert len(result) == 1
+        assert "digraph G" in result[0].text
+        assert "Task 1" in result[0].text
+        assert "Task 2" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_visualize_dependencies_mermaid_success(self, mcp_server):
+        """Test visualize_dependencies handler with Mermaid format."""
+        # Mock the dependency analyzer
+        mock_visualization = "graph TD\n  task1[Task 1]\n  task2[Task 2]\n  task1 --> task2"
+        mcp_server.dependency_analyzer.visualize_mermaid = Mock(return_value=mock_visualization)
+
+        scope_id = str(uuid4())
+        result = await mcp_server._handle_visualize_dependencies(
+            {"scope_type": "task_list", "scope_id": scope_id, "format": "mermaid"}
+        )
+
+        assert len(result) == 1
+        assert "graph TD" in result[0].text
+        assert "Task 1" in result[0].text
+        assert "Task 2" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handle_visualize_dependencies_default_format(self, mcp_server):
+        """Test visualize_dependencies handler with default format (ascii)."""
+        # Mock the dependency analyzer
+        mock_visualization = "Dependency Graph:\n\n○ Task 1"
+        mcp_server.dependency_analyzer.visualize_ascii = Mock(return_value=mock_visualization)
+
+        scope_id = str(uuid4())
+        # Don't provide format, should default to ascii
+        result = await mcp_server._handle_visualize_dependencies(
+            {"scope_type": "project", "scope_id": scope_id}
+        )
+
+        assert len(result) == 1
+        assert "Dependency Graph" in result[0].text

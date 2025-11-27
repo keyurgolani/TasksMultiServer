@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Task, Status, Priority, ExitCriteriaStatus } from '../types';
+import { Task, Status, Priority, ExitCriteriaStatus, SearchCriteria } from '../types';
 import ReadyTasksPanel from '../components/ReadyTasksPanel';
 import DependencyGraph from '../components/DependencyGraph';
 import FormError from '../components/FormError';
 import TagInput from '../components/TagInput';
 import TagFilter from '../components/TagFilter';
+import SearchBar from '../components/SearchBar';
+import FilterChips from '../components/FilterChips';
+import { taskApi } from '../api/services';
 
 const TasksPage: React.FC = () => {
   const { taskListId } = useParams<{ taskListId: string }>();
@@ -37,6 +40,9 @@ const TasksPage: React.FC = () => {
     tags: [] as string[],
   });
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
+  const [searchCriteria, setSearchCriteria] = useState<SearchCriteria>({});
+  const [searchResults, setSearchResults] = useState<Task[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -47,14 +53,21 @@ const TasksPage: React.FC = () => {
   // Get current task list
   const currentTaskList = taskLists.find((tl) => tl.id === taskListId);
 
-  // Filter tasks for current task list
-  let taskListTasks = tasks.filter((t) => t.task_list_id === taskListId);
-  
-  // Apply tag filters
-  if (selectedTagFilters.length > 0) {
-    taskListTasks = taskListTasks.filter((task) =>
-      selectedTagFilters.every((filterTag) => task.tags.includes(filterTag))
-    );
+  // Determine which tasks to display
+  let taskListTasks: Task[];
+  if (searchResults !== null) {
+    // Use search results if a search is active
+    taskListTasks = searchResults.filter((t) => t.task_list_id === taskListId);
+  } else {
+    // Otherwise use regular filtered tasks
+    taskListTasks = tasks.filter((t) => t.task_list_id === taskListId);
+    
+    // Apply tag filters (legacy filter, kept for backward compatibility)
+    if (selectedTagFilters.length > 0) {
+      taskListTasks = taskListTasks.filter((task) =>
+        selectedTagFilters.every((filterTag) => task.tags.includes(filterTag))
+      );
+    }
   }
   
   // Get all unique tags from tasks in this task list
@@ -265,6 +278,50 @@ const TasksPage: React.FC = () => {
     } else {
       navigate('/');
     }
+  };
+
+  // Handle search
+  const handleSearch = async (criteria: SearchCriteria) => {
+    // If no criteria provided, clear search
+    if (!criteria.query && !criteria.status && !criteria.priority && !criteria.tags) {
+      setSearchCriteria({});
+      setSearchResults(null);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const response = await taskApi.search(criteria);
+      setSearchResults(response.results);
+      setSearchCriteria(criteria);
+    } catch (error) {
+      console.error('Search failed:', error);
+      // Fall back to showing all tasks
+      setSearchResults(null);
+      setSearchCriteria({});
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Handle filter removal
+  const handleRemoveFilter = (filterType: string, value?: string) => {
+    const newCriteria = { ...searchCriteria };
+
+    if (filterType === 'query') {
+      delete newCriteria.query;
+    } else if (filterType === 'status' && value) {
+      newCriteria.status = newCriteria.status?.filter((s) => s !== value);
+      if (newCriteria.status?.length === 0) delete newCriteria.status;
+    } else if (filterType === 'priority' && value) {
+      newCriteria.priority = newCriteria.priority?.filter((p) => p !== value);
+      if (newCriteria.priority?.length === 0) delete newCriteria.priority;
+    } else if (filterType === 'tag' && value) {
+      newCriteria.tags = newCriteria.tags?.filter((t) => t !== value);
+      if (newCriteria.tags?.length === 0) delete newCriteria.tags;
+    }
+
+    handleSearch(newCriteria);
   };
 
   // Get status badge color
@@ -774,8 +831,25 @@ const TasksPage: React.FC = () => {
         </div>
       )}
 
-      {/* Tag Filter */}
-      {allTags.length > 0 && !showCreateForm && !editingTask && (
+      {/* Search Bar */}
+      {!showCreateForm && !editingTask && (
+        <SearchBar
+          onSearch={handleSearch}
+          availableTags={allTags}
+          projectName={currentTaskList?.name}
+        />
+      )}
+
+      {/* Filter Chips */}
+      {!showCreateForm && !editingTask && (
+        <FilterChips
+          criteria={searchCriteria}
+          onRemoveFilter={handleRemoveFilter}
+        />
+      )}
+
+      {/* Tag Filter (Legacy - kept for backward compatibility) */}
+      {allTags.length > 0 && !showCreateForm && !editingTask && searchResults === null && (
         <div style={{ marginBottom: '1.5rem' }}>
           <TagFilter
             availableTags={allTags}
@@ -788,21 +862,28 @@ const TasksPage: React.FC = () => {
       )}
 
       {/* Loading State */}
-      {loading && taskListTasks.length === 0 && (
+      {(loading || isSearching) && taskListTasks.length === 0 && (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
-          Loading tasks...
+          {isSearching ? 'Searching...' : 'Loading tasks...'}
         </div>
       )}
 
-      {/* Empty State */}
-      {!loading && taskListTasks.length === 0 && selectedTagFilters.length === 0 && (
+      {/* Empty State - No Search */}
+      {!loading && !isSearching && taskListTasks.length === 0 && searchResults === null && selectedTagFilters.length === 0 && (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
           No tasks found. Create your first task to get started.
         </div>
       )}
 
-      {/* Empty State with Filters */}
-      {!loading && taskListTasks.length === 0 && selectedTagFilters.length > 0 && (
+      {/* Empty State - With Search */}
+      {!loading && !isSearching && taskListTasks.length === 0 && searchResults !== null && (
+        <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
+          No tasks match your search criteria. Try adjusting your filters or search query.
+        </div>
+      )}
+
+      {/* Empty State - With Legacy Tag Filters */}
+      {!loading && !isSearching && taskListTasks.length === 0 && searchResults === null && selectedTagFilters.length > 0 && (
         <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
           No tasks match the selected filters. Try adjusting your tag selection.
         </div>

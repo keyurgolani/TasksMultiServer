@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def test_client():
+def test_client(tmp_path, worker_id):
     """Create a test client for the REST API.
 
     Sets up environment variables for filesystem backing store
@@ -21,9 +21,15 @@ def test_client():
     Yields:
         TestClient instance for making requests
     """
+    # Use worker-specific temp directory for parallel test execution
+    if worker_id == "master":
+        test_dir = tmp_path / "test_task_endpoints"
+    else:
+        test_dir = tmp_path / f"test_task_endpoints_{worker_id}"
+
     # Set up environment for filesystem backing store
     os.environ["DATA_STORE_TYPE"] = "filesystem"
-    os.environ["FILESYSTEM_PATH"] = "/tmp/test_task_endpoints"
+    os.environ["FILESYSTEM_PATH"] = str(test_dir)
 
     # Import app after setting environment variables
     from task_manager.interfaces.rest.server import app
@@ -35,8 +41,8 @@ def test_client():
     # Cleanup
     import shutil
 
-    if os.path.exists("/tmp/test_task_endpoints"):
-        shutil.rmtree("/tmp/test_task_endpoints")
+    if test_dir.exists():
+        shutil.rmtree(test_dir)
 
 
 def test_create_and_get_task(test_client):

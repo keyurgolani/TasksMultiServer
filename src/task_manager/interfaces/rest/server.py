@@ -2253,6 +2253,530 @@ async def remove_task_tags(task_id: str, request: Request) -> Dict[str, Any]:
 
 
 # ============================================================================
+# Search Endpoint
+# ============================================================================
+
+
+@app.post("/search/tasks")
+async def search_tasks(request: Request) -> Dict[str, Any]:
+    """Search tasks with multiple filtering criteria.
+
+    Request body should contain SearchCriteria:
+    - query (optional): Text to search in task titles and descriptions
+    - status (optional): List of status values to filter by
+    - priority (optional): List of priority values to filter by
+    - tags (optional): List of tags to filter by
+    - project_name (optional): Project name to filter by
+    - limit (optional): Maximum number of results (default: 50, max: 100)
+    - offset (optional): Number of results to skip (default: 0)
+    - sort_by (optional): Sort criteria - "relevance", "created_at", "updated_at", or "priority" (default: "relevance")
+
+    Returns:
+        Dictionary with search results and metadata
+
+    Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8
+    """
+    try:
+        from task_manager.models.entities import SearchCriteria
+        from task_manager.models.enums import Priority, Status
+        from task_manager.orchestration.search_orchestrator import SearchOrchestrator
+
+        body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "search_tasks")
+
+        # Parse status list if provided
+        status_list = None
+        if "status" in body and body["status"] is not None:
+            if not isinstance(body["status"], list):
+                return JSONResponse(
+                    status_code=400,
+                    content=format_error_with_formatter(
+                        "VALIDATION_ERROR", "Status must be a list", {"field": "status"}
+                    ),
+                )
+            try:
+                status_list = [Status(s) for s in body["status"]]
+            except ValueError as e:
+                return JSONResponse(
+                    status_code=400,
+                    content=format_error_with_formatter(
+                        "VALIDATION_ERROR",
+                        f"Invalid status value: {e}",
+                        {"field": "status", "valid_values": [s.value for s in Status]},
+                    ),
+                )
+
+        # Parse priority list if provided
+        priority_list = None
+        if "priority" in body and body["priority"] is not None:
+            if not isinstance(body["priority"], list):
+                return JSONResponse(
+                    status_code=400,
+                    content=format_error_with_formatter(
+                        "VALIDATION_ERROR", "Priority must be a list", {"field": "priority"}
+                    ),
+                )
+            try:
+                priority_list = [Priority(p) for p in body["priority"]]
+            except ValueError as e:
+                return JSONResponse(
+                    status_code=400,
+                    content=format_error_with_formatter(
+                        "VALIDATION_ERROR",
+                        f"Invalid priority value: {e}",
+                        {"field": "priority", "valid_values": [p.value for p in Priority]},
+                    ),
+                )
+
+        # Parse tags list if provided
+        tags_list = None
+        if "tags" in body and body["tags"] is not None:
+            if not isinstance(body["tags"], list):
+                return JSONResponse(
+                    status_code=400,
+                    content=format_error_with_formatter(
+                        "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
+                    ),
+                )
+            tags_list = body["tags"]
+
+        # Create SearchCriteria object
+        criteria = SearchCriteria(
+            query=body.get("query"),
+            status=status_list,
+            priority=priority_list,
+            tags=tags_list,
+            project_name=body.get("project_name"),
+            limit=body.get("limit", 50),
+            offset=body.get("offset", 0),
+            sort_by=body.get("sort_by", "relevance"),
+        )
+
+        # Create search orchestrator and perform search
+        search_orchestrator = SearchOrchestrator(data_store)
+        results = search_orchestrator.search_tasks(criteria)
+        total_count = search_orchestrator.count_results(criteria)
+
+        return {
+            "results": [_serialize_task(task) for task in results],
+            "metadata": {
+                "total_count": total_count,
+                "returned_count": len(results),
+                "limit": criteria.limit,
+                "offset": criteria.offset,
+                "sort_by": criteria.sort_by,
+                "has_more": (criteria.offset + len(results)) < total_count,
+            },
+        }
+
+    except ValueError as e:
+        logger.warning(f"Validation error searching tasks: {e}")
+        return JSONResponse(
+            status_code=400,
+            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+        )
+    except Exception as e:
+        logger.error(f"Error searching tasks: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to search tasks",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
+
+
+# ============================================================================
+# Dependency Analysis Endpoints
+# ============================================================================
+
+
+@app.get("/projects/{project_id}/dependencies/analysis")
+async def analyze_project_dependencies(project_id: str) -> Dict[str, Any]:
+    """Analyze dependencies for all tasks in a project.
+
+    Performs comprehensive dependency analysis including:
+    - Critical path identification
+    - Bottleneck detection
+    - Leaf task identification
+    - Progress calculation
+    - Circular dependency detection
+
+    Args:
+        project_id: UUID of the project to analyze
+
+    Returns:
+        Dictionary with dependency analysis results
+
+    Requirements: 5.1, 5.2, 5.3, 5.7, 5.8
+    """
+    try:
+        from uuid import UUID
+
+        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
+
+        # Parse UUID
+        try:
+            project_uuid = UUID(project_id)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR",
+                    "Invalid project ID format",
+                    {"field": "project_id"},
+                ),
+            )
+
+        # Create analyzer and perform analysis
+        analyzer = DependencyAnalyzer(data_store)
+        analysis = analyzer.analyze(scope_type="project", scope_id=project_uuid)
+
+        return {
+            "analysis": {
+                "critical_path": [str(task_id) for task_id in analysis.critical_path],
+                "critical_path_length": analysis.critical_path_length,
+                "bottleneck_tasks": [
+                    {"task_id": str(task_id), "blocked_count": count}
+                    for task_id, count in analysis.bottleneck_tasks
+                ],
+                "leaf_tasks": [str(task_id) for task_id in analysis.leaf_tasks],
+                "completion_progress": analysis.completion_progress,
+                "total_tasks": analysis.total_tasks,
+                "completed_tasks": analysis.completed_tasks,
+                "circular_dependencies": [
+                    [str(task_id) for task_id in cycle] for cycle in analysis.circular_dependencies
+                ],
+            },
+            "scope_type": "project",
+            "scope_id": project_id,
+        }
+
+    except ValueError as e:
+        logger.warning(f"Error analyzing project dependencies: {e}")
+        # Check if it's a not found error
+        if "does not exist" in str(e):
+            return JSONResponse(
+                status_code=404,
+                content=format_error_with_formatter(
+                    "NOT_FOUND", str(e), {"project_id": project_id}
+                ),
+            )
+        else:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+            )
+    except Exception as e:
+        logger.error(f"Error analyzing project dependencies: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to analyze project dependencies",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
+
+
+@app.get("/task-lists/{task_list_id}/dependencies/analysis")
+async def analyze_task_list_dependencies(task_list_id: str) -> Dict[str, Any]:
+    """Analyze dependencies for all tasks in a task list.
+
+    Performs comprehensive dependency analysis including:
+    - Critical path identification
+    - Bottleneck detection
+    - Leaf task identification
+    - Progress calculation
+    - Circular dependency detection
+
+    Args:
+        task_list_id: UUID of the task list to analyze
+
+    Returns:
+        Dictionary with dependency analysis results
+
+    Requirements: 5.1, 5.2, 5.3, 5.7, 5.8
+    """
+    try:
+        from uuid import UUID
+
+        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
+
+        # Parse UUID
+        try:
+            task_list_uuid = UUID(task_list_id)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR",
+                    "Invalid task list ID format",
+                    {"field": "task_list_id"},
+                ),
+            )
+
+        # Create analyzer and perform analysis
+        analyzer = DependencyAnalyzer(data_store)
+        analysis = analyzer.analyze(scope_type="task_list", scope_id=task_list_uuid)
+
+        return {
+            "analysis": {
+                "critical_path": [str(task_id) for task_id in analysis.critical_path],
+                "critical_path_length": analysis.critical_path_length,
+                "bottleneck_tasks": [
+                    {"task_id": str(task_id), "blocked_count": count}
+                    for task_id, count in analysis.bottleneck_tasks
+                ],
+                "leaf_tasks": [str(task_id) for task_id in analysis.leaf_tasks],
+                "completion_progress": analysis.completion_progress,
+                "total_tasks": analysis.total_tasks,
+                "completed_tasks": analysis.completed_tasks,
+                "circular_dependencies": [
+                    [str(task_id) for task_id in cycle] for cycle in analysis.circular_dependencies
+                ],
+            },
+            "scope_type": "task_list",
+            "scope_id": task_list_id,
+        }
+
+    except ValueError as e:
+        logger.warning(f"Error analyzing task list dependencies: {e}")
+        # Check if it's a not found error
+        if "does not exist" in str(e):
+            return JSONResponse(
+                status_code=404,
+                content=format_error_with_formatter(
+                    "NOT_FOUND", str(e), {"task_list_id": task_list_id}
+                ),
+            )
+        else:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+            )
+    except Exception as e:
+        logger.error(f"Error analyzing task list dependencies: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to analyze task list dependencies",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
+
+
+@app.get("/projects/{project_id}/dependencies/visualize")
+async def visualize_project_dependencies(
+    project_id: str, format: str = "ascii"  # pylint: disable=redefined-builtin
+) -> Dict[str, Any]:
+    """Visualize dependencies for all tasks in a project.
+
+    Generates a visualization of the dependency graph in the requested format.
+
+    Args:
+        project_id: UUID of the project to visualize
+
+    Query parameters:
+    - format (optional): Visualization format - "ascii", "dot", or "mermaid" (default: "ascii")
+
+    Returns:
+        Dictionary with visualization string
+
+    Requirements: 5.4, 5.5, 5.6
+    """
+    try:
+        from uuid import UUID
+
+        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
+
+        # Validate format
+        valid_formats = ["ascii", "dot", "mermaid"]
+        if format not in valid_formats:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR",
+                    f"Invalid format '{format}'. Must be one of: {', '.join(valid_formats)}",
+                    {"field": "format", "valid_values": valid_formats},
+                ),
+            )
+
+        # Parse UUID
+        try:
+            project_uuid = UUID(project_id)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR",
+                    "Invalid project ID format",
+                    {"field": "project_id"},
+                ),
+            )
+
+        # Create analyzer and generate visualization
+        analyzer = DependencyAnalyzer(data_store)
+
+        if format == "ascii":
+            visualization = analyzer.visualize_ascii(scope_type="project", scope_id=project_uuid)
+        elif format == "dot":
+            visualization = analyzer.visualize_dot(scope_type="project", scope_id=project_uuid)
+        elif format == "mermaid":
+            visualization = analyzer.visualize_mermaid(scope_type="project", scope_id=project_uuid)
+        else:
+            # Should not reach here due to validation above
+            visualization = ""
+
+        return {
+            "visualization": visualization,
+            "format": format,
+            "scope_type": "project",
+            "scope_id": project_id,
+        }
+
+    except ValueError as e:
+        logger.warning(f"Error visualizing project dependencies: {e}")
+        # Check if it's a not found error
+        if "does not exist" in str(e):
+            return JSONResponse(
+                status_code=404,
+                content=format_error_with_formatter(
+                    "NOT_FOUND", str(e), {"project_id": project_id}
+                ),
+            )
+        else:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+            )
+    except Exception as e:
+        logger.error(f"Error visualizing project dependencies: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to visualize project dependencies",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
+
+
+@app.get("/task-lists/{task_list_id}/dependencies/visualize")
+async def visualize_task_list_dependencies(
+    task_list_id: str, format: str = "ascii"  # pylint: disable=redefined-builtin
+) -> Dict[str, Any]:
+    """Visualize dependencies for all tasks in a task list.
+
+    Generates a visualization of the dependency graph in the requested format.
+
+    Args:
+        task_list_id: UUID of the task list to visualize
+
+    Query parameters:
+    - format (optional): Visualization format - "ascii", "dot", or "mermaid" (default: "ascii")
+
+    Returns:
+        Dictionary with visualization string
+
+    Requirements: 5.4, 5.5, 5.6
+    """
+    try:
+        from uuid import UUID
+
+        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
+
+        # Validate format
+        valid_formats = ["ascii", "dot", "mermaid"]
+        if format not in valid_formats:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR",
+                    f"Invalid format '{format}'. Must be one of: {', '.join(valid_formats)}",
+                    {"field": "format", "valid_values": valid_formats},
+                ),
+            )
+
+        # Parse UUID
+        try:
+            task_list_uuid = UUID(task_list_id)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR",
+                    "Invalid task list ID format",
+                    {"field": "task_list_id"},
+                ),
+            )
+
+        # Create analyzer and generate visualization
+        analyzer = DependencyAnalyzer(data_store)
+
+        if format == "ascii":
+            visualization = analyzer.visualize_ascii(
+                scope_type="task_list", scope_id=task_list_uuid
+            )
+        elif format == "dot":
+            visualization = analyzer.visualize_dot(scope_type="task_list", scope_id=task_list_uuid)
+        elif format == "mermaid":
+            visualization = analyzer.visualize_mermaid(
+                scope_type="task_list", scope_id=task_list_uuid
+            )
+        else:
+            # Should not reach here due to validation above
+            visualization = ""
+
+        return {
+            "visualization": visualization,
+            "format": format,
+            "scope_type": "task_list",
+            "scope_id": task_list_id,
+        }
+
+    except ValueError as e:
+        logger.warning(f"Error visualizing task list dependencies: {e}")
+        # Check if it's a not found error
+        if "does not exist" in str(e):
+            return JSONResponse(
+                status_code=404,
+                content=format_error_with_formatter(
+                    "NOT_FOUND", str(e), {"task_list_id": task_list_id}
+                ),
+            )
+        else:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+            )
+    except Exception as e:
+        logger.error(f"Error visualizing task list dependencies: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to visualize task list dependencies",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
+
+
+# ============================================================================
 # Ready Tasks Endpoint
 # ============================================================================
 

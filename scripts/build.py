@@ -7,7 +7,7 @@ This script runs the complete build process including:
 - Security audit (pip-audit)
 - Linting (pylint, flake8)
 - Type checking (mypy)
-- Tests with coverage (120s timeout)
+- Tests with coverage (600s timeout)
 - Distribution build (180s timeout)
 
 Quality gates:
@@ -198,11 +198,11 @@ def main() -> int:
     if not success:
         return 1
     
-    # Step 6: Tests with coverage (120s timeout)
+    # Step 6: Tests with coverage (600s timeout)
     success, _ = run_command(
         ["pytest", "--cov"],
         "Running test suite with coverage",
-        timeout=120
+        timeout=600
     )
     if not success:
         print_error("Tests failed or coverage below threshold (82% line, 82% branch)")

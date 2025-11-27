@@ -36,6 +36,7 @@ dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-xdist>=3.5.0",
     "hypothesis>=6.92.0",
     "black>=23.0.0",
     "isort>=5.12.0",
@@ -76,6 +77,9 @@ asyncio_mode = "auto"
 markers = [
     "e2e: marks tests as end-to-end tests (deselect with '-m \"not e2e\"')"
 ]
+
+[tool.hypothesis]
+deadline = 500
 
 [tool.coverage.run]
 source = ["src"]

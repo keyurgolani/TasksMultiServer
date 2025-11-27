@@ -24,21 +24,40 @@ This project adheres to a code of conduct. By participating, you are expected to
 - Git
 - Docker and Docker Compose (for integration tests)
 - PostgreSQL 14+ (optional, for local PostgreSQL testing)
+- Node.js 18+ (for React UI development)
 
 ### Setup Development Environment
+
+> ⚠️ **Important**: Always use a virtual environment for development to avoid dependency conflicts and ensure reproducible builds.
 
 1. **Fork and clone the repository**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/task-manager.git
-cd task-manager
+git clone https://github.com/YOUR_USERNAME/tasks-multiserver.git
+cd tasks-multiserver
 ```
 
-2. **Create a virtual environment**
+2. **Create and activate a virtual environment** (REQUIRED)
+
+Using venv (built-in):
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+Or using virtualenv:
+
+```bash
+virtualenv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+Or using conda:
+
+```bash
+conda create -n tasks-multiserver python=3.10
+conda activate tasks-multiserver
 ```
 
 3. **Install dependencies**
@@ -47,21 +66,45 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-4. **Verify setup**
+This installs the package in editable mode with all development dependencies.
+
+4. **Setup pre-commit hooks** (recommended)
+
+```bash
+make setup-hooks
+```
+
+This automatically formats code before each commit.
+
+5. **Verify setup**
 
 ```bash
 make test
 ```
 
+If all tests pass, you're ready to develop!
+
 ## Development Workflow
 
-### 1. Create a Branch
+### 1. Ensure Virtual Environment is Active
 
-Create a feature branch from `develop`:
+Always work within your virtual environment:
 
 ```bash
-git checkout develop
-git pull origin develop
+# Check if virtual environment is active (you should see (.venv) in your prompt)
+which python  # Should point to .venv/bin/python
+
+# If not active, activate it
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+### 2. Create a Branch
+
+Create a feature branch from `main`:
+
+```bash
+git checkout main
+git pull origin main
 git checkout -b feature/your-feature-name
 ```
 
@@ -74,35 +117,29 @@ Branch naming conventions:
 - `test/` - Test improvements
 - `chore/` - Maintenance tasks
 
-### 2. Make Changes
+### 3. Make Changes
 
 Follow the coding standards and write tests for your changes.
 
-### 3. Run Quality Checks
+### 4. Run Quality Checks
 
 Before committing, run all quality checks:
 
 ```bash
-# Format code
-make format
+# Complete build with all quality gates (recommended)
+make all
 
-# Run linters
-make lint
-
-# Run type checker
-make typecheck
-
-# Run security audit
-make audit
-
-# Run tests
-make test
-
-# Run integration tests
-make test-integration
+# Or run individual steps:
+make format      # Format code (black + isort)
+make lint        # Run linters (pylint, flake8)
+make typecheck   # Run type checker (mypy)
+make audit       # Security audit (pip-audit)
+make test        # Run tests with coverage
 ```
 
-### 4. Commit Changes
+**Note**: If you have pre-commit hooks installed, formatting happens automatically on commit.
+
+### 5. Commit Changes
 
 Write clear, descriptive commit messages following conventional commits:
 
@@ -122,15 +159,25 @@ Commit message format:
 - `chore:` - Maintenance tasks
 - `perf:` - Performance improvements
 
-### 5. Push and Create PR
+### 6. Push and Create PR
 
 ```bash
 git push origin feature/your-feature-name
 ```
 
-Then create a pull request on GitHub.
+Then create a pull request on GitHub targeting the `main` branch.
 
 ## Coding Standards
+
+### Quality Requirements
+
+All code must meet these standards:
+
+- **Line coverage**: ≥95% per file
+- **Branch coverage**: ≥90% per file
+- **Linting**: Zero errors (pylint, flake8)
+- **Type checking**: Zero errors (mypy)
+- **Security**: No vulnerabilities (pip-audit)
 
 ### Python Style
 
@@ -138,7 +185,7 @@ Then create a pull request on GitHub.
 - **Black** for code formatting (line length: 100)
 - **isort** for import sorting
 - **Type hints** for all functions and methods
-- **Docstrings** for public APIs
+- **Docstrings** for public APIs (Google style)
 
 ### Code Organization
 
@@ -147,6 +194,13 @@ Follow the layered architecture:
 ```
 Models → Data Delegation → Data Access → Orchestration → Interfaces
 ```
+
+Key principles:
+
+- **Direct store access**: No caching layer
+- **Test-driven development**: Write tests first
+- **Simple, functional code**: Avoid over-engineering
+- **One canonical implementation**: No alternative versions
 
 ### Naming Conventions
 
@@ -157,7 +211,7 @@ Models → Data Delegation → Data Access → Orchestration → Interfaces
 
 ### Type Hints
 
-Always use type hints:
+Always use type hints - no `Any` types allowed:
 
 ```python
 def create_task(
@@ -197,9 +251,10 @@ def get_task(task_id: str) -> Task:
 
 ### Test Coverage
 
-- **Minimum coverage**: 82% line, 82% branch
+- **Minimum coverage**: 95% line, 90% branch per file
 - Write tests for all new code
 - Update tests when modifying existing code
+- Use property-based testing (Hypothesis) for complex logic
 
 ### Test Types
 
@@ -248,8 +303,10 @@ def test_task_persistence_integration(postgresql_store):
 
 ### Running Tests
 
+Ensure your virtual environment is active before running tests.
+
 ```bash
-# All tests
+# Unit tests with coverage (fast, 120s timeout)
 make test
 
 # Specific test file
@@ -258,10 +315,14 @@ pytest tests/unit/test_entities.py
 # Specific test
 pytest tests/unit/test_entities.py::test_create_task
 
-# With coverage
-pytest --cov --cov-report=html
+# With verbose output
+pytest tests/unit/test_entities.py -v
 
-# Integration tests
+# With coverage report
+pytest --cov --cov-report=html
+open htmlcov/index.html
+
+# Integration tests (requires Docker)
 make test-integration
 
 # All tests including integration
@@ -274,13 +335,15 @@ make test-all
 
 Before submitting a PR, ensure:
 
+- [ ] Virtual environment was used for development
 - [ ] Code follows style guidelines
+- [ ] `make all` passes successfully
 - [ ] Code is formatted (Black, isort)
 - [ ] Linting passes (pylint, flake8)
 - [ ] Type checking passes (mypy)
 - [ ] All tests pass
-- [ ] Coverage remains ≥82%
-- [ ] Security audit passes
+- [ ] Coverage remains ≥95% line, ≥90% branch
+- [ ] Security audit passes (pip-audit)
 - [ ] Documentation is updated
 - [ ] Commit messages are clear
 - [ ] PR description is complete
@@ -337,29 +400,50 @@ Reviewers check for:
 
 ## Development Tips
 
+### Virtual Environment Best Practices
+
+- **Always activate** before working: `source .venv/bin/activate`
+- **Deactivate** when done: `deactivate`
+- **Check activation**: Look for `(.venv)` in your prompt
+- **Recreate if corrupted**: `rm -rf .venv && python -m venv .venv`
+- **Keep dependencies updated**: `pip install -e ".[dev]" --upgrade`
+
 ### Pre-commit Hooks
 
 Install pre-commit hooks to catch issues early:
 
 ```bash
-pip install pre-commit
+make setup-hooks
+# Or manually:
 pre-commit install
+```
+
+Run manually on all files:
+
+```bash
+pre-commit run --all-files
 ```
 
 ### IDE Setup
 
 **VS Code:**
 
-- Install Python extension
-- Install Pylance for type checking
-- Configure Black as formatter
-- Enable format on save
+1. Select Python interpreter from virtual environment:
+   - `Cmd+Shift+P` → "Python: Select Interpreter"
+   - Choose `.venv/bin/python`
+2. Install Python extension
+3. Install Pylance for type checking
+4. Configure Black as formatter
+5. Enable format on save
 
 **PyCharm:**
 
-- Configure Black as external tool
-- Enable type checking
-- Configure pytest as test runner
+1. Configure project interpreter:
+   - Settings → Project → Python Interpreter
+   - Add → Existing environment → `.venv/bin/python`
+2. Configure Black as external tool
+3. Enable type checking
+4. Configure pytest as test runner
 
 ### Debugging
 
@@ -381,23 +465,42 @@ pytest -v -s tests/integration/test_file.py::test_name
 pytest --pdb tests/unit/test_file.py::test_name
 ```
 
+**With Print Statements:**
+
+```bash
+pytest -v -s tests/unit/test_file.py::test_name
+```
+
 ### Common Issues
+
+**Virtual Environment Not Active:**
+
+```bash
+# Symptom: "ModuleNotFoundError" or wrong Python version
+source .venv/bin/activate
+```
 
 **Import Errors:**
 
 ```bash
+# Reinstall in editable mode
 pip install -e ".[dev]"
 ```
 
 **Test Failures:**
 
 ```bash
+# Verbose output with short traceback
 pytest -v --tb=short
+
+# Full traceback
+pytest -v --tb=long
 ```
 
 **Coverage Issues:**
 
 ```bash
+# Generate HTML report to see what's missing
 pytest --cov --cov-report=html
 open htmlcov/index.html
 ```
@@ -405,8 +508,23 @@ open htmlcov/index.html
 **Docker Issues:**
 
 ```bash
+# Clean restart
 docker-compose down -v
 docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
+**Dependency Conflicts:**
+
+```bash
+# Recreate virtual environment
+deactivate
+rm -rf .venv
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
 ## Getting Help

@@ -85,6 +85,13 @@ class TaskManagerMCPServer:
         self.tag_orchestrator = TagOrchestrator(self.data_store)
         self.template_engine = TemplateEngine(self.data_store)
 
+        # Import SearchOrchestrator and DependencyAnalyzer here to avoid circular imports
+        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
+        from task_manager.orchestration.search_orchestrator import SearchOrchestrator
+
+        self.search_orchestrator = SearchOrchestrator(self.data_store)
+        self.dependency_analyzer = DependencyAnalyzer(self.data_store)
+
         # Initialize preprocessing layer
         self.preprocessor = ParameterPreprocessor()
 
@@ -215,6 +222,13 @@ class TaskManagerMCPServer:
             },
             "remove_task_tags": {
                 "tags": list,
+            },
+            "search_tasks": {
+                "status": list,
+                "priority": list,
+                "tags": list,
+                "limit": int,
+                "offset": int,
             },
         }
 
@@ -684,6 +698,131 @@ class TaskManagerMCPServer:
                         "required": ["task_id", "tags"],
                     },
                 ),
+                Tool(
+                    name="search_tasks",
+                    description="Search and filter tasks by multiple criteria including text query, status, priority, tags, and project. Supports pagination and sorting.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Optional text to search in task titles and descriptions (case-insensitive)",
+                            },
+                            "status": {
+                                "description": "Optional list of status values to filter by - JSON string or array",
+                                "oneOf": [
+                                    {"type": "string"},
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "enum": [
+                                                "NOT_STARTED",
+                                                "IN_PROGRESS",
+                                                "BLOCKED",
+                                                "COMPLETED",
+                                            ],
+                                        },
+                                    },
+                                ],
+                            },
+                            "priority": {
+                                "description": "Optional list of priority values to filter by - JSON string or array",
+                                "oneOf": [
+                                    {"type": "string"},
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "enum": [
+                                                "CRITICAL",
+                                                "HIGH",
+                                                "MEDIUM",
+                                                "LOW",
+                                                "TRIVIAL",
+                                            ],
+                                        },
+                                    },
+                                ],
+                            },
+                            "tags": {
+                                "description": "Optional list of tags to filter by (tasks must have at least one) - JSON string or array",
+                                "oneOf": [
+                                    {"type": "string"},
+                                    {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
+                                ],
+                            },
+                            "project_name": {
+                                "type": "string",
+                                "description": "Optional project name to filter by",
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Maximum number of results to return (default: 50, max: 100)",
+                                "default": 50,
+                            },
+                            "offset": {
+                                "type": "integer",
+                                "description": "Number of results to skip for pagination (default: 0)",
+                                "default": 0,
+                            },
+                            "sort_by": {
+                                "type": "string",
+                                "enum": ["relevance", "created_at", "updated_at", "priority"],
+                                "description": "Sort criteria (default: relevance)",
+                                "default": "relevance",
+                            },
+                        },
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="analyze_dependencies",
+                    description="Analyze task dependencies within a scope (project or task list). Returns critical path, bottlenecks, leaf tasks, progress, and circular dependencies.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "scope_type": {
+                                "type": "string",
+                                "enum": ["project", "task_list"],
+                                "description": "The type of scope to analyze: 'project' or 'task_list'",
+                            },
+                            "scope_id": {
+                                "type": "string",
+                                "description": "The UUID of the project or task list to analyze",
+                            },
+                        },
+                        "required": ["scope_type", "scope_id"],
+                    },
+                ),
+                Tool(
+                    name="visualize_dependencies",
+                    description="Generate a visualization of task dependencies within a scope (project or task list). Supports ASCII art, Graphviz DOT format, and Mermaid diagram formats.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "scope_type": {
+                                "type": "string",
+                                "enum": ["project", "task_list"],
+                                "description": "The type of scope to visualize: 'project' or 'task_list'",
+                            },
+                            "scope_id": {
+                                "type": "string",
+                                "description": "The UUID of the project or task list to visualize",
+                            },
+                            "format": {
+                                "type": "string",
+                                "enum": ["ascii", "dot", "mermaid"],
+                                "description": "The visualization format: 'ascii' for ASCII art, 'dot' for Graphviz DOT format, 'mermaid' for Mermaid diagram",
+                                "default": "ascii",
+                            },
+                        },
+                        "required": ["scope_type", "scope_id", "format"],
+                    },
+                ),
             ]
 
         @self.server.call_tool()
@@ -742,6 +881,12 @@ class TaskManagerMCPServer:
                 return await self._handle_add_task_tags(arguments)
             elif name == "remove_task_tags":
                 return await self._handle_remove_task_tags(arguments)
+            elif name == "search_tasks":
+                return await self._handle_search_tasks(arguments)
+            elif name == "analyze_dependencies":
+                return await self._handle_analyze_dependencies(arguments)
+            elif name == "visualize_dependencies":
+                return await self._handle_visualize_dependencies(arguments)
 
             raise ValueError(f"Unknown tool: {name}")
 
@@ -1720,6 +1865,369 @@ class TaskManagerMCPServer:
             return [TextContent(type="text", text=result)]
         except Exception as e:
             return self._format_error_response(e, "remove_task_tags")
+
+    async def _handle_search_tasks(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle search_tasks tool call.
+
+        Searches for tasks using multiple filter criteria.
+
+        Args:
+            arguments: Dictionary containing search criteria parameters
+
+        Returns:
+            List containing a single TextContent with search results
+
+        Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8
+        """
+        try:
+            from task_manager.models.entities import SearchCriteria
+            from task_manager.models.enums import Priority, Status
+
+            # Parse query (optional)
+            query = arguments.get("query")
+
+            # Parse status filter (optional)
+            # Preprocessing has already converted JSON strings to arrays
+            status_data = arguments.get("status")
+            status_list = None
+            if status_data:
+                # Ensure status_data is a list
+                if not isinstance(status_data, list):
+                    return [
+                        TextContent(
+                            type="text",
+                            text=f"Error: status must be an array, got {type(status_data).__name__}",
+                        )
+                    ]
+                try:
+                    status_list = [Status(s) for s in status_data]
+                except ValueError as e:
+                    return [TextContent(type="text", text=f"Error: Invalid status value: {e}")]
+
+            # Parse priority filter (optional)
+            # Preprocessing has already converted JSON strings to arrays
+            priority_data = arguments.get("priority")
+            priority_list = None
+            if priority_data:
+                # Ensure priority_data is a list
+                if not isinstance(priority_data, list):
+                    return [
+                        TextContent(
+                            type="text",
+                            text=f"Error: priority must be an array, got {type(priority_data).__name__}",
+                        )
+                    ]
+                try:
+                    priority_list = [Priority(p) for p in priority_data]
+                except ValueError as e:
+                    return [TextContent(type="text", text=f"Error: Invalid priority value: {e}")]
+
+            # Parse tags filter (optional)
+            # Preprocessing has already converted JSON strings to arrays
+            tags_data = arguments.get("tags")
+            tags_list = None
+            if tags_data:
+                # Ensure tags_data is a list
+                if not isinstance(tags_data, list):
+                    return [
+                        TextContent(
+                            type="text",
+                            text=f"Error: tags must be an array, got {type(tags_data).__name__}",
+                        )
+                    ]
+                tags_list = tags_data
+
+            # Parse project_name (optional)
+            project_name = arguments.get("project_name")
+
+            # Parse pagination parameters
+            limit = arguments.get("limit", 50)
+            offset = arguments.get("offset", 0)
+
+            # Parse sort criteria
+            sort_by = arguments.get("sort_by", "relevance")
+
+            # Create SearchCriteria object
+            criteria = SearchCriteria(
+                query=query,
+                status=status_list,
+                priority=priority_list,
+                tags=tags_list,
+                project_name=project_name,
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+            )
+
+            # Search tasks through orchestrator
+            tasks = self.search_orchestrator.search_tasks(criteria)
+
+            # Get total count for pagination info
+            total_count = self.search_orchestrator.count_results(criteria)
+
+            # Format search results as text
+            if not tasks:
+                result = "No tasks found matching the search criteria."
+            else:
+                lines = ["Search Results:"]
+                lines.append(
+                    f"Showing {len(tasks)} of {total_count} total results (offset: {offset}, limit: {limit})"
+                )
+                lines.append(f"Sort: {sort_by}")
+                lines.append("")
+
+                # Show active filters
+                filters = []
+                if query:
+                    filters.append(f"Query: '{query}'")
+                if status_list:
+                    filters.append(f"Status: {', '.join(s.value for s in status_list)}")
+                if priority_list:
+                    filters.append(f"Priority: {', '.join(p.value for p in priority_list)}")
+                if tags_list:
+                    filters.append(f"Tags: {', '.join(tags_list)}")
+                if project_name:
+                    filters.append(f"Project: {project_name}")
+
+                if filters:
+                    lines.append("Active Filters:")
+                    for f in filters:
+                        lines.append(f"  - {f}")
+                    lines.append("")
+
+                # Show tasks
+                lines.append("Tasks:")
+                for i, task in enumerate(tasks, 1):
+                    lines.append(f"{i}. {task.title} (ID: {task.id})")
+                    lines.append(
+                        f"   Status: {task.status.value} | Priority: {task.priority.value}"
+                    )
+                    lines.append(f"   Description: {task.description[:100]}...")
+                    if task.tags:
+                        lines.append(f"   Tags: {', '.join(task.tags)}")
+                    lines.append(f"   Task List ID: {task.task_list_id}")
+                    lines.append(f"   Created: {task.created_at.isoformat()}")
+                    lines.append("")
+
+                # Show pagination info
+                if total_count > offset + len(tasks):
+                    remaining = total_count - offset - len(tasks)
+                    lines.append(
+                        f"Note: {remaining} more results available. Use offset={offset + len(tasks)} to see more."
+                    )
+
+                result = "\n".join(lines)
+
+            return [TextContent(type="text", text=result)]
+        except Exception as e:
+            return self._format_error_response(e, "search_tasks")
+
+    async def _handle_analyze_dependencies(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle analyze_dependencies tool call.
+
+        Analyzes task dependencies within a scope and returns comprehensive analysis
+        including critical path, bottlenecks, leaf tasks, progress, and circular dependencies.
+
+        Args:
+            arguments: Dictionary containing 'scope_type' and 'scope_id' keys
+
+        Returns:
+            List containing a single TextContent with dependency analysis results
+
+        Requirements: 5.1, 5.2, 5.3, 5.7, 5.8
+        """
+        try:
+            from uuid import UUID
+
+            # Parse scope type
+            scope_type = arguments.get("scope_type")
+            if not scope_type:
+                return [TextContent(type="text", text="Error: scope_type is required")]
+
+            if scope_type not in ["project", "task_list"]:
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Error: Invalid scope_type '{scope_type}'. Must be 'project' or 'task_list'",
+                    )
+                ]
+
+            # Parse scope ID
+            scope_id_str = arguments.get("scope_id")
+            if not scope_id_str:
+                return [TextContent(type="text", text="Error: scope_id is required")]
+
+            try:
+                scope_id = UUID(scope_id_str)
+            except ValueError:
+                return [
+                    TextContent(type="text", text=f"Error: Invalid UUID format: {scope_id_str}")
+                ]
+
+            # Analyze dependencies through dependency analyzer
+            analysis = self.dependency_analyzer.analyze(scope_type, scope_id)
+
+            # Format analysis results as text
+            lines = [f"Dependency Analysis for {scope_type} (ID: {scope_id})"]
+            lines.append("=" * 60)
+            lines.append("")
+
+            # Overall Progress
+            lines.append("📊 Overall Progress:")
+            lines.append(f"  Total Tasks: {analysis.total_tasks}")
+            lines.append(f"  Completed Tasks: {analysis.completed_tasks}")
+            lines.append(f"  Completion: {analysis.completion_progress:.1f}%")
+            lines.append("")
+
+            # Critical Path
+            lines.append("🎯 Critical Path:")
+            if analysis.critical_path:
+                lines.append(f"  Length: {analysis.critical_path_length} tasks")
+                lines.append("  Tasks in critical path:")
+                for task_id in analysis.critical_path:
+                    # Get task details
+                    task = self.data_store.get_task(task_id)
+                    if task:
+                        status_symbol = {
+                            "NOT_STARTED": "○",
+                            "IN_PROGRESS": "◐",
+                            "BLOCKED": "⊗",
+                            "COMPLETED": "●",
+                        }.get(task.status.value, "?")
+                        lines.append(f"    {status_symbol} {task.title} (ID: {task_id})")
+            else:
+                lines.append("  No critical path (no tasks or no dependencies)")
+            lines.append("")
+
+            # Bottlenecks
+            lines.append("🚧 Bottleneck Tasks:")
+            if analysis.bottleneck_tasks:
+                lines.append(f"  Found {len(analysis.bottleneck_tasks)} bottleneck(s)")
+                for task_id, blocked_count in analysis.bottleneck_tasks:
+                    task = self.data_store.get_task(task_id)
+                    if task:
+                        status_symbol = {
+                            "NOT_STARTED": "○",
+                            "IN_PROGRESS": "◐",
+                            "BLOCKED": "⊗",
+                            "COMPLETED": "●",
+                        }.get(task.status.value, "?")
+                        lines.append(
+                            f"    {status_symbol} {task.title} (blocks {blocked_count} tasks)"
+                        )
+                        lines.append(f"       ID: {task_id}")
+            else:
+                lines.append("  No bottlenecks detected")
+            lines.append("")
+
+            # Leaf Tasks
+            lines.append("🌿 Leaf Tasks (No Dependencies):")
+            if analysis.leaf_tasks:
+                lines.append(f"  Found {len(analysis.leaf_tasks)} leaf task(s)")
+                for task_id in analysis.leaf_tasks:
+                    task = self.data_store.get_task(task_id)
+                    if task:
+                        status_symbol = {
+                            "NOT_STARTED": "○",
+                            "IN_PROGRESS": "◐",
+                            "BLOCKED": "⊗",
+                            "COMPLETED": "●",
+                        }.get(task.status.value, "?")
+                        lines.append(f"    {status_symbol} {task.title} (ID: {task_id})")
+            else:
+                lines.append("  No leaf tasks (all tasks have dependencies)")
+            lines.append("")
+
+            # Circular Dependencies
+            lines.append("🔄 Circular Dependencies:")
+            if analysis.circular_dependencies:
+                lines.append(f"  ⚠️  WARNING: Found {len(analysis.circular_dependencies)} cycle(s)!")
+                for i, cycle in enumerate(analysis.circular_dependencies, 1):
+                    lines.append(f"  Cycle {i}:")
+                    for task_id in cycle:
+                        task = self.data_store.get_task(task_id)
+                        if task:
+                            lines.append(f"    → {task.title} (ID: {task_id})")
+                    lines.append("")
+            else:
+                lines.append("  ✓ No circular dependencies detected")
+            lines.append("")
+
+            # Legend
+            lines.append("Legend:")
+            lines.append("  ○ NOT_STARTED")
+            lines.append("  ◐ IN_PROGRESS")
+            lines.append("  ⊗ BLOCKED")
+            lines.append("  ● COMPLETED")
+
+            result = "\n".join(lines)
+            return [TextContent(type="text", text=result)]
+        except Exception as e:
+            return self._format_error_response(e, "analyze_dependencies")
+
+    async def _handle_visualize_dependencies(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle visualize_dependencies tool call.
+
+        Generates a visualization of task dependencies within a scope in the requested format.
+        Supports ASCII art, Graphviz DOT format, and Mermaid diagram formats.
+
+        Args:
+            arguments: Dictionary containing 'scope_type', 'scope_id', and 'format' keys
+
+        Returns:
+            List containing a single TextContent with the dependency visualization
+
+        Requirements: 5.4, 5.5, 5.6
+        """
+        try:
+            from uuid import UUID
+
+            # Parse scope type
+            scope_type = arguments.get("scope_type")
+            if not scope_type:
+                return [TextContent(type="text", text="Error: scope_type is required")]
+
+            if scope_type not in ["project", "task_list"]:
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Error: Invalid scope_type '{scope_type}'. Must be 'project' or 'task_list'",
+                    )
+                ]
+
+            # Parse scope ID
+            scope_id_str = arguments.get("scope_id")
+            if not scope_id_str:
+                return [TextContent(type="text", text="Error: scope_id is required")]
+
+            try:
+                scope_id = UUID(scope_id_str)
+            except ValueError:
+                return [
+                    TextContent(type="text", text=f"Error: Invalid UUID format: {scope_id_str}")
+                ]
+
+            # Parse format
+            format_type = arguments.get("format", "ascii")
+            if format_type not in ["ascii", "dot", "mermaid"]:
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Error: Invalid format '{format_type}'. Must be 'ascii', 'dot', or 'mermaid'",
+                    )
+                ]
+
+            # Generate visualization through dependency analyzer
+            if format_type == "ascii":
+                visualization = self.dependency_analyzer.visualize_ascii(scope_type, scope_id)
+            elif format_type == "dot":
+                visualization = self.dependency_analyzer.visualize_dot(scope_type, scope_id)
+            else:  # mermaid
+                visualization = self.dependency_analyzer.visualize_mermaid(scope_type, scope_id)
+
+            return [TextContent(type="text", text=visualization)]
+        except Exception as e:
+            return self._format_error_response(e, "visualize_dependencies")
 
     async def run(self) -> None:
         """Run the MCP server.

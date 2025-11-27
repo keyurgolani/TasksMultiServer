@@ -131,6 +131,56 @@ class TaskList:
 
 
 @dataclass
+class SearchCriteria:
+    """Search and filter criteria for finding tasks.
+
+    Attributes:
+        query: Optional text to search in task titles and descriptions
+        status: Optional list of status values to filter by
+        priority: Optional list of priority values to filter by
+        tags: Optional list of tags to filter by
+        project_name: Optional project name to filter by
+        limit: Maximum number of results to return (default: 50)
+        offset: Number of results to skip for pagination (default: 0)
+        sort_by: Sort criteria - "relevance", "created_at", "updated_at", or "priority" (default: "relevance")
+    """
+
+    query: Optional[str] = None
+    status: Optional[list[Status]] = None
+    priority: Optional[list[Priority]] = None
+    tags: Optional[list[str]] = None
+    project_name: Optional[str] = None
+    limit: int = 50
+    offset: int = 0
+    sort_by: str = "relevance"
+
+
+@dataclass
+class DependencyAnalysis:
+    """Analysis results for task dependency graphs.
+
+    Attributes:
+        critical_path: List of task IDs forming the longest chain of dependencies
+        critical_path_length: Length of the critical path
+        bottleneck_tasks: List of (task_id, blocked_count) tuples for tasks that block multiple other tasks
+        leaf_tasks: List of task IDs that have no dependencies
+        completion_progress: Percentage of completed tasks (0.0 to 100.0)
+        total_tasks: Total number of tasks in the analyzed scope
+        completed_tasks: Number of completed tasks in the analyzed scope
+        circular_dependencies: List of cycles, where each cycle is a list of task IDs forming the cycle
+    """
+
+    critical_path: list[UUID]
+    critical_path_length: int
+    bottleneck_tasks: list[tuple[UUID, int]]
+    leaf_tasks: list[UUID]
+    completion_progress: float
+    total_tasks: int
+    completed_tasks: int
+    circular_dependencies: list[list[UUID]]
+
+
+@dataclass
 class Task:
     """Individual work item with title, description, status, dependencies, and exit criteria.
 

@@ -1222,3 +1222,519 @@ class TestMCPServerTools:
         text = result[0].text
 
         assert "error" in text.lower() or "not exist" in text.lower()
+
+    @pytest.mark.asyncio
+    async def test_search_tasks_tool_searches_by_query(self, filesystem_env):
+        """Test that search_tasks tool searches tasks by text query.
+
+        Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+        from task_manager.models.entities import ExitCriteria
+        from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a task list and tasks
+        task_list = server.task_list_orchestrator.create_task_list(name="Test List")
+        task1 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Search Test Task",
+            description="This is a searchable task",
+            status=Status.NOT_STARTED,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.HIGH,
+            notes=[],
+            tags=["test", "search"],
+        )
+        task2 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Another Task",
+            description="Different content",
+            status=Status.IN_PROGRESS,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.MEDIUM,
+            notes=[],
+            tags=["other"],
+        )
+
+        # Search by query
+        result = await server._handle_search_tasks({"query": "Search"})
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        assert "Search Test Task" in text
+        assert "Another Task" not in text
+        assert "1 of" in text  # Should show pagination info
+
+    @pytest.mark.asyncio
+    async def test_search_tasks_tool_filters_by_status(self, filesystem_env):
+        """Test that search_tasks tool filters by status.
+
+        Requirements: 4.2
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+        from task_manager.models.entities import ExitCriteria
+        from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a task list and tasks
+        task_list = server.task_list_orchestrator.create_task_list(name="Test List")
+        task1 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Not Started Task",
+            description="Task 1",
+            status=Status.NOT_STARTED,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.HIGH,
+            notes=[],
+        )
+        task2 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="In Progress Task",
+            description="Task 2",
+            status=Status.IN_PROGRESS,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.MEDIUM,
+            notes=[],
+        )
+
+        # Search by status
+        result = await server._handle_search_tasks({"status": ["IN_PROGRESS"]})
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        assert "In Progress Task" in text
+        assert "Not Started Task" not in text
+
+    @pytest.mark.asyncio
+    async def test_search_tasks_tool_filters_by_tags(self, filesystem_env):
+        """Test that search_tasks tool filters by tags.
+
+        Requirements: 4.4
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+        from task_manager.models.entities import ExitCriteria
+        from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a task list and tasks
+        task_list = server.task_list_orchestrator.create_task_list(name="Test List")
+        task1 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Tagged Task",
+            description="Task with tags",
+            status=Status.NOT_STARTED,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.HIGH,
+            notes=[],
+            tags=["important", "urgent"],
+        )
+        task2 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Untagged Task",
+            description="Task without tags",
+            status=Status.NOT_STARTED,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.MEDIUM,
+            notes=[],
+            tags=[],
+        )
+
+        # Search by tags
+        result = await server._handle_search_tasks({"tags": ["important"]})
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        assert "Tagged Task" in text
+        assert "Untagged Task" not in text
+
+    @pytest.mark.asyncio
+    async def test_search_tasks_tool_with_no_results(self, filesystem_env):
+        """Test that search_tasks tool handles no results gracefully.
+
+        Requirements: 4.8
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Search with query that won't match anything
+        result = await server._handle_search_tasks({"query": "NonexistentSearchTerm12345"})
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        assert "No tasks found" in text
+
+    @pytest.mark.asyncio
+    async def test_analyze_dependencies_tool_analyzes_project(self, filesystem_env):
+        """Test that analyze_dependencies tool analyzes dependencies in a project.
+
+        Requirements: 5.1, 5.2, 5.3, 5.7, 5.8
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+        from task_manager.models.entities import Dependency, ExitCriteria
+        from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a project and task list
+        project = server.project_orchestrator.create_project(name="Test Project")
+        task_list = server.task_list_orchestrator.create_task_list(
+            name="Test List", project_name="Test Project"
+        )
+
+        # Create tasks with dependencies
+        task1 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Task 1",
+            description="First task",
+            status=Status.COMPLETED,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.COMPLETE)],
+            priority=Priority.MEDIUM,
+            notes=[],
+        )
+
+        task2 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Task 2",
+            description="Second task",
+            status=Status.IN_PROGRESS,
+            dependencies=[Dependency(task_id=task1.id, task_list_id=task_list.id)],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.HIGH,
+            notes=[],
+        )
+
+        task3 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Task 3",
+            description="Third task",
+            status=Status.NOT_STARTED,
+            dependencies=[Dependency(task_id=task2.id, task_list_id=task_list.id)],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.LOW,
+            notes=[],
+        )
+
+        # Analyze dependencies at project level
+        result = await server._handle_analyze_dependencies(
+            {"scope_type": "project", "scope_id": str(project.id)}
+        )
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        # Check that analysis includes expected sections
+        assert "Dependency Analysis" in text
+        assert "Overall Progress" in text
+        assert "Total Tasks: 3" in text
+        assert "Completed Tasks: 1" in text
+        assert "Critical Path" in text
+        assert "Bottleneck Tasks" in text
+        assert "Leaf Tasks" in text
+        assert "Circular Dependencies" in text
+        assert "No circular dependencies detected" in text
+
+        # Check that task titles appear in the output
+        assert "Task 1" in text or str(task1.id) in text
+        assert "Task 2" in text or str(task2.id) in text
+        assert "Task 3" in text or str(task3.id) in text
+
+    @pytest.mark.asyncio
+    async def test_analyze_dependencies_tool_analyzes_task_list(self, filesystem_env):
+        """Test that analyze_dependencies tool analyzes dependencies in a task list.
+
+        Requirements: 5.1, 5.2, 5.3, 5.7, 5.8
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+        from task_manager.models.entities import ExitCriteria
+        from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a task list
+        task_list = server.task_list_orchestrator.create_task_list(name="Test List")
+
+        # Create a simple task with no dependencies (leaf task)
+        task1 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Leaf Task",
+            description="Task with no dependencies",
+            status=Status.NOT_STARTED,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.MEDIUM,
+            notes=[],
+        )
+
+        # Analyze dependencies at task list level
+        result = await server._handle_analyze_dependencies(
+            {"scope_type": "task_list", "scope_id": str(task_list.id)}
+        )
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        # Check that analysis includes expected sections
+        assert "Dependency Analysis" in text
+        assert "Overall Progress" in text
+        assert "Total Tasks: 1" in text
+        assert "Completed Tasks: 0" in text
+        assert "Leaf Tasks" in text
+        assert "Found 1 leaf task" in text
+        assert "Leaf Task" in text or str(task1.id) in text
+
+    @pytest.mark.asyncio
+    async def test_analyze_dependencies_tool_with_empty_scope(self, filesystem_env):
+        """Test that analyze_dependencies tool handles empty scopes gracefully.
+
+        Requirements: 5.1, 5.2, 5.3, 5.7, 5.8
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a project with no tasks
+        project = server.project_orchestrator.create_project(name="Empty Project")
+
+        # Analyze dependencies
+        result = await server._handle_analyze_dependencies(
+            {"scope_type": "project", "scope_id": str(project.id)}
+        )
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        # Check that analysis handles empty scope
+        assert "Dependency Analysis" in text
+        assert "Total Tasks: 0" in text
+        assert "Completed Tasks: 0" in text
+
+    @pytest.mark.asyncio
+    async def test_visualize_dependencies_tool_ascii_format(self, filesystem_env):
+        """Test that visualize_dependencies tool generates ASCII visualization.
+
+        Requirements: 5.4
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+        from task_manager.models.entities import Dependency, ExitCriteria
+        from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a project and task list
+        project = server.project_orchestrator.create_project(name="Viz Test Project")
+        task_list = server.task_list_orchestrator.create_task_list(
+            name="Viz Test List", project_name="Viz Test Project"
+        )
+
+        # Create tasks with dependencies
+        task1 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Task 1",
+            description="First task",
+            status=Status.COMPLETED,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.COMPLETE)],
+            priority=Priority.HIGH,
+            notes=[],
+        )
+
+        task2 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Task 2",
+            description="Second task",
+            status=Status.IN_PROGRESS,
+            dependencies=[Dependency(task_id=task1.id, task_list_id=task_list.id)],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.MEDIUM,
+            notes=[],
+        )
+
+        # Visualize dependencies in ASCII format
+        result = await server._handle_visualize_dependencies(
+            {"scope_type": "project", "scope_id": str(project.id), "format": "ascii"}
+        )
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        # Check that visualization contains expected elements
+        assert "Dependency Graph" in text
+        assert "Task 1" in text
+        assert "Task 2" in text
+        assert "Legend" in text
+        # Check for status symbols
+        assert "●" in text or "○" in text or "◐" in text
+
+    @pytest.mark.asyncio
+    async def test_visualize_dependencies_tool_dot_format(self, filesystem_env):
+        """Test that visualize_dependencies tool generates DOT visualization.
+
+        Requirements: 5.5
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+        from task_manager.models.entities import Dependency, ExitCriteria
+        from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a project and task list
+        project = server.project_orchestrator.create_project(name="DOT Test Project")
+        task_list = server.task_list_orchestrator.create_task_list(
+            name="DOT Test List", project_name="DOT Test Project"
+        )
+
+        # Create tasks with dependencies
+        task1 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Task A",
+            description="First task",
+            status=Status.NOT_STARTED,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.HIGH,
+            notes=[],
+        )
+
+        task2 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Task B",
+            description="Second task",
+            status=Status.NOT_STARTED,
+            dependencies=[Dependency(task_id=task1.id, task_list_id=task_list.id)],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.MEDIUM,
+            notes=[],
+        )
+
+        # Visualize dependencies in DOT format
+        result = await server._handle_visualize_dependencies(
+            {"scope_type": "task_list", "scope_id": str(task_list.id), "format": "dot"}
+        )
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        # Check that visualization is valid DOT format
+        assert "digraph G" in text
+        assert "Task A" in text
+        assert "Task B" in text
+        assert "->" in text  # Edge notation
+        assert "fillcolor" in text  # Node styling
+
+    @pytest.mark.asyncio
+    async def test_visualize_dependencies_tool_mermaid_format(self, filesystem_env):
+        """Test that visualize_dependencies tool generates Mermaid visualization.
+
+        Requirements: 5.6
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+        from task_manager.models.entities import Dependency, ExitCriteria
+        from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a project and task list
+        project = server.project_orchestrator.create_project(name="Mermaid Test Project")
+        task_list = server.task_list_orchestrator.create_task_list(
+            name="Mermaid Test List", project_name="Mermaid Test Project"
+        )
+
+        # Create tasks with dependencies
+        task1 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Task X",
+            description="First task",
+            status=Status.BLOCKED,
+            dependencies=[],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.HIGH,
+            notes=[],
+        )
+
+        task2 = server.task_orchestrator.create_task(
+            task_list_id=task_list.id,
+            title="Task Y",
+            description="Second task",
+            status=Status.NOT_STARTED,
+            dependencies=[Dependency(task_id=task1.id, task_list_id=task_list.id)],
+            exit_criteria=[ExitCriteria(criteria="Done", status=ExitCriteriaStatus.INCOMPLETE)],
+            priority=Priority.MEDIUM,
+            notes=[],
+        )
+
+        # Visualize dependencies in Mermaid format
+        result = await server._handle_visualize_dependencies(
+            {"scope_type": "project", "scope_id": str(project.id), "format": "mermaid"}
+        )
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        # Check that visualization is valid Mermaid format
+        assert "graph TD" in text
+        assert "Task X" in text
+        assert "Task Y" in text
+        assert "-->" in text  # Edge notation
+        assert "classDef" in text  # Styling
+
+    @pytest.mark.asyncio
+    async def test_visualize_dependencies_tool_with_empty_scope(self, filesystem_env):
+        """Test that visualize_dependencies tool handles empty scopes gracefully.
+
+        Requirements: 5.4, 5.5, 5.6
+        """
+        from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+
+        # Execute
+        server = TaskManagerMCPServer()
+
+        # Create a project with no tasks
+        project = server.project_orchestrator.create_project(name="Empty Viz Project")
+
+        # Visualize dependencies (should handle empty scope)
+        result = await server._handle_visualize_dependencies(
+            {"scope_type": "project", "scope_id": str(project.id), "format": "ascii"}
+        )
+
+        # Verify
+        assert len(result) == 1
+        text = result[0].text
+
+        # Check that visualization handles empty scope
+        assert "No tasks" in text or "empty" in text.lower()

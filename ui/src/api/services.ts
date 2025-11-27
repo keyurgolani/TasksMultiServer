@@ -91,4 +91,9 @@ export const taskApi = {
     });
     return response.data.ready_tasks || [];
   },
+
+  search: async (criteria: any): Promise<any> => {
+    const response = await apiClient.post('/search/tasks', criteria);
+    return response.data;
+  },
 };

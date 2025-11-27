@@ -18,6 +18,9 @@ from task_manager.data.access.migrations import (
     migrate_add_tags_column,
 )
 
+# Mark all tests in this module to run in the same xdist group for proper isolation
+pytestmark = pytest.mark.xdist_group(name="migrations")
+
 
 class TestMigrations:
     """Test suite for migration utilities."""
@@ -322,8 +325,8 @@ def test_db_url():
     """Provide test database URL from environment or use in-memory SQLite."""
     import os
 
-    # Use PostgreSQL if available, otherwise skip
-    postgres_url = os.environ.get("POSTGRES_URL")
+    # Use TEST_POSTGRES_URL first (set by conftest), then POSTGRES_URL
+    postgres_url = os.environ.get("TEST_POSTGRES_URL") or os.environ.get("POSTGRES_URL")
     if postgres_url:
         return postgres_url
 

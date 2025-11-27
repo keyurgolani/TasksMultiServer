@@ -1,6 +1,16 @@
 """Core data models and entities."""
 
-from .entities import ActionPlanItem, Dependency, ExitCriteria, Note, Project, Task, TaskList
+from .entities import (
+    ActionPlanItem,
+    Dependency,
+    DependencyAnalysis,
+    ExitCriteria,
+    Note,
+    Project,
+    SearchCriteria,
+    Task,
+    TaskList,
+)
 from .enums import ExitCriteriaStatus, NoteType, Priority, Status
 
 __all__ = [
@@ -15,4 +25,6 @@ __all__ = [
     "Project",
     "TaskList",
     "Task",
+    "SearchCriteria",
+    "DependencyAnalysis",
 ]

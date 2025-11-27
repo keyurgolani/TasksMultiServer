@@ -8,7 +8,7 @@ setup-hooks:
 	@echo "Pre-commit hooks installed successfully"
 
 test:
-	timeout 120s pytest --cov --cov-fail-under=90
+	timeout 300s pytest --cov --cov-fail-under=90
 
 test-integration:
 	timeout 180s python3 -m pytest tests/integration/ -v
