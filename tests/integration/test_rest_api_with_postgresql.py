@@ -50,15 +50,19 @@ def postgresql_client():
 def test_postgresql_health_check(postgresql_client):
     """Test health endpoint reports PostgreSQL backing store.
 
-    Requirements: 12.1, 15.2
+    Requirements: 9.1, 9.2, 9.4, 9.5, 12.1, 15.2
     """
     response = postgresql_client.get("/health")
 
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
-    assert data["backing_store"] == "PostgreSQLStore"
-    assert data["projects_count"] == 2  # Default projects
+    assert "timestamp" in data
+    assert "checks" in data
+    assert "response_time_ms" in data
+    # Should have database check for PostgreSQL backing store
+    assert "database" in data["checks"]
+    assert data["checks"]["database"]["status"] == "healthy"
 
 
 def test_postgresql_project_crud(postgresql_client):

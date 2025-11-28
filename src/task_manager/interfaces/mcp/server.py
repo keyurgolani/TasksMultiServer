@@ -85,12 +85,14 @@ class TaskManagerMCPServer:
         self.tag_orchestrator = TagOrchestrator(self.data_store)
         self.template_engine = TemplateEngine(self.data_store)
 
-        # Import SearchOrchestrator and DependencyAnalyzer here to avoid circular imports
+        # Import SearchOrchestrator, DependencyAnalyzer, and BlockingDetector here to avoid circular imports
+        from task_manager.orchestration.blocking_detector import BlockingDetector
         from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
         from task_manager.orchestration.search_orchestrator import SearchOrchestrator
 
         self.search_orchestrator = SearchOrchestrator(self.data_store)
         self.dependency_analyzer = DependencyAnalyzer(self.data_store)
+        self.blocking_detector = BlockingDetector(self.data_store)
 
         # Initialize preprocessing layer
         self.preprocessor = ParameterPreprocessor()
@@ -984,6 +986,14 @@ class TaskManagerMCPServer:
                     lines.append(f"  Dependencies: {len(task.dependencies)}")
                     lines.append(f"  Exit Criteria: {len(task.exit_criteria)}")
 
+                    # Add blocking information
+                    block_reason = self.blocking_detector.detect_blocking(task)
+                    if block_reason:
+                        lines.append(f"  ⚠️  BLOCKED: {block_reason.message}")
+                        lines.append(
+                            f"     Blocking tasks: {', '.join(block_reason.blocking_task_titles)}"
+                        )
+
             result = "\n".join(lines)
             return [TextContent(type="text", text=result)]
         except Exception as e:
@@ -1760,6 +1770,15 @@ class TaskManagerMCPServer:
                     lines.append(
                         f"  Exit Criteria: {len(task.exit_criteria)} total, {incomplete_criteria} incomplete"
                     )
+
+                    # Add blocking information (should be None for ready tasks, but check anyway)
+                    block_reason = self.blocking_detector.detect_blocking(task)
+                    if block_reason:
+                        lines.append(f"  ⚠️  BLOCKED: {block_reason.message}")
+                        lines.append(
+                            f"     Blocking tasks: {', '.join(block_reason.blocking_task_titles)}"
+                        )
+
                     lines.append("")
 
                 result = "\n".join(lines)

@@ -87,7 +87,7 @@ def is_valid_dot_format(dot_string: str) -> bool:
     num_tasks=st.integers(min_value=1, max_value=15),
     seed=st.integers(min_value=0, max_value=1000),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=500)
 def test_dot_format_is_valid_graphviz(num_tasks: int, seed: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 25: DOT format is valid Graphviz

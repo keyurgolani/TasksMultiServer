@@ -904,9 +904,10 @@ const TasksPage: React.FC = () => {
                 style={{
                   padding: '1.5rem',
                   backgroundColor: 'white',
-                  border: '1px solid #ddd',
+                  border: task.block_reason?.is_blocked ? '2px solid #ef5350' : '1px solid #ddd',
                   borderRadius: '8px',
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  borderLeft: task.block_reason?.is_blocked ? '6px solid #d32f2f' : undefined,
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
@@ -954,6 +955,38 @@ const TasksPage: React.FC = () => {
                             🏷️ {tag}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {task.block_reason && task.block_reason.is_blocked && (
+                      <div style={{
+                        padding: '0.75rem',
+                        backgroundColor: '#ffebee',
+                        border: '1px solid #ef5350',
+                        borderRadius: '6px',
+                        marginBottom: '0.5rem',
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          marginBottom: '0.25rem',
+                        }}>
+                          <span style={{ fontSize: '1.25rem' }}>🚫</span>
+                          <strong style={{ color: '#c62828', fontSize: '0.875rem' }}>Blocked</strong>
+                        </div>
+                        <div style={{ fontSize: '0.875rem', color: '#d32f2f', marginBottom: '0.5rem' }}>
+                          {task.block_reason.message}
+                        </div>
+                        {task.block_reason.blocking_task_titles.length > 0 && (
+                          <div style={{ fontSize: '0.75rem', color: '#666' }}>
+                            <strong>Waiting on:</strong>
+                            <ul style={{ margin: '0.25rem 0 0 1.5rem', padding: 0 }}>
+                              {task.block_reason.blocking_task_titles.map((title, idx) => (
+                                <li key={idx}>{title}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '0.5rem' }}>

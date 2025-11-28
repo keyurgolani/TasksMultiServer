@@ -18,8 +18,7 @@ from task_manager.data.access.migrations import (
     migrate_add_tags_column,
 )
 
-# Mark all tests in this module to run in the same xdist group for proper isolation
-pytestmark = pytest.mark.xdist_group(name="migrations")
+# Tests for database migrations
 
 
 class TestMigrations:

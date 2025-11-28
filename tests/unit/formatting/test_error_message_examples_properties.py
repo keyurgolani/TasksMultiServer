@@ -185,7 +185,12 @@ def test_error_messages_with_valid_values_include_examples(
     # Only check this for invalid_enum error type, as other error types use expected_type
     if valid_values and error_type == "invalid_enum":
         # Filter out whitespace-only values and strip whitespace from realistic values
-        realistic_values = [v.strip() for v in valid_values if v and not v.isspace()]
+        # Also filter out values that are only whitespace after stripping or contain only newlines
+        realistic_values = [
+            v.strip()
+            for v in valid_values
+            if v and v.strip() and not v.isspace() and "\n" not in v.strip()
+        ]
         if realistic_values:
             example_uses_valid_value = any(str(val) in example_text for val in realistic_values)
             assert example_uses_valid_value, (

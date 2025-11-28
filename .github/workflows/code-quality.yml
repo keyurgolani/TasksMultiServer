@@ -39,9 +39,7 @@ jobs:
       run: mypy src --pretty
     
     - name: Check test coverage
-      run: |
-        pytest --cov --cov-report=term-missing --cov-report=html
-        coverage report --fail-under=95
+      run: make test
     
     - name: Comment coverage on PR
       uses: py-cov-action/python-coverage-comment-action@v3

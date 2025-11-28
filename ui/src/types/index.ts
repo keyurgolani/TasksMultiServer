@@ -65,6 +65,13 @@ export interface ActionPlanItem {
   content: string;
 }
 
+export interface BlockReason {
+  is_blocked: boolean;
+  blocking_task_ids: string[];
+  blocking_task_titles: string[];
+  message: string;
+}
+
 export interface Task {
   id: string;
   task_list_id: string;
@@ -80,6 +87,7 @@ export interface Task {
   execution_notes?: Note[];
   agent_instructions_template?: string;
   tags: string[];
+  block_reason?: BlockReason;
   created_at: string;
   updated_at: string;
 }

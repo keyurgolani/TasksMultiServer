@@ -156,6 +156,23 @@ class SearchCriteria:
 
 
 @dataclass
+class BlockReason:
+    """Information about why a task is blocked.
+
+    Attributes:
+        is_blocked: Whether the task is currently blocked
+        blocking_task_ids: List of task IDs that are blocking this task
+        blocking_task_titles: List of titles of tasks that are blocking this task
+        message: Human-readable message explaining why the task is blocked
+    """
+
+    is_blocked: bool
+    blocking_task_ids: list[UUID]
+    blocking_task_titles: list[str]
+    message: str
+
+
+@dataclass
 class DependencyAnalysis:
     """Analysis results for task dependency graphs.
 
@@ -178,6 +195,42 @@ class DependencyAnalysis:
     total_tasks: int
     completed_tasks: int
     circular_dependencies: list[list[UUID]]
+
+
+@dataclass
+class BulkOperationResult:
+    """Result of a bulk operation on multiple entities.
+
+    Attributes:
+        total: Total number of operations attempted
+        succeeded: Number of operations that succeeded
+        failed: Number of operations that failed
+        results: List of individual operation results (dicts with operation details)
+        errors: List of error details for failed operations (dicts with error information)
+    """
+
+    total: int
+    succeeded: int
+    failed: int
+    results: list[dict]
+    errors: list[dict]
+
+
+@dataclass
+class HealthStatus:
+    """Health status of the system and its components.
+
+    Attributes:
+        status: Overall system status - "healthy", "degraded", or "unhealthy"
+        timestamp: When the health check was performed
+        checks: Dictionary mapping check names to their results (each result is a dict with check details)
+        response_time_ms: Total time taken to perform all health checks in milliseconds
+    """
+
+    status: str
+    timestamp: datetime
+    checks: dict[str, dict]
+    response_time_ms: float
 
 
 @dataclass

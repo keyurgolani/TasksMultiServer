@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def test_client(tmp_path, worker_id):
+def test_client(tmp_path):
     """Create a test client for the REST API.
 
     Sets up environment variables for filesystem backing store
@@ -22,13 +22,7 @@ def test_client(tmp_path, worker_id):
     Yields:
         TestClient instance for making requests
     """
-    # Use worker-specific temp directory for parallel test execution
-    if worker_id == "master":
-        # Not running in parallel
-        test_dir = tmp_path / "test_rest_api"
-    else:
-        # Running in parallel - use worker-specific directory
-        test_dir = tmp_path / f"test_rest_api_{worker_id}"
+    test_dir = tmp_path / "test_rest_api"
 
     # Set up environment for filesystem backing store
     os.environ["DATA_STORE_TYPE"] = "filesystem"
@@ -66,7 +60,7 @@ def test_root_endpoint(test_client):
 def test_health_endpoint(test_client):
     """Test the health check endpoint returns status.
 
-    Requirements: 12.1, 15.1
+    Requirements: 9.1, 9.4, 9.5, 12.1, 15.1
     """
     response = test_client.get("/health")
 
@@ -74,10 +68,12 @@ def test_health_endpoint(test_client):
     data = response.json()
     assert "status" in data
     assert data["status"] == "healthy"
-    assert "backing_store" in data
-    assert "projects_count" in data
-    # Should have 2 default projects (Chore and Repeatable)
-    assert data["projects_count"] == 2
+    assert "timestamp" in data
+    assert "checks" in data
+    assert "response_time_ms" in data
+    # Should have filesystem check for filesystem backing store
+    assert "filesystem" in data["checks"]
+    assert data["checks"]["filesystem"]["status"] == "healthy"
 
 
 def test_cors_headers(test_client):
@@ -111,18 +107,23 @@ def test_request_logging_header(test_client):
 def test_backing_store_initialization(test_client):
     """Test that backing store is properly initialized with default projects.
 
-    Requirements: 15.1, 15.2
+    Requirements: 9.1, 9.3, 9.4, 15.1, 15.2
     """
     response = test_client.get("/health")
 
     assert response.status_code == 200
     data = response.json()
 
-    # Verify backing store type
-    assert data["backing_store"] == "FilesystemStore"
+    # Verify health check includes filesystem check
+    assert "checks" in data
+    assert "filesystem" in data["checks"]
+    assert data["checks"]["filesystem"]["status"] == "healthy"
 
-    # Verify default projects were created
-    assert data["projects_count"] == 2
+    # Verify default projects were created by checking projects endpoint
+    projects_response = test_client.get("/projects")
+    assert projects_response.status_code == 200
+    projects_data = projects_response.json()
+    assert len(projects_data["projects"]) == 2
 
 
 def test_openapi_docs_available(test_client):

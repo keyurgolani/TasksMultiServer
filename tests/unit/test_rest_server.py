@@ -516,3 +516,293 @@ class TestRequestLoggingMiddleware:
 
         assert response.status_code == 200
         assert "X-Process-Time" in response.headers
+
+
+class TestFormatErrorWithFormatter:
+    """Test format_error_with_formatter function with various error patterns."""
+
+    @patch("task_manager.interfaces.rest.server.error_formatter")
+    def test_format_missing_required_field_pattern(self, mock_formatter: Mock) -> None:
+        """Test formatting of 'Missing required field' pattern."""
+        from task_manager.interfaces.rest.server import format_error_with_formatter
+
+        mock_formatter.format_validation_error.return_value = "Formatted: Missing field"
+
+        result = format_error_with_formatter(
+            "VALIDATION_ERROR", "Missing required field: name", {"field": "name"}
+        )
+
+        assert result["error"]["code"] == "VALIDATION_ERROR"
+        assert "Formatted" in result["error"]["message"]
+        mock_formatter.format_validation_error.assert_called_once_with(
+            field="name", error_type="missing", received_value=None
+        )
+
+    @patch("task_manager.interfaces.rest.server.error_formatter")
+    def test_format_invalid_value_pattern_with_valid_values(self, mock_formatter: Mock) -> None:
+        """Test formatting of 'Invalid X value' pattern with valid values."""
+        from task_manager.interfaces.rest.server import format_error_with_formatter
+
+        mock_formatter.format_validation_error.return_value = "Formatted: Invalid value"
+
+        result = format_error_with_formatter(
+            "VALIDATION_ERROR",
+            "Invalid status value: INVALID",
+            {"field": "status", "valid_values": ["NOT_STARTED", "IN_PROGRESS"]},
+        )
+
+        assert result["error"]["code"] == "VALIDATION_ERROR"
+        mock_formatter.format_validation_error.assert_called_once()
+        call_args = mock_formatter.format_validation_error.call_args
+        assert call_args[1]["error_type"] == "invalid_enum"
+        assert call_args[1]["valid_values"] == ["NOT_STARTED", "IN_PROGRESS"]
+
+    @patch("task_manager.interfaces.rest.server.error_formatter")
+    def test_format_invalid_value_pattern_without_valid_values(self, mock_formatter: Mock) -> None:
+        """Test formatting of 'Invalid X value' pattern without valid values."""
+        from task_manager.interfaces.rest.server import format_error_with_formatter
+
+        mock_formatter.format_validation_error.return_value = "Formatted: Invalid value"
+
+        result = format_error_with_formatter(
+            "VALIDATION_ERROR", "Invalid priority value: WRONG", {}
+        )
+
+        assert result["error"]["code"] == "VALIDATION_ERROR"
+        mock_formatter.format_validation_error.assert_called_once()
+        call_args = mock_formatter.format_validation_error.call_args
+        assert call_args[1]["error_type"] == "invalid_value"
+
+    @patch("task_manager.interfaces.rest.server.error_formatter")
+    def test_format_field_description_pattern_missing(self, mock_formatter: Mock) -> None:
+        """Test formatting of 'field: description' pattern with missing error."""
+        from task_manager.interfaces.rest.server import format_error_with_formatter
+
+        mock_formatter.format_validation_error.return_value = "Formatted: Missing"
+
+        result = format_error_with_formatter(
+            "VALIDATION_ERROR", "name: field is required and missing", {}
+        )
+
+        assert result["error"]["code"] == "VALIDATION_ERROR"
+        call_args = mock_formatter.format_validation_error.call_args
+        assert call_args[1]["error_type"] == "missing"
+
+    @patch("task_manager.interfaces.rest.server.error_formatter")
+    def test_format_field_description_pattern_invalid_type(self, mock_formatter: Mock) -> None:
+        """Test formatting of 'field: description' pattern with invalid type error."""
+        from task_manager.interfaces.rest.server import format_error_with_formatter
+
+        mock_formatter.format_validation_error.return_value = "Formatted: Invalid type"
+
+        result = format_error_with_formatter(
+            "VALIDATION_ERROR", "count: invalid type, must be integer", {}
+        )
+
+        assert result["error"]["code"] == "VALIDATION_ERROR"
+        call_args = mock_formatter.format_validation_error.call_args
+        assert call_args[1]["error_type"] == "invalid_type"
+
+    @patch("task_manager.interfaces.rest.server.error_formatter")
+    def test_format_field_description_pattern_invalid_format(self, mock_formatter: Mock) -> None:
+        """Test formatting of 'field: description' pattern with invalid format error."""
+        from task_manager.interfaces.rest.server import format_error_with_formatter
+
+        mock_formatter.format_validation_error.return_value = "Formatted: Invalid format"
+
+        result = format_error_with_formatter(
+            "VALIDATION_ERROR", "email: invalid format for email address", {}
+        )
+
+        assert result["error"]["code"] == "VALIDATION_ERROR"
+        call_args = mock_formatter.format_validation_error.call_args
+        assert call_args[1]["error_type"] == "invalid_format"
+
+    @patch("task_manager.interfaces.rest.server.error_formatter")
+    def test_format_field_description_pattern_invalid_enum(self, mock_formatter: Mock) -> None:
+        """Test formatting of 'field: description' pattern with invalid enum error."""
+        from task_manager.interfaces.rest.server import format_error_with_formatter
+
+        mock_formatter.format_validation_error.return_value = "Formatted: Invalid enum"
+
+        result = format_error_with_formatter(
+            "VALIDATION_ERROR", "status: invalid enum value provided", {}
+        )
+
+        assert result["error"]["code"] == "VALIDATION_ERROR"
+        call_args = mock_formatter.format_validation_error.call_args
+        assert call_args[1]["error_type"] == "invalid_enum"
+
+    @patch("task_manager.interfaces.rest.server.error_formatter")
+    def test_format_generic_error_with_visual_indicators(self, mock_formatter: Mock) -> None:
+        """Test formatting of generic errors with visual indicators."""
+        from task_manager.interfaces.rest.server import format_error_with_formatter
+
+        result = format_error_with_formatter("VALIDATION_ERROR", "Something went wrong", {})
+
+        assert result["error"]["code"] == "VALIDATION_ERROR"
+        assert "❌" in result["error"]["message"]
+        assert "💡" in result["error"]["message"]
+        assert "🔧" in result["error"]["message"]
+
+    def test_format_error_when_formatter_is_none(self) -> None:
+        """Test formatting when error_formatter is None."""
+        # Temporarily set error_formatter to None
+        import task_manager.interfaces.rest.server as server_module
+        from task_manager.interfaces.rest.server import format_error_with_formatter
+
+        original_formatter = server_module.error_formatter
+        server_module.error_formatter = None
+
+        try:
+            result = format_error_with_formatter("VALIDATION_ERROR", "Test error", {})
+            assert result["error"]["code"] == "VALIDATION_ERROR"
+            assert result["error"]["message"] == "Test error"
+        finally:
+            server_module.error_formatter = original_formatter
+
+
+class TestPreprocessRequestBody:
+    """Test preprocess_request_body function."""
+
+    @patch("task_manager.interfaces.rest.server.preprocessor")
+    def test_preprocess_create_task_list_with_repeatable(self, mock_preprocessor: Mock) -> None:
+        """Test preprocessing for create_task_list endpoint with repeatable field."""
+        from task_manager.interfaces.rest.server import preprocess_request_body
+
+        mock_preprocessor.preprocess.return_value = True
+
+        body = {"name": "Test List", "repeatable": "true"}
+        result = preprocess_request_body(body, "create_task_list")
+
+        assert result["name"] == "Test List"
+        mock_preprocessor.preprocess.assert_called_once_with("true", bool)
+
+    @patch("task_manager.interfaces.rest.server.preprocessor")
+    def test_preprocess_create_task_with_arrays(self, mock_preprocessor: Mock) -> None:
+        """Test preprocessing for create_task endpoint with array fields."""
+        from task_manager.interfaces.rest.server import preprocess_request_body
+
+        mock_preprocessor.preprocess.side_effect = lambda v, t: v if t != list else []
+
+        body = {
+            "title": "Test",
+            "dependencies": "[]",
+            "exit_criteria": "[]",
+            "notes": "[]",
+            "tags": '["tag1"]',
+        }
+        result = preprocess_request_body(body, "create_task")
+
+        assert result["title"] == "Test"
+        # Only fields in preprocessing_rules are preprocessed: dependencies, exit_criteria, notes, tags
+        assert mock_preprocessor.preprocess.call_count == 4
+
+    @patch("task_manager.interfaces.rest.server.preprocessor")
+    def test_preprocess_add_tags(self, mock_preprocessor: Mock) -> None:
+        """Test preprocessing for add_tags endpoint."""
+        from task_manager.interfaces.rest.server import preprocess_request_body
+
+        mock_preprocessor.preprocess.return_value = ["tag1", "tag2"]
+
+        body = {"task_id": "123", "tags": '["tag1", "tag2"]'}
+        result = preprocess_request_body(body, "add_tags")
+
+        assert result["task_id"] == "123"
+        mock_preprocessor.preprocess.assert_called_once_with('["tag1", "tag2"]', list)
+
+    def test_preprocess_unknown_endpoint(self) -> None:
+        """Test preprocessing for unknown endpoint (no rules applied)."""
+        from task_manager.interfaces.rest.server import preprocess_request_body
+
+        body = {"field1": "value1", "field2": "value2"}
+        result = preprocess_request_body(body, "unknown_endpoint")
+
+        assert result == body
+
+
+class TestHealthEndpoint:
+    """Test health check endpoint."""
+
+    @pytest.mark.asyncio
+    @patch("task_manager.interfaces.rest.server.health_check_service")
+    async def test_health_endpoint_healthy(self, mock_health_service: Mock) -> None:
+        """Test health endpoint returns 200 when healthy."""
+        from datetime import datetime, timezone
+
+        from task_manager.health.health_check_service import HealthStatus
+
+        mock_health_status = HealthStatus(
+            status="healthy",
+            timestamp=datetime.now(timezone.utc),
+            checks={"database": {"status": "healthy"}},
+            response_time_ms=10.5,
+        )
+        mock_health_service.check_health.return_value = mock_health_status
+
+        from task_manager.interfaces.rest.server import health
+
+        response = await health()
+
+        assert response.status_code == 200
+        content = response.body.decode()
+        assert "healthy" in content
+
+    @pytest.mark.asyncio
+    @patch("task_manager.interfaces.rest.server.health_check_service")
+    async def test_health_endpoint_unhealthy(self, mock_health_service: Mock) -> None:
+        """Test health endpoint returns 503 when unhealthy."""
+        from datetime import datetime, timezone
+
+        from task_manager.health.health_check_service import HealthStatus
+
+        mock_health_status = HealthStatus(
+            status="unhealthy",
+            timestamp=datetime.now(timezone.utc),
+            checks={"database": {"status": "unhealthy", "error": "Connection failed"}},
+            response_time_ms=100.0,
+        )
+        mock_health_service.check_health.return_value = mock_health_status
+
+        from task_manager.interfaces.rest.server import health
+
+        response = await health()
+
+        assert response.status_code == 503
+        content = response.body.decode()
+        assert "unhealthy" in content
+
+    @pytest.mark.asyncio
+    async def test_health_endpoint_service_not_initialized(self) -> None:
+        """Test health endpoint when service is not initialized."""
+        import task_manager.interfaces.rest.server as server_module
+
+        original_service = server_module.health_check_service
+        server_module.health_check_service = None
+
+        try:
+            from task_manager.interfaces.rest.server import health
+
+            response = await health()
+
+            assert response.status_code == 503
+            content = response.body.decode()
+            assert "unhealthy" in content
+            assert "not initialized" in content
+        finally:
+            server_module.health_check_service = original_service
+
+    @pytest.mark.asyncio
+    @patch("task_manager.interfaces.rest.server.health_check_service")
+    async def test_health_endpoint_exception(self, mock_health_service: Mock) -> None:
+        """Test health endpoint handles exceptions."""
+        mock_health_service.check_health.side_effect = Exception("Health check failed")
+
+        from task_manager.interfaces.rest.server import health
+
+        response = await health()
+
+        assert response.status_code == 503
+        content = response.body.decode()
+        assert "unhealthy" in content
+        assert "Health check failed" in content

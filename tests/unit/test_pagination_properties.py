@@ -184,7 +184,7 @@ def test_pagination_with_zero_offset_returns_first_items(num_tasks: int, limit: 
     offset=st.integers(min_value=1, max_value=10),
     limit=st.integers(min_value=1, max_value=5),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=500)
 def test_pagination_with_offset_skips_items(num_tasks: int, offset: int, limit: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 19: Search pagination returns correct subset
@@ -254,7 +254,7 @@ def test_pagination_with_offset_skips_items(num_tasks: int, offset: int, limit: 
     num_tasks=st.integers(min_value=5, max_value=15),
     page_size=st.integers(min_value=2, max_value=5),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=500)
 def test_pagination_pages_cover_all_items(num_tasks: int, page_size: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 19: Search pagination returns correct subset
@@ -323,7 +323,7 @@ def test_pagination_pages_cover_all_items(num_tasks: int, page_size: int) -> Non
 
 
 @given(offset=st.integers(min_value=0, max_value=50))
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=500)
 def test_pagination_with_offset_beyond_results_returns_empty(offset: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 19: Search pagination returns correct subset

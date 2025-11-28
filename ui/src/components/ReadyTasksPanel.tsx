@@ -341,10 +341,11 @@ const ReadyTasksPanel: React.FC<ReadyTasksPanelProps> = ({ scopeType, scopeId, s
                 style={{
                   padding: '1rem',
                   backgroundColor: 'white',
-                  border: '1px solid #ddd',
+                  border: task.block_reason?.is_blocked ? '2px solid #ef5350' : '1px solid #ddd',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   transition: 'box-shadow 0.2s',
+                  borderLeft: task.block_reason?.is_blocked ? '4px solid #d32f2f' : undefined,
                 }}
                 onClick={() => viewTaskDetail(task)}
                 onMouseEnter={(e) => {
@@ -363,6 +364,9 @@ const ReadyTasksPanel: React.FC<ReadyTasksPanelProps> = ({ scopeType, scopeId, s
                       gap: '0.5rem',
                       flexWrap: 'wrap',
                     }}>
+                      {task.block_reason?.is_blocked && (
+                        <span style={{ fontSize: '1rem' }}>🚫</span>
+                      )}
                       {task.title}
                       <span style={{
                         fontSize: '0.7rem',
@@ -397,6 +401,18 @@ const ReadyTasksPanel: React.FC<ReadyTasksPanelProps> = ({ scopeType, scopeId, s
                     }}>
                       {task.description}
                     </p>
+                    {task.block_reason && task.block_reason.is_blocked && (
+                      <div style={{
+                        marginTop: '0.5rem',
+                        padding: '0.5rem',
+                        backgroundColor: '#ffebee',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        color: '#d32f2f',
+                      }}>
+                        <strong>Blocked:</strong> {task.block_reason.message}
+                      </div>
+                    )}
                   </div>
                   <div style={{
                     fontSize: '0.75rem',

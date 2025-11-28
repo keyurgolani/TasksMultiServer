@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ui-config
+  namespace: task-manager
+data:
+  VITE_API_BASE_URL: "http://localhost:8000"

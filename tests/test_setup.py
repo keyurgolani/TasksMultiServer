@@ -5,7 +5,7 @@ def test_imports() -> None:
     """Verify basic package imports work."""
     import task_manager
 
-    assert task_manager.__version__ == "0.1.0"
+    assert task_manager.__version__ == "0.2.0"
 
 
 def test_rest_api_import() -> None:

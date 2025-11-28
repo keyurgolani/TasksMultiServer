@@ -68,13 +68,18 @@ pip install -e ".[dev]"
 
 This installs the package in editable mode with all development dependencies.
 
-4. **Setup pre-commit hooks** (recommended)
+4. **Setup pre-commit hooks** (REQUIRED)
 
 ```bash
 make setup-hooks
 ```
 
-This automatically formats code before each commit.
+This installs Git hooks that automatically run before commits and pushes:
+
+- **pre-commit**: Formats code (black, isort), runs linters (pylint, flake8), type checking (mypy)
+- **pre-push**: Runs security audit (pip-audit) and unit tests with 95% coverage
+
+These hooks mirror the GitHub Actions CI/CD pipeline, catching issues locally before they fail remotely. See [docs/PRE_COMMIT_SETUP.md](../docs/PRE_COMMIT_SETUP.md) for details.
 
 5. **Verify setup**
 
@@ -166,6 +171,74 @@ git push origin feature/your-feature-name
 ```
 
 Then create a pull request on GitHub targeting the `main` branch.
+
+## Version Management
+
+### Version Synchronization
+
+TasksMultiServer maintains version numbers across multiple files. Use the version synchronization tools to keep them consistent.
+
+#### Synchronize Version
+
+To update the version across all files:
+
+```bash
+make sync-version VERSION=x.y.z
+```
+
+This updates:
+
+- `pyproject.toml`
+- `ui/package.json` (if exists)
+- `version.json`
+- `src/task_manager/__init__.py`
+
+Example:
+
+```bash
+make sync-version VERSION=0.2.0
+```
+
+#### Validate Version Consistency
+
+To check if all version files are consistent:
+
+```bash
+make validate-version
+```
+
+This is automatically run as part of:
+
+- `make all` (full build)
+- `make full-build` (complete build with all quality gates)
+- Pre-commit hooks (when version files are modified)
+
+#### Version Format
+
+Versions must follow semantic versioning:
+
+- Format: `X.Y.Z` or `X.Y.Z-suffix`
+- Examples: `1.0.0`, `2.1.3`, `0.1.0-alpha`, `1.0.0-beta.1`
+
+Invalid formats will be rejected:
+
+- ❌ `1.2` (missing patch version)
+- ❌ `01.2.3` (leading zeros)
+- ❌ `1.2.3.4` (too many components)
+
+#### Pre-commit Hook
+
+The version validation hook automatically runs when you modify version files:
+
+```bash
+# Install hooks (if not already done)
+make setup-hooks
+
+# The hook will run automatically on commit
+git commit -m "chore: bump version to 0.2.0"
+```
+
+If versions are inconsistent, the commit will be blocked with an error message.
 
 ## Coding Standards
 
@@ -306,7 +379,7 @@ def test_task_persistence_integration(postgresql_store):
 Ensure your virtual environment is active before running tests.
 
 ```bash
-# Unit tests with coverage (fast, 120s timeout)
+# Unit tests with coverage (fast, 600s timeout)
 make test
 
 # Specific test file

@@ -13,7 +13,7 @@ import logging
 import sys
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, Optional
 
 from fastapi import FastAPI, Request
@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse
 from task_manager.data.config import ConfigurationError, create_data_store
 from task_manager.data.delegation.data_store import DataStore
 from task_manager.formatting.error_formatter import ErrorFormatter
+from task_manager.health.health_check_service import HealthCheckService
 from task_manager.orchestration.dependency_orchestrator import DependencyOrchestrator
 from task_manager.orchestration.project_orchestrator import ProjectOrchestrator
 from task_manager.orchestration.tag_orchestrator import TagOrchestrator
@@ -110,7 +111,9 @@ dependency_orchestrator: DependencyOrchestrator = None  # type: ignore
 template_engine: TemplateEngine = None  # type: ignore
 preprocessor: ParameterPreprocessor = None  # type: ignore
 error_formatter: ErrorFormatter = None  # type: ignore
-tag_orchestrator: "TagOrchestrator" = None  # type: ignore
+tag_orchestrator: TagOrchestrator = None  # type: ignore
+blocking_detector: Any = None  # type: ignore
+health_check_service: HealthCheckService = None  # type: ignore
 
 
 @asynccontextmanager
@@ -132,7 +135,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Requirements: 15.1, 15.2
     """
     global data_store, project_orchestrator, task_list_orchestrator
-    global task_orchestrator, dependency_orchestrator, template_engine, preprocessor, error_formatter, tag_orchestrator
+    global task_orchestrator, dependency_orchestrator, template_engine, preprocessor, error_formatter, tag_orchestrator, blocking_detector, health_check_service
 
     # Startup: Initialize backing store from environment variables
     logger.info("Initializing Task Management System REST API...")
@@ -152,6 +155,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         dependency_orchestrator = DependencyOrchestrator(data_store)
         template_engine = TemplateEngine(data_store)
         tag_orchestrator = TagOrchestrator(data_store)
+
+        # Import BlockingDetector here to avoid circular imports
+        from task_manager.orchestration.blocking_detector import BlockingDetector
+
+        blocking_detector = BlockingDetector(data_store)
+
         logger.info("Orchestrators initialized successfully")
 
         # Initialize preprocessing layer
@@ -161,6 +170,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Initialize error formatter
         error_formatter = ErrorFormatter()
         logger.info("Error formatter initialized successfully")
+
+        # Initialize health check service
+        health_check_service = HealthCheckService()
+        logger.info("Health check service initialized successfully")
 
         logger.info("REST API startup complete")
 
@@ -588,30 +601,56 @@ async def root() -> Dict[str, str]:
 async def health() -> Dict[str, Any]:
     """Health check endpoint.
 
-    Returns the health status of the API and backing store.
+    Returns the health status of the system including database/filesystem checks.
+    Returns HTTP 200 for healthy systems and HTTP 503 for unhealthy systems.
 
     Returns:
-        Dictionary with health status
+        Dictionary with health status and detailed check results
+
+    Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7
     """
     try:
-        # Check if data_store is initialized
-        if "data_store" not in globals() or data_store is None:
+        # Check if health_check_service is initialized
+        if health_check_service is None:
             return JSONResponse(
                 status_code=503,
-                content={"status": "unhealthy", "error": "Data store not initialized"},
+                content={
+                    "status": "unhealthy",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "checks": {},
+                    "response_time_ms": 0.0,
+                    "error": "Health check service not initialized",
+                },
             )
 
-        # Test backing store connectivity by listing projects
-        projects = data_store.list_projects()
+        # Perform health checks
+        health_status = health_check_service.check_health()
 
-        return {
-            "status": "healthy",
-            "backing_store": type(data_store).__name__,
-            "projects_count": len(projects),
+        # Prepare response
+        response_data = {
+            "status": health_status.status,
+            "timestamp": health_status.timestamp.isoformat(),
+            "checks": health_status.checks,
+            "response_time_ms": health_status.response_time_ms,
         }
+
+        # Return 200 for healthy, 503 for unhealthy
+        status_code = 200 if health_status.status == "healthy" else 503
+
+        return JSONResponse(status_code=status_code, content=response_data)
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
-        return JSONResponse(status_code=503, content={"status": "unhealthy", "error": str(e)})
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "checks": {},
+                "response_time_ms": 0.0,
+                "error": str(e),
+            },
+        )
 
 
 # ============================================================================
@@ -1429,7 +1468,23 @@ def _serialize_task(task) -> Dict[str, Any]:
 
     Returns:
         Dictionary representation of the task
+
+    Requirements: 6.1, 6.2, 6.3, 6.4, 6.5
     """
+    # Detect blocking information
+    block_reason = None
+    if blocking_detector is not None:
+        block_reason_obj = blocking_detector.detect_blocking(task)
+        if block_reason_obj:
+            block_reason = {
+                "is_blocked": block_reason_obj.is_blocked,
+                "blocking_task_ids": [
+                    str(task_id) for task_id in block_reason_obj.blocking_task_ids
+                ],
+                "blocking_task_titles": block_reason_obj.blocking_task_titles,
+                "message": block_reason_obj.message,
+            }
+
     return {
         "id": str(task.id),
         "task_list_id": str(task.task_list_id),
@@ -1472,6 +1527,7 @@ def _serialize_task(task) -> Dict[str, Any]:
         ),
         "agent_instructions_template": task.agent_instructions_template,
         "tags": task.tags if task.tags else [],
+        "block_reason": block_reason,
         "created_at": task.created_at.isoformat(),
         "updated_at": task.updated_at.isoformat(),
     }
@@ -2250,6 +2306,523 @@ async def remove_task_tags(task_id: str, request: Request) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error removing tags: {e}")
         raise StorageError("Failed to remove tags", {"error": str(e)})
+
+
+# ============================================================================
+# Bulk Operations Endpoints
+# ============================================================================
+
+
+@app.post("/tasks/bulk/create")
+async def bulk_create_tasks(request: Request) -> Dict[str, Any]:
+    """Create multiple tasks in a single operation.
+
+    Request body should contain:
+    - tasks (required): Array of task definitions, each containing:
+      - task_list_id (required): UUID of the task list
+      - title (required): Task title
+      - description (required): Task description
+      - status (required): Task status
+      - priority (required): Task priority
+      - dependencies (required): List of dependencies (can be empty)
+      - exit_criteria (required): List of exit criteria (must not be empty)
+      - notes (required): List of notes (can be empty)
+      - tags (optional): List of tags
+      - research_notes (optional): List of research notes
+      - action_plan (optional): Ordered list of action items
+      - execution_notes (optional): List of execution notes
+      - agent_instructions_template (optional): Template for agent instructions
+
+    All tasks are validated before any are created. If any validation fails,
+    no tasks are created.
+
+    Returns:
+        Dictionary with BulkOperationResult containing success/failure details
+
+    Requirements: 7.1, 7.5, 7.6
+    """
+    try:
+        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
+
+        body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "bulk_create_tasks")
+
+        # Validate required field
+        if "tasks" not in body:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: tasks", {"field": "tasks"}
+                ),
+            )
+
+        # Ensure tasks is a list
+        if not isinstance(body["tasks"], list):
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Tasks must be a list", {"field": "tasks"}
+                ),
+            )
+
+        task_definitions = body["tasks"]
+
+        # Create bulk operations handler and perform bulk create
+        bulk_handler = BulkOperationsHandler(data_store)
+        result = bulk_handler.bulk_create_tasks(task_definitions)
+
+        # Return appropriate status code based on result
+        if len(result.errors) > 0 and result.succeeded == 0:
+            # All failed or validation errors
+            status_code = 400
+        elif result.failed > 0:
+            # Partial failure
+            status_code = 207  # Multi-Status
+        else:
+            # All succeeded
+            status_code = 201
+
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "result": {
+                    "total": result.total,
+                    "succeeded": result.succeeded,
+                    "failed": result.failed,
+                    "results": result.results,
+                    "errors": result.errors,
+                }
+            },
+        )
+
+    except ValueError as e:
+        logger.warning(f"Validation error in bulk create: {e}")
+        return JSONResponse(
+            status_code=400,
+            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+        )
+    except Exception as e:
+        logger.error(f"Error in bulk create: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to bulk create tasks",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
+
+
+@app.put("/tasks/bulk/update")
+async def bulk_update_tasks(request: Request) -> Dict[str, Any]:
+    """Update multiple tasks in a single operation.
+
+    Request body should contain:
+    - updates (required): Array of task updates, each containing:
+      - task_id (required): UUID of the task to update
+      - title (optional): New task title
+      - description (optional): New task description
+      - status (optional): New task status
+      - priority (optional): New task priority
+      - agent_instructions_template (optional): New template
+
+    All updates are validated before any are applied. If any validation fails,
+    no tasks are updated.
+
+    Returns:
+        Dictionary with BulkOperationResult containing success/failure details
+
+    Requirements: 7.2, 7.5, 7.6
+    """
+    try:
+        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
+
+        body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "bulk_update_tasks")
+
+        # Validate required field
+        if "updates" not in body:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: updates", {"field": "updates"}
+                ),
+            )
+
+        # Ensure updates is a list
+        if not isinstance(body["updates"], list):
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Updates must be a list", {"field": "updates"}
+                ),
+            )
+
+        updates = body["updates"]
+
+        # Create bulk operations handler and perform bulk update
+        bulk_handler = BulkOperationsHandler(data_store)
+        result = bulk_handler.bulk_update_tasks(updates)
+
+        # Return appropriate status code based on result
+        if len(result.errors) > 0 and result.succeeded == 0:
+            # All failed or validation errors
+            status_code = 400
+        elif result.failed > 0:
+            # Partial failure
+            status_code = 207  # Multi-Status
+        else:
+            # All succeeded
+            status_code = 200
+
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "result": {
+                    "total": result.total,
+                    "succeeded": result.succeeded,
+                    "failed": result.failed,
+                    "results": result.results,
+                    "errors": result.errors,
+                }
+            },
+        )
+
+    except ValueError as e:
+        logger.warning(f"Validation error in bulk update: {e}")
+        return JSONResponse(
+            status_code=400,
+            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+        )
+    except Exception as e:
+        logger.error(f"Error in bulk update: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to bulk update tasks",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
+
+
+@app.delete("/tasks/bulk/delete")
+async def bulk_delete_tasks(request: Request) -> Dict[str, Any]:
+    """Delete multiple tasks in a single operation.
+
+    Request body should contain:
+    - task_ids (required): Array of task ID strings to delete
+
+    All task IDs are validated before any are deleted. If any validation fails,
+    no tasks are deleted.
+
+    Returns:
+        Dictionary with BulkOperationResult containing success/failure details
+
+    Requirements: 7.3, 7.5, 7.6
+    """
+    try:
+        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
+
+        body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "bulk_delete_tasks")
+
+        # Validate required field
+        if "task_ids" not in body:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: task_ids", {"field": "task_ids"}
+                ),
+            )
+
+        # Ensure task_ids is a list
+        if not isinstance(body["task_ids"], list):
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Task IDs must be a list", {"field": "task_ids"}
+                ),
+            )
+
+        task_ids = body["task_ids"]
+
+        # Create bulk operations handler and perform bulk delete
+        bulk_handler = BulkOperationsHandler(data_store)
+        result = bulk_handler.bulk_delete_tasks(task_ids)
+
+        # Return appropriate status code based on result
+        if len(result.errors) > 0 and result.succeeded == 0:
+            # All failed or validation errors
+            status_code = 400
+        elif result.failed > 0:
+            # Partial failure
+            status_code = 207  # Multi-Status
+        else:
+            # All succeeded
+            status_code = 200
+
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "result": {
+                    "total": result.total,
+                    "succeeded": result.succeeded,
+                    "failed": result.failed,
+                    "results": result.results,
+                    "errors": result.errors,
+                }
+            },
+        )
+
+    except ValueError as e:
+        logger.warning(f"Validation error in bulk delete: {e}")
+        return JSONResponse(
+            status_code=400,
+            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+        )
+    except Exception as e:
+        logger.error(f"Error in bulk delete: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to bulk delete tasks",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
+
+
+@app.post("/tasks/bulk/tags/add")
+async def bulk_add_tags(request: Request) -> Dict[str, Any]:
+    """Add tags to multiple tasks in a single operation.
+
+    Request body should contain:
+    - task_ids (required): Array of task ID strings
+    - tags (required): Array of tag strings to add to each task
+
+    All task IDs and tags are validated before any tags are added. If any
+    validation fails, no tags are added to any tasks.
+
+    Returns:
+        Dictionary with BulkOperationResult containing success/failure details
+
+    Requirements: 7.4, 7.5, 7.6
+    """
+    try:
+        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
+
+        body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "bulk_add_tags")
+
+        # Validate required fields
+        if "task_ids" not in body:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: task_ids", {"field": "task_ids"}
+                ),
+            )
+
+        if "tags" not in body:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: tags", {"field": "tags"}
+                ),
+            )
+
+        # Ensure task_ids is a list
+        if not isinstance(body["task_ids"], list):
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Task IDs must be a list", {"field": "task_ids"}
+                ),
+            )
+
+        # Ensure tags is a list
+        if not isinstance(body["tags"], list):
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
+                ),
+            )
+
+        task_ids = body["task_ids"]
+        tags = body["tags"]
+
+        # Create bulk operations handler and perform bulk add tags
+        bulk_handler = BulkOperationsHandler(data_store)
+        result = bulk_handler.bulk_add_tags(task_ids, tags)
+
+        # Return appropriate status code based on result
+        if len(result.errors) > 0 and result.succeeded == 0:
+            # All failed or validation errors
+            status_code = 400
+        elif result.failed > 0:
+            # Partial failure
+            status_code = 207  # Multi-Status
+        else:
+            # All succeeded
+            status_code = 200
+
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "result": {
+                    "total": result.total,
+                    "succeeded": result.succeeded,
+                    "failed": result.failed,
+                    "results": result.results,
+                    "errors": result.errors,
+                }
+            },
+        )
+
+    except ValueError as e:
+        logger.warning(f"Validation error in bulk add tags: {e}")
+        return JSONResponse(
+            status_code=400,
+            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+        )
+    except Exception as e:
+        logger.error(f"Error in bulk add tags: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to bulk add tags",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
+
+
+@app.post("/tasks/bulk/tags/remove")
+async def bulk_remove_tags(request: Request) -> Dict[str, Any]:
+    """Remove tags from multiple tasks in a single operation.
+
+    Request body should contain:
+    - task_ids (required): Array of task ID strings
+    - tags (required): Array of tag strings to remove from each task
+
+    All task IDs are validated before any tags are removed. If any validation
+    fails, no tags are removed from any tasks.
+
+    Returns:
+        Dictionary with BulkOperationResult containing success/failure details
+
+    Requirements: 7.4, 7.5, 7.6
+    """
+    try:
+        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
+
+        body = await request.json()
+
+        # Apply preprocessing for agent-friendly type conversion
+        body = preprocess_request_body(body, "bulk_remove_tags")
+
+        # Validate required fields
+        if "task_ids" not in body:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: task_ids", {"field": "task_ids"}
+                ),
+            )
+
+        if "tags" not in body:
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Missing required field: tags", {"field": "tags"}
+                ),
+            )
+
+        # Ensure task_ids is a list
+        if not isinstance(body["task_ids"], list):
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Task IDs must be a list", {"field": "task_ids"}
+                ),
+            )
+
+        # Ensure tags is a list
+        if not isinstance(body["tags"], list):
+            return JSONResponse(
+                status_code=400,
+                content=format_error_with_formatter(
+                    "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
+                ),
+            )
+
+        task_ids = body["task_ids"]
+        tags = body["tags"]
+
+        # Create bulk operations handler and perform bulk remove tags
+        bulk_handler = BulkOperationsHandler(data_store)
+        result = bulk_handler.bulk_remove_tags(task_ids, tags)
+
+        # Return appropriate status code based on result
+        if len(result.errors) > 0 and result.succeeded == 0:
+            # All failed or validation errors
+            status_code = 400
+        elif result.failed > 0:
+            # Partial failure
+            status_code = 207  # Multi-Status
+        else:
+            # All succeeded
+            status_code = 200
+
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "result": {
+                    "total": result.total,
+                    "succeeded": result.succeeded,
+                    "failed": result.failed,
+                    "results": result.results,
+                    "errors": result.errors,
+                }
+            },
+        )
+
+    except ValueError as e:
+        logger.warning(f"Validation error in bulk remove tags: {e}")
+        return JSONResponse(
+            status_code=400,
+            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
+        )
+    except Exception as e:
+        logger.error(f"Error in bulk remove tags: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": "Failed to bulk remove tags",
+                    "details": {"error": str(e)},
+                }
+            },
+        )
 
 
 # ============================================================================

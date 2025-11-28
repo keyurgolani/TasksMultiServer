@@ -243,9 +243,9 @@ docker-compose -f docker-compose.test.yml logs
 
 ### Timeouts
 
-- Unit tests: 120 seconds
-- Integration tests: 180 seconds
-- Build: 180 seconds
+- Unit tests: 600 seconds
+- Integration tests: 260 seconds
+- Build: 260 seconds
 
 ## Future Enhancements
 

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def test_client(tmp_path, worker_id):
+def test_client(tmp_path):
     """Create a test client for the REST API.
 
     Sets up environment variables for filesystem backing store
@@ -21,11 +21,7 @@ def test_client(tmp_path, worker_id):
     Yields:
         TestClient instance for making requests
     """
-    # Use worker-specific temp directory for parallel test execution
-    if worker_id == "master":
-        test_dir = tmp_path / "test_rest_health_edge_cases"
-    else:
-        test_dir = tmp_path / f"test_rest_health_edge_cases_{worker_id}"
+    test_dir = tmp_path / "test_rest_health_edge_cases"
 
     # Set up environment for filesystem backing store
     os.environ["DATA_STORE_TYPE"] = "filesystem"
@@ -46,20 +42,23 @@ def test_client(tmp_path, worker_id):
 
 
 def test_health_check_exception_handling(test_client):
-    """Test health check endpoint exception handling."""
+    """Test health check endpoint exception handling.
+
+    Requirements: 9.6, 9.7
+    """
     # The health endpoint should handle exceptions gracefully
-    # We'll test by mocking the data_store to raise an exception
+    # We'll test by mocking the health_check_service to raise an exception
     from task_manager.interfaces.rest import server
 
-    original_data_store = server.data_store
+    original_health_check_service = server.health_check_service
 
     try:
-        # Mock data_store to raise an exception
-        class FailingDataStore:
-            def list_projects(self):
-                raise RuntimeError("Database connection failed")
+        # Mock health_check_service to raise an exception
+        class FailingHealthCheckService:
+            def check_health(self):
+                raise RuntimeError("Health check failed")
 
-        server.data_store = FailingDataStore()
+        server.health_check_service = FailingHealthCheckService()
 
         response = test_client.get("/health")
         assert response.status_code == 503
@@ -68,8 +67,8 @@ def test_health_check_exception_handling(test_client):
         assert "error" in data
 
     finally:
-        # Restore original data_store
-        server.data_store = original_data_store
+        # Restore original health_check_service
+        server.health_check_service = original_health_check_service
 
 
 def test_create_project_with_invalid_enum_value(test_client):

@@ -33,6 +33,7 @@ ENV/
 htmlcov/
 .tox/
 .hypothesis/
+coverage.xml
 
 # IDEs
 .vscode/

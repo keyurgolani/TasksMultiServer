@@ -2,9 +2,12 @@
 
 from .entities import (
     ActionPlanItem,
+    BlockReason,
+    BulkOperationResult,
     Dependency,
     DependencyAnalysis,
     ExitCriteria,
+    HealthStatus,
     Note,
     Project,
     SearchCriteria,
@@ -26,5 +29,8 @@ __all__ = [
     "TaskList",
     "Task",
     "SearchCriteria",
+    "BlockReason",
     "DependencyAnalysis",
+    "BulkOperationResult",
+    "HealthStatus",
 ]

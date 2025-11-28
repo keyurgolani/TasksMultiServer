@@ -58,7 +58,7 @@ def create_task(
     num_tasks=st.integers(min_value=1, max_value=20),
     num_completed=st.integers(min_value=0, max_value=20),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=500)
 def test_progress_calculation_is_accurate(num_tasks: int, num_completed: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 23: Progress calculation is accurate

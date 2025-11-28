@@ -532,6 +532,57 @@ const TaskDetailPage: React.FC = () => {
         )}
       </div>
 
+      {/* Blocking Information */}
+      {task.block_reason && task.block_reason.is_blocked && (
+        <div style={{
+          padding: '1.5rem',
+          backgroundColor: '#ffebee',
+          border: '2px solid #ef5350',
+          borderRadius: '8px',
+          marginBottom: '1.5rem',
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            marginBottom: '1rem',
+          }}>
+            <span style={{ fontSize: '2rem' }}>🚫</span>
+            <h2 style={{ margin: 0, color: '#c62828' }}>Task is Blocked</h2>
+          </div>
+          <div style={{
+            padding: '1rem',
+            backgroundColor: 'white',
+            borderRadius: '6px',
+            marginBottom: '1rem',
+          }}>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '1rem', color: '#d32f2f', fontWeight: '500' }}>
+              {task.block_reason.message}
+            </p>
+            {task.block_reason.blocking_task_titles.length > 0 && (
+              <div>
+                <strong style={{ color: '#666' }}>Waiting on these tasks to complete:</strong>
+                <ul style={{ margin: '0.5rem 0 0 1.5rem', padding: 0 }}>
+                  {task.block_reason.blocking_task_titles.map((title, idx) => (
+                    <li key={idx} style={{ marginBottom: '0.25rem', color: '#666' }}>
+                      {title}
+                      {task.block_reason && task.block_reason.blocking_task_ids[idx] && (
+                        <span style={{ fontSize: '0.75rem', color: '#999', marginLeft: '0.5rem' }}>
+                          (ID: {task.block_reason.blocking_task_ids[idx]})
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: '0.875rem', color: '#666', fontStyle: 'italic' }}>
+            💡 Complete the blocking tasks above to unblock this task.
+          </div>
+        </div>
+      )}
+
       {/* Exit Criteria */}
       <div style={{
         padding: '1.5rem',

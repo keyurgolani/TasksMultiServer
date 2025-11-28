@@ -160,8 +160,17 @@ class ErrorFormatter:
         Returns:
             Example value as a string
         """
-        # If valid values provided (enum), use the first one
+        # If valid values provided (enum), use the first realistic one
         if valid_values and len(valid_values) > 0:
+            # Filter out whitespace-only values and values with newlines
+            realistic_values = [
+                v.strip()
+                for v in valid_values
+                if v and str(v).strip() and not str(v).isspace() and "\n" not in str(v).strip()
+            ]
+            if realistic_values:
+                return f'"{field}": "{realistic_values[0]}"'
+            # Fallback to first value if no realistic values found
             return f'"{field}": "{valid_values[0]}"'
 
         # Generate example based on expected type

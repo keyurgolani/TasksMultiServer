@@ -1,5 +1,6 @@
 """Business logic and CRUD operations."""
 
+from .blocking_detector import BlockingDetector
 from .dependency_analyzer import DependencyAnalyzer
 from .dependency_orchestrator import DependencyOrchestrator
 from .project_orchestrator import ProjectOrchestrator
@@ -10,6 +11,7 @@ from .task_orchestrator import TaskOrchestrator
 from .template_engine import TemplateEngine
 
 __all__ = [
+    "BlockingDetector",
     "DependencyAnalyzer",
     "DependencyOrchestrator",
     "ProjectOrchestrator",

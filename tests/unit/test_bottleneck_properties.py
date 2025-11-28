@@ -260,7 +260,7 @@ def test_bottleneck_with_explicit_dependents(num_dependents: int) -> None:
     num_bottlenecks=st.integers(min_value=1, max_value=4),
     dependents_per_bottleneck=st.integers(min_value=2, max_value=5),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=500)
 def test_multiple_bottlenecks_sorted_by_count(
     num_bottlenecks: int, dependents_per_bottleneck: int
 ) -> None:

@@ -125,30 +125,156 @@ docker-compose exec -T postgres psql -U taskmanager taskmanager < backup.sql
 
 ## Kubernetes Deployment
 
-### Build Images
+Complete Kubernetes manifests are available in the `k8s/` directory.
+
+### Prerequisites
+
+- Kubernetes cluster (minikube, kind, GKE, EKS, AKS)
+- kubectl configured and connected to your cluster
+- Docker for building images
+
+### Quick Start
+
+1. **Build Docker images:**
 
 ```bash
 docker build -f Dockerfile.api -t tasks-multiserver-api:0.1.0 .
 docker build -f ui/Dockerfile -t tasks-multiserver-ui:0.1.0 ui/
 ```
 
-### Deploy
+For local clusters (minikube/kind), load images:
 
 ```bash
-kubectl apply -f k8s/
+minikube image load tasks-multiserver-api:0.1.0
+minikube image load tasks-multiserver-ui:0.1.0
+```
+
+2. **Deploy using Kustomize:**
+
+```bash
+kubectl apply -k k8s/
+```
+
+Or apply manifests individually:
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/postgres-secret.yaml
+kubectl apply -f k8s/postgres-pvc.yaml
+kubectl apply -f k8s/postgres-deployment.yaml
+kubectl apply -f k8s/postgres-service.yaml
+kubectl apply -f k8s/api-configmap.yaml
+kubectl apply -f k8s/api-deployment.yaml
+kubectl apply -f k8s/api-service.yaml
+kubectl apply -f k8s/ui-configmap.yaml
+kubectl apply -f k8s/ui-deployment.yaml
+kubectl apply -f k8s/ui-service.yaml
+```
+
+3. **Verify deployment:**
+
+```bash
+kubectl get all -n task-manager
 ```
 
 ### Configuration
 
-Update `k8s/configmap.yaml` and `k8s/secret.yaml` with your settings.
+#### Database Credentials
 
-### Access
+Edit `k8s/postgres-secret.yaml` before deployment:
+
+```yaml
+stringData:
+  POSTGRES_DB: taskmanager
+  POSTGRES_USER: your-username
+  POSTGRES_PASSWORD: your-secure-password
+```
+
+Update `k8s/api-configmap.yaml` with matching connection string.
+
+#### API Configuration
+
+Edit `k8s/api-configmap.yaml`:
+
+```yaml
+data:
+  DATA_STORE_TYPE: "postgresql"
+  POSTGRES_URL: "postgresql://user:pass@postgres:5432/taskmanager"
+```
+
+#### UI Configuration
+
+Edit `k8s/ui-configmap.yaml`:
+
+```yaml
+data:
+  VITE_API_BASE_URL: "http://your-api-url:8000"
+```
+
+### Access Services
+
+#### Port Forwarding (Development)
 
 ```bash
-# Port forward
-kubectl port-forward svc/ui-service 3000:3000
-kubectl port-forward svc/rest-api-service 8000:8000
+# Access UI
+kubectl port-forward -n task-manager svc/ui 3000:3000
+
+# Access API
+kubectl port-forward -n task-manager svc/rest-api 8000:8000
 ```
+
+Then visit:
+
+- UI: http://localhost:3000
+- API: http://localhost:8000/docs
+
+#### LoadBalancer (Production)
+
+If your cluster supports LoadBalancer services:
+
+```bash
+kubectl get svc -n task-manager ui
+```
+
+Use the EXTERNAL-IP to access the UI.
+
+### Scaling
+
+```bash
+# Scale API replicas
+kubectl scale -n task-manager deployment/rest-api --replicas=3
+
+# Scale UI replicas
+kubectl scale -n task-manager deployment/ui --replicas=3
+```
+
+### Monitoring
+
+```bash
+# View logs
+kubectl logs -n task-manager -l app=rest-api -f
+kubectl logs -n task-manager -l app=postgres -f
+
+# Check pod status
+kubectl get pods -n task-manager
+
+# Describe resources
+kubectl describe deployment -n task-manager rest-api
+```
+
+### Cleanup
+
+```bash
+kubectl delete -k k8s/
+```
+
+Or delete the entire namespace:
+
+```bash
+kubectl delete namespace task-manager
+```
+
+For detailed Kubernetes deployment instructions, see `k8s/README.md`.
 
 ## MCP Server Deployment
 
