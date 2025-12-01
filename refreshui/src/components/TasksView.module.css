@@ -1,0 +1,495 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 16px;
+  overflow: hidden;
+  padding: 16px;
+}
+
+/* Top Section: Projects and Task Lists */
+/* Top Section: Projects and Task Lists */
+/* Top Section: Projects and Task Lists */
+/* Top Section: Projects and Task Lists */
+.topSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px; /* Reduced gap from 16px */
+  flex-shrink: 0;
+  padding-bottom: 8px; /* Reduced padding from 12px */
+  border-bottom: 1px solid var(--border);
+}
+
+/* New 2-Column Section Layout */
+.sectionContainer {
+  display: flex;
+  flex-direction: row;
+  gap: 12px; /* Reduced gap from 16px */
+  align-items: stretch;
+  min-height: 70px; /* Reduced height for flatter cards */
+}
+
+/* Column 1: Header & Filter */
+.headerColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px; /* Reduced gap from 8px */
+  width: 130px;
+  min-width: 130px;
+  justify-content: center; /* Center vertically */
+  padding-top: 0; /* Remove top padding */
+}
+
+.sectionHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.sectionHeader h3 {
+  font-size: 13px; /* Smaller title */
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sidebarFilter {
+  width: 100%;
+}
+
+.miniInput {
+  height: 26px; /* Smaller input */
+  font-size: 11px;
+}
+
+/* Column 2: Scrollable Cards */
+.cardsColumn {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px;
+  align-items: center;
+  scrollbar-width: none; 
+  -ms-overflow-style: none;
+}
+
+.cardsColumn::-webkit-scrollbar {
+  display: none;
+}
+
+/* Horizontal Project Card */
+.projectCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px; /* Slightly smaller radius */
+  padding: 4px 12px; /* Minimal vertical padding */
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px; /* Minimal gap */
+  min-width: 140px; /* Further reduced default width */
+  width: auto; /* Allow width to grow */
+  height: 60px; /* Minimal fixed height */
+  position: relative;
+  overflow: visible; /* Allow content to determine width */
+}
+
+.projectCard:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--shadow);
+}
+
+.projectCard.active {
+  background: var(--bg-surface-active);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+/* Row 1: Project Name */
+.projectName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  /* Remove truncation to allow width growth */
+  line-height: 1.2;
+}
+
+/* Row 2: Stats (Ready + Lists) */
+.projectStats {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.statItem {
+  font-size: 10px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+
+/* Row 3: Progress */
+.projectProgress {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.progressBar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-app);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+  border-radius: 2px;
+  transition: width 0.5s ease-out;
+}
+
+.progressText {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 24px;
+  text-align: right;
+}
+
+/* Task List Card (Horizontal & Flat) */
+.taskListCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px; /* Very compact */
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 4px; /* Tight gap */
+  min-width: 180px;
+  width: auto; /* Allow width to grow */
+  height: 60px; /* Fixed height */
+  justify-content: center;
+}
+
+.taskListCard:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--shadow);
+}
+
+.taskListCard.active {
+  background: var(--bg-surface-active);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+.itemName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.taskListMetaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.readyCount {
+  color: var(--warning);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.taskListProgress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.taskListProgressBar {
+  flex: 1;
+  height: 3px;
+  background: var(--bg-app);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 30px;
+}
+
+.taskListDoneText {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.emptyStateSmall {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-style: italic;
+  text-align: center;
+  padding: 12px;
+}
+
+/* Bottom Section: Sidebar + Main Content */
+.bottomSection {
+  display: flex;
+  flex: 1;
+  gap: 24px;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 280px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding-right: 12px;
+  border-right: 1px solid var(--border);
+}
+
+.sidebarSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Ready Tasks in Sidebar */
+.readyTasksList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.readyTaskItem {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.readyTaskItem:hover {
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px var(--shadow);
+  border-color: var(--primary);
+}
+
+.readyTaskHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.readyTaskHeader h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.readyTaskMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.priorityBadge {
+  font-size: 9px;
+  font-weight: 700;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.readyTaskDesc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Main Content */
+/* Main Content */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.mainHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.searchContainer {
+  width: 240px; /* Fixed width for search */
+}
+
+.sectionTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionTitle::before {
+  content: '';
+  width: 4px;
+  height: 20px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+.taskGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  overflow-y: auto; /* Added scroll to grid only */
+  padding-right: 4px; /* Space for scrollbar */
+  flex: 1; /* Take remaining space */
+  align-content: start; /* Align grid items to top */
+}
+
+.taskCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.taskTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.taskMetaRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.taskDescription {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.taskTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.tag {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-app);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.metaCount {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.metaProgressContainer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.metaProgressBar {
+  width: 40px;
+  height: 4px;
+  background: var(--bg-app);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.metaProgressFill {
+  height: 100%;
+  background: var(--success);
+}
+
+.metaProgressText {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}

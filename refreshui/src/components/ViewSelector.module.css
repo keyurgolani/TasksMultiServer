@@ -1,0 +1,49 @@
+.container {
+  display: flex;
+  background: var(--bg-surface);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 4px;
+}
+
+:global([data-theme="light"]) .container {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: #eef0f3;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.option:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+:global([data-theme="dark"]) .option:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.option.active {
+  background: var(--bg-surface);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-weight: 600;
+}
+
+:global([data-theme="dark"]) .option.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}

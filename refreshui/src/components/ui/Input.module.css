@@ -1,0 +1,64 @@
+.inputWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.inputContainer {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.icon {
+    position: absolute;
+    left: 12px;
+    color: var(--text-tertiary);
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--text-primary);
+  font-size: 16px;
+  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.hasIcon {
+    padding-left: 36px !important;
+}
+
+.input:focus {
+  background: var(--bg-surface);
+  border-color: #6B73FF;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(107, 115, 255, 0.1);
+}
+
+/* Dark mode specific styles */
+:global([data-theme="dark"]) .input {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+}
+
+:global([data-theme="dark"]) .input:focus {
+  background: var(--bg-surface);
+  border-color: #6B73FF;
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}

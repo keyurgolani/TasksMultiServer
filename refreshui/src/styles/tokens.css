@@ -1,0 +1,76 @@
+:root {
+  /* Fonts */
+  --font-default: "Inter", sans-serif;
+  --font-corporate: "Roboto", sans-serif;
+  --font-fun: "Quicksand", sans-serif;
+  --font-nerd: "Fira Code", monospace;
+  --font-quirky: "Space Grotesk", sans-serif;
+
+  /* Common Colors */
+  --primary-gradient: linear-gradient(135deg, #6b73ff 0%, #000dff 100%);
+  --secondary-gradient: linear-gradient(
+    135deg,
+    #ff9a9e 0%,
+    #fecfef 99%,
+    #fecfef 100%
+  );
+  
+  --primary: #6b73ff;
+  --primary-dark: #5a63e0;
+  --error: #ff4757;
+
+  --status-success-bg: #e6f4ea;
+  --status-success-text: #1e8e3e;
+  --status-warning-bg: #fef7e0;
+  --status-warning-text: #f9ab00;
+  --status-error-bg: #fce8e6;
+  --status-error-text: #d93025;
+  --status-info-bg: #e8f0fe;
+  --status-info-text: #1967d2;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Light Theme (Default) */
+  --bg-app: #f0f2f5;
+  --bg-surface: #ffffff;
+  --bg-glass: rgba(255, 255, 255, 0.7);
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --border-glass: rgba(255, 255, 255, 0.3);
+  --shadow-color: rgba(0, 0, 0, 0.05);
+  
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(107, 115, 255, 0.4);
+  --scrollbar-thumb-hover: rgba(107, 115, 255, 0.6);
+  --scrollbar-thumb-active: rgba(107, 115, 255, 0.8);
+}
+
+[data-theme="dark"] {
+  --bg-app: #0f1115;
+  --bg-surface: #1e2128;
+  --bg-glass: rgba(30, 33, 40, 0.7);
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #666666;
+  --border-glass: rgba(255, 255, 255, 0.1);
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(107, 115, 255, 0.3);
+  --scrollbar-thumb-hover: rgba(107, 115, 255, 0.5);
+  --scrollbar-thumb-active: rgba(107, 115, 255, 0.7);
+}
+
+/* Shadows */
+:root {
+  --shadow-sm: 0 2px 4px var(--shadow-color);
+  --shadow-md: 0 4px 12px var(--shadow-color);
+  --shadow-lg: 0 8px 24px var(--shadow-color);
+}
