@@ -1,0 +1,25 @@
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.trigger:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--primary);
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  color: var(--primary);
+}

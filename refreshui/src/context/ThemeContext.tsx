@@ -29,7 +29,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   
   const [colorId, setColorId] = useState<string>(saved?.colorId || 'light');
   const [fontId, setFontId] = useState<string>(saved?.fontId || 'inter');
-  const [effectSettings, setEffectSettingsState] = useState<EffectSettings>(saved?.effects || defaultEffectSettings);
+  const [effectSettings, setEffectSettingsState] = useState<EffectSettings>({
+    ...defaultEffectSettings,
+    ...(saved?.effects || {})
+  });
 
   const activeColorTheme = colorThemes[colorId] || colorThemes.light;
   const activeFontTheme = fontThemes[fontId] || fontThemes.inter;

@@ -667,6 +667,7 @@ export interface EffectSettings {
   glassBlur: number; // 0 to 20 (px)
   shadowStrength: number; // 0 to 100
   borderRadius: number; // 0 to 24 (px)
+  fabRoundness: number; // 0 to 100 (0 = square, 100 = round)
 }
 
 export const defaultEffectSettings: EffectSettings = {
@@ -675,6 +676,7 @@ export const defaultEffectSettings: EffectSettings = {
   glassBlur: 10,
   shadowStrength: 40,
   borderRadius: 12,
+  fabRoundness: 25, // Slightly rounded square by default
 };
 
 // --- Utilities ---
@@ -702,6 +704,11 @@ export const getThemeCssVariables = (
   cssVars['--glass-blur'] = `${effects.glassBlur}px`;
   cssVars['--shadow-strength'] = (effects.shadowStrength / 100).toString();
   cssVars['--border-radius'] = `${effects.borderRadius}px`;
+  
+  // Calculate FAB border radius based on percentage
+  // 0% = 4px (slight round), 100% = 50% (fully round)
+  const fabRadius = 4 + (effects.fabRoundness / 100) * 24; // Max 28px (half of 56px FAB)
+  cssVars['--fab-radius'] = effects.fabRoundness === 100 ? '50%' : `${fabRadius}px`;
 
   return cssVars;
 };

@@ -11,7 +11,7 @@ import { CreateTaskListModal } from "../components/CreateTaskListModal";
 import { CreateTaskModal } from "../components/CreateTaskModal";
 import { CreateProjectModal } from "../components/CreateProjectModal";
 import { Fab } from '../components/Fab';
-import { ThemeSelector } from '../components/ThemeSelector';
+import { Customizations } from '../components/Customizations';
 import { ViewSelector, type DashboardView } from '../components/ViewSelector';
 import { TasksView } from '../components/TasksView';
 import { TaskListView } from '../components/TaskListView';
@@ -238,7 +238,7 @@ export const Dashboard: React.FC = () => {
             />
           </div>
           <div className={styles.headerControls}>
-            <ThemeSelector />
+            <Customizations />
           </div>
         </div>
       </header>
