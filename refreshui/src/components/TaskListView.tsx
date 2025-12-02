@@ -1,17 +1,10 @@
-import React, { useState } from "react";
-import {
-  Search,
-  Filter,
-  List,
-  CheckCircle2,
-  Circle,
-  Clock,
-  AlertCircle,
-} from "lucide-react";
-import { Input, Button } from "./ui";
-import type { Project, TaskList, Task } from "../api/client";
+import React, { useState, useRef } from "react";
+import { List, Circle } from "lucide-react";
 import { SmallTaskCard } from "./SmallTaskCard";
-import { FilterPopover } from "./FilterPopover";
+import type { Project, TaskList, Task } from "../api/client";
+import { StatsPanel } from "./StatsPanel";
+import { SearchFilterToolbar } from "./SearchFilterToolbar";
+import { TaskListFilterPopover } from "./TaskListFilterPopover";
 import styles from "./TaskListView.module.css";
 
 interface TaskListViewProps {
@@ -31,23 +24,30 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const [filters, setFilters] = useState({
     status: [] as string[],
     priority: [] as string[],
+    taskCount: 'all',
+    completion: 'all',
   });
 
-  const handleFilterChange = (type: "status" | "priority", value: string) => {
-    setFilters((prev) => {
-      const current = prev[type];
-      const updated = current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value];
-      return { ...prev, [type]: updated };
-    });
+  const handleFilterChange = (type: "status" | "priority" | "taskCount" | "completion", value: string) => {
+    if (type === 'status' || type === 'priority') {
+      setFilters((prev) => {
+        const current = prev[type];
+        const updated = current.includes(value)
+          ? current.filter((item) => item !== value)
+          : [...current, value];
+        return { ...prev, [type]: updated };
+      });
+    } else {
+      setFilters((prev) => ({ ...prev, [type]: value }));
+    }
   };
 
   const clearFilters = () => {
-    setFilters({ status: [], priority: [] });
+    setFilters({ status: [], priority: [], taskCount: 'all', completion: 'all' });
   };
 
   // Calculate stats for a task list
@@ -114,42 +114,65 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
 
   return (
     <div className={styles.container}>
-      <div className={styles.toolbar}>
-        <div className={styles.searchContainer}>
-          <Input
-            icon={<Search size={16} />}
-            placeholder="Search task lists or tasks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        <div style={{ position: "relative" }}>
-          <Button
-            variant={
-              filters.status.length > 0 || filters.priority.length > 0
-                ? "primary"
-                : "secondary"
-            }
-            icon={<Filter size={16} />}
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-          >
-            Filter
-          </Button>
-          <FilterPopover
-            isOpen={isFilterOpen}
-            onClose={() => setIsFilterOpen(false)}
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            onClear={clearFilters}
-          />
-        </div>
-      </div>
+      <SearchFilterToolbar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onClearSearch={() => setSearchQuery('')}
+        isFilterOpen={isFilterOpen}
+        setIsFilterOpen={setIsFilterOpen}
+        isFilterActive={filters.status.length > 0 || filters.priority.length > 0 || filters.taskCount !== 'all' || filters.completion !== 'all'}
+        filterButtonRef={filterButtonRef as React.RefObject<HTMLButtonElement>}
+        placeholder="Search task lists or tasks..."
+      >
+        <TaskListFilterPopover
+          isOpen={isFilterOpen}
+          onClose={() => setIsFilterOpen(false)}
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          onClear={clearFilters}
+          buttonRef={filterButtonRef}
+        />
+      </SearchFilterToolbar>
 
       <div className={styles.content}>
-        {filteredProjects.map((project) => {
-          const projectLists = taskLists.filter(
-            (list) => list.project_id === project.id
-          );
+        {filteredProjects
+          .sort((a, b) => {
+            // Sort projects by task list count (descending)
+            const aListCount = taskLists.filter(l => l.project_id === a.id).length;
+            const bListCount = taskLists.filter(l => l.project_id === b.id).length;
+            return bListCount - aListCount;
+          })
+          .map((project) => {
+          const projectLists = taskLists
+            .filter((list) => list.project_id === project.id)
+            .sort((a, b) => {
+              // Sort task lists by task count (descending)
+              const aTaskCount = tasks.filter(t => t.task_list_id === a.id).length;
+              const bTaskCount = tasks.filter(t => t.task_list_id === b.id).length;
+              return bTaskCount - aTaskCount;
+            })
+            .filter((list) => {
+              // Apply task count filter
+              const stats = getListStats(list.id);
+              const taskCount = stats.total;
+              
+              if (filters.taskCount !== 'all') {
+                if (filters.taskCount === 'empty' && taskCount > 0) return false;
+                if (filters.taskCount === 'few' && (taskCount < 1 || taskCount > 5)) return false;
+                if (filters.taskCount === 'medium' && (taskCount < 6 || taskCount > 10)) return false;
+                if (filters.taskCount === 'many' && taskCount < 11) return false;
+              }
+              
+              // Apply completion filter
+              if (filters.completion !== 'all') {
+                const completionRate = stats.completionRate;
+                if (filters.completion === 'low' && (completionRate > 25)) return false;
+                if (filters.completion === 'medium' && (completionRate < 26 || completionRate > 75)) return false;
+                if (filters.completion === 'high' && completionRate < 76) return false;
+              }
+              
+              return true;
+            });
           if (projectLists.length === 0) return null;
 
           // Dynamic width calculation
@@ -201,62 +224,15 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                         </div>
 
                         <div className={styles.listMetrics}>
-                          <div className={styles.metricItem}>
-                            <CheckCircle2
-                              size={14}
-                              className={styles.metricIcon}
-                              style={{ color: "var(--success)" }}
-                            />
-                            <span className={styles.metricValue}>
-                              {stats.completed}
-                            </span>
-                            <span className={styles.metricLabel}>Done</span>
-                          </div>
-                          <div className={styles.metricItem}>
-                            <Clock
-                              size={14}
-                              className={styles.metricIcon}
-                              style={{ color: "var(--warning)" }}
-                            />
-                            <span className={styles.metricValue}>
-                              {stats.inProgress}
-                            </span>
-                            <span className={styles.metricLabel}>Active</span>
-                          </div>
-                          <div className={styles.metricItem}>
-                            <AlertCircle
-                              size={14}
-                              className={styles.metricIcon}
-                              style={{ color: "var(--error)" }}
-                            />
-                            <span className={styles.metricValue}>
-                              {stats.blocked}
-                            </span>
-                            <span className={styles.metricLabel}>Blocked</span>
-                          </div>
-                          <div className={styles.metricItem}>
-                            <Circle
-                              size={14}
-                              className={styles.metricIcon}
-                              style={{ color: "var(--text-tertiary)" }}
-                            />
-                            <span className={styles.metricValue}>
-                              {stats.notStarted}
-                            </span>
-                            <span className={styles.metricLabel}>Todo</span>
-                          </div>
-                        </div>
-
-                        <div className={styles.progressSection}>
-                          <div className={styles.progressBar}>
-                            <div
-                              className={styles.progressFill}
-                              style={{ width: `${stats.completionRate}%` }}
-                            />
-                          </div>
-                          <span className={styles.progressText}>
-                            {Math.round(stats.completionRate)}% Complete
-                          </span>
+                          <StatsPanel 
+                            stats={{
+                              completed: stats.completed,
+                              inProgress: stats.inProgress,
+                              blocked: stats.blocked,
+                              notStarted: stats.notStarted,
+                              total: stats.total
+                            }}
+                          />
                         </div>
                       </div>
 

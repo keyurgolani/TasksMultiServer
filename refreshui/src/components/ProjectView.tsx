@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
 import type { Project, TaskList, ProjectStats, Task } from '../api/client';
-import { Folder, List, Search, Filter } from 'lucide-react';
-import { Input, Button, Badge } from './ui';
+import { Folder, List } from 'lucide-react';
+import { Badge } from './ui';
 import { ProjectFilterPopover } from './ProjectFilterPopover';
+import { StatsPanel } from './StatsPanel';
+import { SearchFilterToolbar } from './SearchFilterToolbar';
 import styles from './ProjectView.module.css';
 
 interface ProjectViewProps {
@@ -86,35 +88,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
 
   return (
     <div className={styles.container}>
-      <div className={styles.toolbar}>
-        <div className={styles.searchContainer}>
-          <Input
-            icon={<Search size={16} />}
-            placeholder="Search projects or lists..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onClear={() => setSearchQuery('')}
-          />
-        </div>
-        <div style={{ position: 'relative' }}>
-          <Button 
-            ref={filterButtonRef}
-            variant={filters.completion !== 'all' || filters.taskCount !== 'all' || filters.isDefault !== 'all' ? "primary" : "secondary"} 
-            icon={<Filter size={16} />}
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-          >
-            Filter
-          </Button>
-          <ProjectFilterPopover
-            isOpen={isFilterOpen}
-            onClose={() => setIsFilterOpen(false)}
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            onClear={clearFilters}
-            buttonRef={filterButtonRef}
-          />
-        </div>
-      </div>
+      <SearchFilterToolbar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onClearSearch={() => setSearchQuery('')}
+        isFilterOpen={isFilterOpen}
+        setIsFilterOpen={setIsFilterOpen}
+        isFilterActive={filters.completion !== 'all' || filters.taskCount !== 'all' || filters.isDefault !== 'all'}
+        filterButtonRef={filterButtonRef as React.RefObject<HTMLButtonElement>}
+        placeholder="Search projects or lists..."
+      >
+        <ProjectFilterPopover
+          isOpen={isFilterOpen}
+          onClose={() => setIsFilterOpen(false)}
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          onClear={clearFilters}
+          buttonRef={filterButtonRef}
+        />
+      </SearchFilterToolbar>
       <div className={styles.grid}>
         {filteredProjects.map(project => {
           // Calculate detailed stats from tasks prop
@@ -129,14 +121,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
           const inProgress = projectTasks.filter(t => t.status === 'IN_PROGRESS').length;
           const blocked = projectTasks.filter(t => t.status === 'BLOCKED').length;
           const notStarted = projectTasks.filter(t => t.status === 'NOT_STARTED').length;
-          
-          const completionPercentage = totalTasks > 0 
-            ? Math.round((completed / totalTasks) * 100) 
-            : 0;
+
+          // completionPercentage was calculated but not used in the return block, so it's removed.
 
           return (
-            <div 
-              key={project.id} 
+            <div
+              key={project.id}
               className={styles.projectCard}
               onClick={() => onProjectClick(project.id)}
               style={{ cursor: 'pointer' }}
@@ -156,59 +146,48 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
                 </div>
               </div>
 
-              <div className={styles.statsGrid}>
-                <div className={styles.statItem}>
-                  <span className={styles.statValue} style={{ color: 'var(--success)' }}>{completed}</span>
-                  <span className={styles.statLabel}>Done</span>
-                </div>
-                <div className={styles.statItem}>
-                  <span className={styles.statValue} style={{ color: 'var(--warning)' }}>{inProgress}</span>
-                  <span className={styles.statLabel}>Active</span>
-                </div>
-                <div className={styles.statItem}>
-                  <span className={styles.statValue} style={{ color: 'var(--error)' }}>{blocked}</span>
-                  <span className={styles.statLabel}>Blocked</span>
-                </div>
-                <div className={styles.statItem}>
-                  <span className={styles.statValue} style={{ color: 'var(--text-tertiary)' }}>{notStarted}</span>
-                  <span className={styles.statLabel}>Ready</span>
-                </div>
-              </div>
-
-              <div className={styles.breakdownSection}>
-                <div className={styles.breakdownHeader}>
-                  <span>Progress</span>
-                  <span>{completionPercentage}%</span>
-                </div>
-                <div className={styles.breakdownBar}>
-                  <div className={styles.breakdownSegment} style={{ width: `${(completed/totalTasks)*100}%`, backgroundColor: 'var(--success)' }} />
-                  <div className={styles.breakdownSegment} style={{ width: `${(inProgress/totalTasks)*100}%`, backgroundColor: 'var(--warning)' }} />
-                  <div className={styles.breakdownSegment} style={{ width: `${(blocked/totalTasks)*100}%`, backgroundColor: 'var(--error)' }} />
-                  <div className={styles.breakdownSegment} style={{ width: `${(notStarted/totalTasks)*100}%`, backgroundColor: 'var(--bg-surface-active)' }} />
-                </div>
+              <div className={styles.statsSection}>
+                <StatsPanel 
+                  stats={{
+                    completed,
+                    inProgress,
+                    blocked,
+                    notStarted,
+                    total: totalTasks
+                  }}
+                />
               </div>
 
               <div className={styles.listsSection}>
                 <h3 className={styles.listsTitle}>Task Lists ({projectLists.length})</h3>
-                <div className={styles.listsGrid}>
-                  {projectLists.slice(0, 6).map(list => (
-                    <div 
-                      key={list.id} 
-                      className={styles.listItem}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTaskListClick(list.id, project.id);
-                      }}
-                    >
-                      <List size={12} className={styles.listIcon} />
-                      <span className={styles.listName}>{list.name}</span>
-                    </div>
-                  ))}
-                  {projectLists.length > 6 && (
-                    <div className={styles.listItem} style={{ color: 'var(--primary)' }}>
-                      +{projectLists.length - 6} more
-                    </div>
-                  )}
+                <div className={styles.listsStack}>
+                  {projectLists.map(list => {
+                    // Calculate list stats for preview
+                    const listTasks = tasks.filter(t => t.task_list_id === list.id);
+                    const listCompleted = listTasks.filter(t => t.status === 'COMPLETED').length;
+                    const listTotal = listTasks.length;
+                    
+                    return (
+                      <div 
+                        key={list.id} 
+                        className={styles.listItem}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTaskListClick(list.id, project.id);
+                        }}
+                      >
+                        <div className={styles.listInfo}>
+                          <List size={14} className={styles.listIcon} />
+                          <span className={styles.listName}>{list.name}</span>
+                        </div>
+                        <div className={styles.listMeta}>
+                          <span className={styles.listCount}>
+                            {listCompleted}/{listTotal} done
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

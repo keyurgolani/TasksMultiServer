@@ -1,0 +1,15 @@
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  align-items: center;
+}
+
+.searchContainer {
+  flex: 1;
+  position: relative;
+}
+
+.filterContainer {
+  position: relative;
+}

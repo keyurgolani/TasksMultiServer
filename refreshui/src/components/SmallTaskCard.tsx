@@ -17,6 +17,8 @@ export const SmallTaskCard: React.FC<SmallTaskCardProps> = ({ task, onClick }) =
         return 'radial-gradient(circle at top left, color-mix(in srgb, var(--success) 15%, transparent) 0%, transparent 70%)';
       case 'BLOCKED':
         return 'radial-gradient(circle at top left, color-mix(in srgb, var(--error) 15%, transparent) 0%, transparent 70%)';
+      case 'NOT_STARTED':
+        return 'radial-gradient(circle at top left, color-mix(in srgb, var(--text-tertiary) 10%, transparent) 0%, transparent 70%)';
       default:
         return undefined;
     }
