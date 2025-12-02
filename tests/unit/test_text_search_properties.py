@@ -1,6 +1,6 @@
 """Property-based tests for text search functionality.
 
-Feature: agent-ux-enhancements, Property 14: Search matches text in titles
+Feature: rest-api-improvements, Property 14: Text search finds matching tasks
 """
 
 import tempfile
@@ -51,12 +51,12 @@ def create_task_with_title(task_list_id, title: str, description: str = "Test de
 @settings(max_examples=100)
 def test_search_matches_text_in_titles(search_text: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 14: Search matches text in titles
+    Feature: rest-api-improvements, Property 14: Text search finds matching tasks
 
     Test that for any task with specific text in its title, searching for that
     text returns the task.
 
-    Validates: Requirements 4.1
+    Validates: Requirements 4.2
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -110,12 +110,12 @@ def test_search_matches_text_in_titles(search_text: str) -> None:
 @settings(max_examples=100)
 def test_search_matches_text_in_descriptions(search_text: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 14: Search matches text in titles
+    Feature: rest-api-improvements, Property 14: Text search finds matching tasks
 
     Test that for any task with specific text in its description, searching for
     that text returns the task.
 
-    Validates: Requirements 4.1
+    Validates: Requirements 4.2
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -173,11 +173,11 @@ def test_search_matches_text_in_descriptions(search_text: str) -> None:
 @settings(max_examples=100)
 def test_search_is_case_insensitive(search_text: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 14: Search matches text in titles
+    Feature: rest-api-improvements, Property 14: Text search finds matching tasks
 
     Test that text search is case-insensitive.
 
-    Validates: Requirements 4.1
+    Validates: Requirements 4.2
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -225,11 +225,11 @@ def test_search_is_case_insensitive(search_text: str) -> None:
 @settings(max_examples=100)
 def test_search_excludes_non_matching_tasks(search_text: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 14: Search matches text in titles
+    Feature: rest-api-improvements, Property 14: Text search finds matching tasks
 
     Test that tasks without the search text are not included in results.
 
-    Validates: Requirements 4.1
+    Validates: Requirements 4.2
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:

@@ -14,7 +14,7 @@ import pytest
 
 from task_manager.models.entities import ExitCriteria, Project, Task, TaskList
 from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
-from task_manager.orchestration.task_orchestrator import TaskOrchestrator
+from task_manager.orchestration.task_orchestrator import BusinessLogicError, TaskOrchestrator
 
 
 @pytest.fixture
@@ -493,7 +493,7 @@ class TestTaskOrchestratorUpdateTask:
     def test_update_task_status_to_completed_with_incomplete_exit_criteria_raises_error(
         self, task_orchestrator, mock_data_store, sample_task
     ):
-        """Test updating task status to COMPLETED with incomplete exit criteria raises ValueError.
+        """Test updating task status to COMPLETED with incomplete exit criteria raises BusinessLogicError.
 
         Requirements: 3.8
         """
@@ -505,7 +505,7 @@ class TestTaskOrchestratorUpdateTask:
         mock_data_store.get_task.return_value = sample_task
 
         # Execute and verify - use update_status method which validates exit criteria
-        with pytest.raises(ValueError, match="Cannot mark task as COMPLETED"):
+        with pytest.raises(BusinessLogicError, match="Cannot mark task as COMPLETED"):
             task_orchestrator.update_status(task_id=sample_task.id, status=Status.COMPLETED)
 
     def test_update_task_status_to_completed_with_complete_exit_criteria_succeeds(

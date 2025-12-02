@@ -16,8 +16,10 @@
   );
   
   --primary: #6b73ff;
+  --primary-rgb: 107, 115, 255;
   --primary-dark: #5a63e0;
   --error: #ff4757;
+  --secondary-rgb: 255, 154, 158; /* For gradients */
 
   --status-success-bg: #e6f4ea;
   --status-success-text: #1e8e3e;
@@ -45,6 +47,7 @@
   --text-tertiary: #999999;
   --border-glass: rgba(255, 255, 255, 0.3);
   --shadow-color: rgba(0, 0, 0, 0.05);
+  --progress-bar-bg: rgba(0, 0, 0, 0.15);
   
   /* Scrollbar */
   --scrollbar-thumb: rgba(107, 115, 255, 0.4);
@@ -61,6 +64,7 @@
   --text-tertiary: #666666;
   --border-glass: rgba(255, 255, 255, 0.1);
   --shadow-color: rgba(0, 0, 0, 0.3);
+  --progress-bar-bg: rgba(255, 255, 255, 0.1);
   
   /* Scrollbar */
   --scrollbar-thumb: rgba(107, 115, 255, 0.3);

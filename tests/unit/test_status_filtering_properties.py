@@ -1,6 +1,6 @@
 """Property-based tests for status filtering functionality.
 
-Feature: agent-ux-enhancements, Property 15: Search filters by status
+Feature: rest-api-improvements, Property 15: Status filter returns only matching tasks
 """
 
 import tempfile
@@ -51,12 +51,12 @@ status_strategy = st.sampled_from(list(Status))
 @settings(max_examples=100)
 def test_search_filters_by_single_status(filter_status: Status) -> None:
     """
-    Feature: agent-ux-enhancements, Property 15: Search filters by status
+    Feature: rest-api-improvements, Property 15: Status filter returns only matching tasks
 
     Test that for any set of tasks with different statuses, filtering by a
     specific status returns only tasks with that status.
 
-    Validates: Requirements 4.2
+    Validates: Requirements 4.3
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -112,12 +112,12 @@ def test_search_filters_by_single_status(filter_status: Status) -> None:
 @settings(max_examples=100)
 def test_search_filters_by_multiple_statuses(filter_statuses: list[Status]) -> None:
     """
-    Feature: agent-ux-enhancements, Property 15: Search filters by status
+    Feature: rest-api-improvements, Property 15: Status filter returns only matching tasks
 
     Test that filtering by multiple statuses returns only tasks with one of
     those statuses.
 
-    Validates: Requirements 4.2
+    Validates: Requirements 4.3
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -181,12 +181,12 @@ def test_search_filters_by_multiple_statuses(filter_statuses: list[Status]) -> N
 @settings(max_examples=100)
 def test_search_with_no_matching_status_returns_empty(filter_status: Status) -> None:
     """
-    Feature: agent-ux-enhancements, Property 15: Search filters by status
+    Feature: rest-api-improvements, Property 15: Status filter returns only matching tasks
 
     Test that filtering by a status when no tasks have that status returns
     an empty list.
 
-    Validates: Requirements 4.2
+    Validates: Requirements 4.3
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -233,11 +233,11 @@ def test_search_with_no_matching_status_returns_empty(filter_status: Status) -> 
 @settings(max_examples=100)
 def test_status_filter_with_text_query(filter_status: Status) -> None:
     """
-    Feature: agent-ux-enhancements, Property 15: Search filters by status
+    Feature: rest-api-improvements, Property 15: Status filter returns only matching tasks
 
     Test that status filtering works correctly when combined with text query.
 
-    Validates: Requirements 4.2
+    Validates: Requirements 4.3
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:

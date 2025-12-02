@@ -148,8 +148,10 @@ class TestServerInitialization:
     def test_app_metadata(self) -> None:
         """Test FastAPI app has correct metadata."""
         assert app.title == "Task Management System API"
-        assert app.description == "REST API for task management operations"
-        assert app.version == "0.1.0"
+        # Verify description contains key content (it's a long markdown string)
+        assert "Task Management System REST API" in app.description
+        assert "comprehensive REST API" in app.description
+        assert app.version == "0.1.0-alpha"
 
     def test_cors_middleware_configured(self) -> None:
         """Test CORS middleware is configured."""
@@ -332,7 +334,7 @@ class TestGenericExceptionHandler:
 
         assert response.status_code == 500
         content = response.body.decode()
-        assert "INTERNAL_ERROR" in content
+        assert "STORAGE_ERROR" in content
         assert "unexpected error occurred" in content.lower()
 
 
@@ -806,3 +808,392 @@ class TestHealthEndpoint:
         content = response.body.decode()
         assert "unhealthy" in content
         assert "Health check failed" in content
+
+
+class TestSuccessResponseFormats:
+    """Test success response format consistency across endpoints.
+
+    Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7
+    """
+
+    @pytest.fixture
+    def test_client(self, tmp_path):
+        """Create a test client for the REST API with filesystem backing store."""
+        import os
+        import shutil
+
+        test_dir = tmp_path / "test_rest_response_formats"
+
+        # Set up environment for filesystem backing store
+        os.environ["DATA_STORE_TYPE"] = "filesystem"
+        os.environ["FILESYSTEM_PATH"] = str(test_dir)
+
+        # Import app after setting environment variables
+        from task_manager.interfaces.rest.server import app
+
+        # Create test client with lifespan context enabled
+        with TestClient(app) as client:
+            yield client
+
+        # Cleanup
+        if test_dir.exists():
+            shutil.rmtree(test_dir)
+
+    def test_single_project_response_format(self, test_client):
+        """Test single project retrieval follows {"project": {...}} format.
+
+        Requirements: 8.1
+        """
+        # Create project
+        create_response = test_client.post("/projects", json={"name": "Test Project"})
+        assert create_response.status_code == 200
+        project_id = create_response.json()["project"]["id"]
+
+        # Get single project
+        get_response = test_client.get(f"/projects/{project_id}")
+        assert get_response.status_code == 200
+
+        response_data = get_response.json()
+
+        # Verify format
+        assert "project" in response_data
+        assert isinstance(response_data["project"], dict)
+        assert set(response_data.keys()) == {"project"}
+
+    def test_multiple_projects_response_format(self, test_client):
+        """Test multiple projects retrieval follows {"projects": [...]} format.
+
+        Requirements: 8.2
+        """
+        # Create projects
+        test_client.post("/projects", json={"name": "Project 1"})
+        test_client.post("/projects", json={"name": "Project 2"})
+
+        # List projects
+        list_response = test_client.get("/projects")
+        assert list_response.status_code == 200
+
+        response_data = list_response.json()
+
+        # Verify format
+        assert "projects" in response_data
+        assert isinstance(response_data["projects"], list)
+        assert set(response_data.keys()) == {"projects"}
+
+    def test_create_project_response_format(self, test_client):
+        """Test project creation follows {"message": "...", "project": {...}} format.
+
+        Requirements: 8.3, 8.7
+        """
+        create_response = test_client.post("/projects", json={"name": "New Project"})
+
+        # Verify status code
+        assert create_response.status_code in [200, 201]
+
+        response_data = create_response.json()
+
+        # Verify format
+        assert "message" in response_data
+        assert "project" in response_data
+        assert isinstance(response_data["message"], str)
+        assert isinstance(response_data["project"], dict)
+        assert set(response_data.keys()) == {"message", "project"}
+
+    def test_update_project_response_format(self, test_client):
+        """Test project update follows {"message": "...", "project": {...}} format.
+
+        Requirements: 8.4, 8.7
+        """
+        # Create project
+        create_response = test_client.post("/projects", json={"name": "Original"})
+        project_id = create_response.json()["project"]["id"]
+
+        # Update project
+        update_response = test_client.put(f"/projects/{project_id}", json={"name": "Updated"})
+
+        # Verify status code
+        assert update_response.status_code == 200
+
+        response_data = update_response.json()
+
+        # Verify format
+        assert "message" in response_data
+        assert "project" in response_data
+        assert isinstance(response_data["message"], str)
+        assert isinstance(response_data["project"], dict)
+        assert set(response_data.keys()) == {"message", "project"}
+
+    def test_delete_project_response_format(self, test_client):
+        """Test project deletion follows {"message": "..."} format.
+
+        Requirements: 8.5, 8.7
+        """
+        # Create project
+        create_response = test_client.post("/projects", json={"name": "To Delete"})
+        project_id = create_response.json()["project"]["id"]
+
+        # Delete project
+        delete_response = test_client.delete(f"/projects/{project_id}")
+
+        # Verify status code
+        assert delete_response.status_code == 200
+
+        response_data = delete_response.json()
+
+        # Verify format
+        assert "message" in response_data
+        assert isinstance(response_data["message"], str)
+        assert set(response_data.keys()) == {"message"}
+
+    def test_single_task_list_response_format(self, test_client):
+        """Test single task list retrieval follows {"task_list": {...}} format.
+
+        Requirements: 8.1
+        """
+        # Create task list
+        create_response = test_client.post("/task-lists", json={"name": "Test List"})
+        assert create_response.status_code == 200
+        task_list_id = create_response.json()["task_list"]["id"]
+
+        # Get single task list
+        get_response = test_client.get(f"/task-lists/{task_list_id}")
+        assert get_response.status_code == 200
+
+        response_data = get_response.json()
+
+        # Verify format
+        assert "task_list" in response_data
+        assert isinstance(response_data["task_list"], dict)
+        assert set(response_data.keys()) == {"task_list"}
+
+    def test_multiple_task_lists_response_format(self, test_client):
+        """Test multiple task lists retrieval follows {"task_lists": [...]} format.
+
+        Requirements: 8.2
+        """
+        # Create task lists
+        test_client.post("/task-lists", json={"name": "List 1"})
+        test_client.post("/task-lists", json={"name": "List 2"})
+
+        # List task lists
+        list_response = test_client.get("/task-lists")
+        assert list_response.status_code == 200
+
+        response_data = list_response.json()
+
+        # Verify format
+        assert "task_lists" in response_data
+        assert isinstance(response_data["task_lists"], list)
+        assert set(response_data.keys()) == {"task_lists"}
+
+    def test_single_task_response_format(self, test_client):
+        """Test single task retrieval follows {"task": {...}} format.
+
+        Requirements: 8.1
+        """
+        # Create task list
+        tl_response = test_client.post("/task-lists", json={"name": "Test List"})
+        task_list_id = tl_response.json()["task_list"]["id"]
+
+        # Create task
+        task_data = {
+            "task_list_id": task_list_id,
+            "title": "Test Task",
+            "description": "Description",
+            "status": "NOT_STARTED",
+            "priority": "MEDIUM",
+            "exit_criteria": [{"criteria": "Complete", "status": "INCOMPLETE"}],
+            "dependencies": [],
+            "notes": [],
+        }
+        create_response = test_client.post("/tasks", json=task_data)
+        task_id = create_response.json()["task"]["id"]
+
+        # Get single task
+        get_response = test_client.get(f"/tasks/{task_id}")
+        assert get_response.status_code == 200
+
+        response_data = get_response.json()
+
+        # Verify format
+        assert "task" in response_data
+        assert isinstance(response_data["task"], dict)
+        assert set(response_data.keys()) == {"task"}
+
+    def test_multiple_tasks_response_format(self, test_client):
+        """Test multiple tasks retrieval follows {"tasks": [...]} format.
+
+        Requirements: 8.2
+        """
+        # Create task list
+        tl_response = test_client.post("/task-lists", json={"name": "Test List"})
+        task_list_id = tl_response.json()["task_list"]["id"]
+
+        # Create tasks
+        for i in range(2):
+            task_data = {
+                "task_list_id": task_list_id,
+                "title": f"Task {i+1}",
+                "description": "Description",
+                "status": "NOT_STARTED",
+                "priority": "MEDIUM",
+                "exit_criteria": [{"criteria": "Complete", "status": "INCOMPLETE"}],
+                "dependencies": [],
+                "notes": [],
+            }
+            test_client.post("/tasks", json=task_data)
+
+        # List tasks
+        list_response = test_client.get("/tasks")
+        assert list_response.status_code == 200
+
+        response_data = list_response.json()
+
+        # Verify format
+        assert "tasks" in response_data
+        assert isinstance(response_data["tasks"], list)
+        assert set(response_data.keys()) == {"tasks"}
+
+    def test_bulk_create_response_format(self, test_client):
+        """Test bulk create follows response format with total, succeeded, failed counts.
+
+        Requirements: 8.6
+        """
+        # Create task list
+        tl_response = test_client.post("/task-lists", json={"name": "Test List"})
+        task_list_id = tl_response.json()["task_list"]["id"]
+
+        # Bulk create tasks
+        task_definitions = [
+            {
+                "task_list_id": task_list_id,
+                "title": f"Task {i+1}",
+                "description": "Description",
+                "status": "NOT_STARTED",
+                "priority": "MEDIUM",
+                "exit_criteria": [{"criteria": "Complete", "status": "INCOMPLETE"}],
+                "dependencies": [],
+                "notes": [],
+            }
+            for i in range(3)
+        ]
+
+        bulk_response = test_client.post("/tasks/bulk/create", json={"tasks": task_definitions})
+        assert bulk_response.status_code in [200, 201]
+
+        response_data = bulk_response.json()
+
+        # Verify format
+        assert "result" in response_data
+        result = response_data["result"]
+
+        assert "total" in result
+        assert "succeeded" in result
+        assert "failed" in result
+        assert "results" in result
+
+        assert isinstance(result["total"], int)
+        assert isinstance(result["succeeded"], int)
+        assert isinstance(result["failed"], int)
+        assert isinstance(result["results"], list)
+
+        assert result["total"] == 3
+        assert result["succeeded"] + result["failed"] == result["total"]
+        assert len(result["results"]) == result["total"]
+
+    def test_bulk_update_response_format(self, test_client):
+        """Test bulk update follows response format with total, succeeded, failed counts.
+
+        Requirements: 8.6
+        """
+        # Create task list
+        tl_response = test_client.post("/task-lists", json={"name": "Test List"})
+        task_list_id = tl_response.json()["task_list"]["id"]
+
+        # Create tasks
+        task_ids = []
+        for i in range(2):
+            task_data = {
+                "task_list_id": task_list_id,
+                "title": f"Task {i+1}",
+                "description": "Description",
+                "status": "NOT_STARTED",
+                "priority": "MEDIUM",
+                "exit_criteria": [{"criteria": "Complete", "status": "INCOMPLETE"}],
+                "dependencies": [],
+                "notes": [],
+            }
+            response = test_client.post("/tasks", json=task_data)
+            task_ids.append(response.json()["task"]["id"])
+
+        # Bulk update
+        updates = [
+            {"task_id": task_id, "status": "IN_PROGRESS", "priority": "HIGH"}
+            for task_id in task_ids
+        ]
+
+        bulk_response = test_client.put("/tasks/bulk/update", json={"updates": updates})
+        assert bulk_response.status_code == 200
+
+        response_data = bulk_response.json()
+
+        # Verify format
+        assert "result" in response_data
+        result = response_data["result"]
+
+        assert "total" in result
+        assert "succeeded" in result
+        assert "failed" in result
+        assert "results" in result
+
+        assert isinstance(result["total"], int)
+        assert isinstance(result["succeeded"], int)
+        assert isinstance(result["failed"], int)
+        assert isinstance(result["results"], list)
+
+    def test_bulk_delete_response_format(self, test_client):
+        """Test bulk delete follows response format with total, succeeded, failed counts.
+
+        Requirements: 8.6
+        """
+        # Create task list
+        tl_response = test_client.post("/task-lists", json={"name": "Test List"})
+        task_list_id = tl_response.json()["task_list"]["id"]
+
+        # Create tasks
+        task_ids = []
+        for i in range(2):
+            task_data = {
+                "task_list_id": task_list_id,
+                "title": f"Task {i+1}",
+                "description": "Description",
+                "status": "NOT_STARTED",
+                "priority": "MEDIUM",
+                "exit_criteria": [{"criteria": "Complete", "status": "INCOMPLETE"}],
+                "dependencies": [],
+                "notes": [],
+            }
+            response = test_client.post("/tasks", json=task_data)
+            task_ids.append(response.json()["task"]["id"])
+
+        # Bulk delete
+        bulk_response = test_client.request(
+            "DELETE", "/tasks/bulk/delete", json={"task_ids": task_ids}
+        )
+        assert bulk_response.status_code == 200
+
+        response_data = bulk_response.json()
+
+        # Verify format
+        assert "result" in response_data
+        result = response_data["result"]
+
+        assert "total" in result
+        assert "succeeded" in result
+        assert "failed" in result
+        assert "results" in result
+
+        assert isinstance(result["total"], int)
+        assert isinstance(result["succeeded"], int)
+        assert isinstance(result["failed"], int)
+        assert isinstance(result["results"], list)

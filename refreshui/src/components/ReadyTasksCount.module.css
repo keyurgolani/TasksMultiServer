@@ -1,0 +1,37 @@
+:global {
+  @keyframes ready-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+}
+
+.readyCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  animation: ready-pulse 2s ease-in-out infinite;
+}
+
+.number {
+  color: var(--warning);
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(var(--warning-rgb, 255, 165, 2), 0.3);
+}
+
+.label {
+  color: var(--warning);
+  font-weight: 500;
+  text-shadow: 0 0 8px rgba(var(--warning-rgb, 255, 165, 2), 0.3);
+}
+
+/* Compact variant - just shows the number */
+.compact .label {
+  display: none;
+}
+
+.compact {
+  font-size: 11px;
+}

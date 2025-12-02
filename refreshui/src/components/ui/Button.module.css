@@ -4,11 +4,17 @@
   justify-content: center;
   gap: 8px;
   border-radius: 8px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid transparent;
   outline: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.button:active {
+  transform: scale(0.96);
 }
 
 /* Sizes */
@@ -40,11 +46,12 @@
 .primary:hover {
   filter: brightness(1.1);
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(107, 115, 255, 0.3);
+  box-shadow: var(--glow-primary);
 }
 
 .primary:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.96);
+  box-shadow: none;
 }
 
 .secondary {
@@ -56,6 +63,12 @@
 .secondary:hover {
   background: var(--bg-app);
   border-color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.secondary:active {
+  transform: translateY(0) scale(0.96);
 }
 
 .ghost {
@@ -64,8 +77,13 @@
 }
 
 .ghost:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--text-primary);
+  background: rgba(107, 115, 255, 0.1);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.ghost:active {
+  transform: translateY(0) scale(0.96);
 }
 
 .icon {

@@ -1,0 +1,106 @@
+.toastContainer {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(20, 20, 20, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  min-width: 300px;
+  max-width: 400px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  position: relative;
+}
+
+.toast_success {
+  border-left: 4px solid #10b981;
+}
+
+.toast_error {
+  border-left: 4px solid #ef4444;
+}
+
+.toast_info {
+  border-left: 4px solid #3b82f6;
+}
+
+.toast_warning {
+  border-left: 4px solid #f59e0b;
+}
+
+.icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon_success {
+  color: #10b981;
+}
+.icon_error {
+  color: #ef4444;
+}
+.icon_info {
+  color: #3b82f6;
+}
+.icon_warning {
+  color: #f59e0b;
+}
+
+.message {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.closeButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+/* Progress Bar for Auto-dismiss */
+.progressBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  width: 100%;
+}
+
+.progressFill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.4);
+  transform-origin: left;
+}

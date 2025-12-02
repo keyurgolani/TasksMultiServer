@@ -1,4 +1,5 @@
 import React from 'react';
+import { StatusIndicator } from './StatusIndicator';
 import styles from './SmallTaskCard.module.css';
 import type { Task } from '../api/client';
 
@@ -8,13 +9,16 @@ interface SmallTaskCardProps {
 }
 
 export const SmallTaskCard: React.FC<SmallTaskCardProps> = ({ task, onClick }) => {
-  const getStatusColor = (status: string) => {
+  const getStatusBackground = (status: string) => {
     switch (status) {
-      case "COMPLETED": return "#2ed573";
-      case "IN_PROGRESS": return "#ffa502";
-      case "BLOCKED": return "#ff4757";
-      case "NOT_STARTED": return "#a4b0be";
-      default: return "#a4b0be";
+      case 'IN_PROGRESS':
+        return 'radial-gradient(circle at top left, color-mix(in srgb, var(--warning) 15%, transparent) 0%, transparent 70%)';
+      case 'COMPLETED':
+        return 'radial-gradient(circle at top left, color-mix(in srgb, var(--success) 15%, transparent) 0%, transparent 70%)';
+      case 'BLOCKED':
+        return 'radial-gradient(circle at top left, color-mix(in srgb, var(--error) 15%, transparent) 0%, transparent 70%)';
+      default:
+        return undefined;
     }
   };
 
@@ -22,21 +26,13 @@ export const SmallTaskCard: React.FC<SmallTaskCardProps> = ({ task, onClick }) =
     <div 
       className={styles.card}
       onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default' }}
+      style={{ 
+        cursor: onClick ? 'pointer' : 'default',
+        background: getStatusBackground(task.status)
+      }}
     >
       <div className={styles.titleRow}>
-        <div 
-          className={styles.priorityDot}
-          style={{ 
-            width: '8px', 
-            height: '8px', 
-            borderRadius: '50%', 
-            backgroundColor: getStatusColor(task.status),
-            flexShrink: 0,
-            marginRight: '8px'
-          }}
-          title={task.status.replace('_', ' ')}
-        />
+        <StatusIndicator status={task.status} variant="dot" />
         <h4 className={styles.title}>{task.title}</h4>
         
         {/* Exit Criteria Progress Bar - inline on right */}

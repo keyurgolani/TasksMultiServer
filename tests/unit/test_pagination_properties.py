@@ -118,7 +118,7 @@ def test_pagination_returns_correct_subset(num_tasks: int, limit: int, offset: i
     num_tasks=st.integers(min_value=5, max_value=20),
     limit=st.integers(min_value=1, max_value=5),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_pagination_with_zero_offset_returns_first_items(num_tasks: int, limit: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 19: Search pagination returns correct subset

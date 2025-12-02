@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactDOM from 'react-dom';
-import { themes, type Theme } from '../styles/themes';
+import { themes, type Theme, fonts, applyFont, saveFont, loadSavedFont } from '../styles/themes';
 import styles from './ThemeSelector.module.css';
 
 interface ThemeSelectorProps {
@@ -12,9 +12,17 @@ interface ThemeSelectorProps {
 
 export const ThemeSelector: React.FC<ThemeSelectorProps> = ({ currentTheme, onThemeChange }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [currentFont, setCurrentFont] = useState(() => loadSavedFont());
 
   const currentThemeData = themes[currentTheme] || themes.light;
   const themeList = Object.values(themes);
+  const fontList = Object.entries(fonts);
+
+  const handleFontChange = (fontKey: string, fontValue: string) => {
+    setCurrentFont(fontKey);
+    applyFont(fontValue);
+    saveFont(fontKey);
+  };
 
   // Helper to render the skeleton UI
   const renderPreview = (theme: Theme, isMini: boolean) => (
@@ -110,11 +118,13 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({ currentTheme, onTh
                 }}
               >
                 <div className={styles.popupHeader}>
-                  <h3>Select Theme</h3>
+                  <h3>Appearance</h3>
                   <button className={styles.closeButton} onClick={() => setIsOpen(false)}>
                     ×
                   </button>
                 </div>
+
+                <div className={styles.sectionTitle}>Theme</div>
                 <div className={styles.themeGrid}>
                   {themeList.map((theme, index) => (
                     <motion.button
@@ -122,7 +132,6 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({ currentTheme, onTh
                       className={`${styles.themeOption} ${currentTheme === theme.id ? styles.active : ''}`}
                       onClick={() => {
                         onThemeChange(theme.id);
-                        setIsOpen(false);
                       }}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -154,6 +163,23 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({ currentTheme, onTh
                     </motion.button>
                   ))}
                 </div>
+
+                <div className={styles.sectionTitle}>Font</div>
+                <div className={styles.fontGrid}>
+                  {fontList.map(([key, font]) => (
+                    <button
+                      key={key}
+                      className={`${styles.fontOption} ${currentFont === key ? styles.active : ''}`}
+                      onClick={() => handleFontChange(key, font.value)}
+                      style={{ fontFamily: font.value }}
+                    >
+                      <span className={styles.fontName}>{font.name}</span>
+                      <span className={styles.fontPreview}>Aa</span>
+                      {currentFont === key && <Check size={16} className={styles.checkIcon} />}
+                    </button>
+                  ))}
+                </div>
+
               </motion.div>
             </>
           )}

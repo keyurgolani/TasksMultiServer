@@ -18,6 +18,8 @@ Requirements: 1.3
 import os
 import sys
 
+from sqlalchemy import create_engine
+
 from task_manager.data.access.migrations import (
     MigrationError,
     check_schema_exists,
@@ -47,8 +49,6 @@ def main():
             print("WARNING: This will delete all data!")
             response = input("Are you sure? (yes/no): ")
             if response.lower() == "yes":
-                from sqlalchemy import create_engine
-
                 engine = create_engine(connection_url)
                 drop_all_tables(engine)
                 print("✓ All tables dropped")
@@ -56,8 +56,6 @@ def main():
                 print("Operation cancelled")
 
         elif command == "check":
-            from sqlalchemy import create_engine
-
             engine = create_engine(connection_url)
             exists = check_schema_exists(engine)
             if exists:

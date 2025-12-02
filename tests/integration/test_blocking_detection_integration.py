@@ -73,10 +73,10 @@ class TestMCPBlockingDetection:
 
         Requirements: 6.1, 6.2, 6.3
         """
-        # Create project and task list
+        # Create project and task list with unique name
         project = Project(
             id=uuid4(),
-            name="Test Project",
+            name=f"Test Project {uuid4()}",
             is_default=False,
             created_at=datetime.now(),
             updated_at=datetime.now(),
@@ -147,10 +147,10 @@ class TestMCPBlockingDetection:
 
         Requirements: 6.4
         """
-        # Create project and task list
+        # Create project and task list with unique name
         project = Project(
             id=uuid4(),
-            name="Test Project",
+            name=f"Test Project {uuid4()}",
             is_default=False,
             created_at=datetime.now(),
             updated_at=datetime.now(),
@@ -215,10 +215,10 @@ class TestRESTBlockingDetection:
         if rest_server.blocking_detector is None:
             rest_server.blocking_detector = BlockingDetector(postgresql_store)
 
-        # Create project and task list
+        # Create project and task list with unique name
         project = Project(
             id=uuid4(),
-            name="Test Project",
+            name=f"Test Project {uuid4()}",
             is_default=False,
             created_at=datetime.now(),
             updated_at=datetime.now(),
@@ -294,10 +294,10 @@ class TestRESTBlockingDetection:
         if rest_server.blocking_detector is None:
             rest_server.blocking_detector = BlockingDetector(postgresql_store)
 
-        # Create project and task list
+        # Create project and task list with unique name
         project = Project(
             id=uuid4(),
-            name="Test Project",
+            name=f"Test Project {uuid4()}",
             is_default=False,
             created_at=datetime.now(),
             updated_at=datetime.now(),

@@ -23,6 +23,18 @@
     display: flex;
     align-items: center;
     pointer-events: none;
+    animation: iconFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes iconFadeIn {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
 }
 
 .input {
@@ -38,6 +50,31 @@
 
 .hasIcon {
     padding-left: 36px !important;
+}
+
+.iconButton {
+  position: absolute;
+  left: 12px;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: iconFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.iconButton:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+:global([data-theme="dark"]) .iconButton:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .input:focus {

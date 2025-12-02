@@ -1,6 +1,6 @@
 """Property-based tests for project filtering functionality.
 
-Feature: agent-ux-enhancements, Property 18: Search filters by project
+Feature: rest-api-improvements, Property 18: Project filter returns only matching tasks
 """
 
 import tempfile
@@ -57,14 +57,14 @@ project_name_strategy = st.text(
 
 @given(project_name=project_name_strategy)
 @settings(max_examples=100)
-def test_search_filters_by_project_name(project_name: str) -> None:
+def test_search_filters_by_project_id(project_name: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 18: Search filters by project
+    Feature: rest-api-improvements, Property 18: Project filter returns only matching tasks
 
     Test that for any set of tasks in different projects, filtering by a
-    specific project returns only tasks in that project.
+    specific project ID returns only tasks in that project.
 
-    Validates: Requirements 4.5
+    Validates: Requirements 4.6
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -120,15 +120,15 @@ def test_search_filters_by_project_name(project_name: str) -> None:
         other_task = create_task(other_task_list.id, "Task in other project")
         store.create_task(other_task)
 
-        # Search with project filter
-        criteria = SearchCriteria(project_name=project_name)
+        # Search with project_id filter
+        criteria = SearchCriteria(project_id=target_project.id)
         results = orchestrator.search_tasks(criteria)
 
         # Verify that all results belong to the target project
         result_ids = [task.id for task in results]
         assert (
             target_task.id in result_ids
-        ), f"Task in project '{project_name}' should be in results"
+        ), f"Task in project with ID '{target_project.id}' should be in results"
         assert other_task.id not in result_ids, f"Task in other project should NOT be in results"
 
         # Verify all results are from task lists in the target project
@@ -136,19 +136,19 @@ def test_search_filters_by_project_name(project_name: str) -> None:
         for task in results:
             assert (
                 task.task_list_id in target_task_list_ids
-            ), f"All results should be from task lists in project '{project_name}'"
+            ), f"All results should be from task lists in project with ID '{target_project.id}'"
 
 
 @given(project_name=project_name_strategy)
 @settings(max_examples=100)
-def test_search_with_nonexistent_project_returns_empty(project_name: str) -> None:
+def test_search_with_nonexistent_project_id_returns_empty(project_name: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 18: Search filters by project
+    Feature: rest-api-improvements, Property 18: Project filter returns only matching tasks
 
-    Test that filtering by a project name that doesn't exist returns
+    Test that filtering by a project ID that doesn't exist returns
     an empty list.
 
-    Validates: Requirements 4.5
+    Validates: Requirements 4.6
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -156,11 +156,10 @@ def test_search_with_nonexistent_project_returns_empty(project_name: str) -> Non
         store.initialize()
         orchestrator = SearchOrchestrator(store)
 
-        # Create a project with a different name
-        existing_project_name = f"Existing-{uuid4()}"
+        # Create a project
         existing_project = Project(
             id=uuid4(),
-            name=existing_project_name,
+            name=project_name,
             is_default=False,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
@@ -180,27 +179,26 @@ def test_search_with_nonexistent_project_returns_empty(project_name: str) -> Non
         task = create_task(task_list.id, "Task in existing project")
         store.create_task(task)
 
-        # Search with a non-existent project name
-        # Make sure it's different from the existing project name
-        if project_name != existing_project_name:
-            criteria = SearchCriteria(project_name=project_name)
-            results = orchestrator.search_tasks(criteria)
+        # Search with a non-existent project ID
+        non_existent_project_id = uuid4()
+        criteria = SearchCriteria(project_id=non_existent_project_id)
+        results = orchestrator.search_tasks(criteria)
 
-            # Verify that no results are returned
-            assert (
-                len(results) == 0
-            ), f"Should return no results when project '{project_name}' doesn't exist"
+        # Verify that no results are returned
+        assert (
+            len(results) == 0
+        ), f"Should return no results when project ID '{non_existent_project_id}' doesn't exist"
 
 
 @given(project_name=project_name_strategy)
 @settings(max_examples=100)
-def test_project_filter_with_multiple_task_lists(project_name: str) -> None:
+def test_project_id_filter_with_multiple_task_lists(project_name: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 18: Search filters by project
+    Feature: rest-api-improvements, Property 18: Project filter returns only matching tasks
 
-    Test that project filtering returns tasks from all task lists in that project.
+    Test that project ID filtering returns tasks from all task lists in that project.
 
-    Validates: Requirements 4.5
+    Validates: Requirements 4.6
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -244,26 +242,28 @@ def test_project_filter_with_multiple_task_lists(project_name: str) -> None:
         task_2 = create_task(task_list_2.id, "Task in list 2")
         store.create_task(task_2)
 
-        # Search with project filter
-        criteria = SearchCriteria(project_name=project_name)
+        # Search with project_id filter
+        criteria = SearchCriteria(project_id=target_project.id)
         results = orchestrator.search_tasks(criteria)
 
         # Verify that tasks from both task lists are in the results
         result_ids = [task.id for task in results]
         assert task_1.id in result_ids, f"Task from task list 1 should be in results"
         assert task_2.id in result_ids, f"Task from task list 2 should be in results"
-        assert len(results) == 2, f"Should return exactly 2 tasks from project '{project_name}'"
+        assert (
+            len(results) == 2
+        ), f"Should return exactly 2 tasks from project ID '{target_project.id}'"
 
 
 @given(project_name=project_name_strategy)
 @settings(max_examples=100)
-def test_project_filter_with_text_query(project_name: str) -> None:
+def test_project_id_filter_with_text_query(project_name: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 18: Search filters by project
+    Feature: rest-api-improvements, Property 18: Project filter returns only matching tasks
 
-    Test that project filtering works correctly when combined with text query.
+    Test that project ID filtering works correctly when combined with text query.
 
-    Validates: Requirements 4.5
+    Validates: Requirements 4.6
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -323,15 +323,15 @@ def test_project_filter_with_text_query(project_name: str) -> None:
         non_matching_task = create_task(target_task_list.id, f"Task in {project_name}")
         store.create_task(non_matching_task)
 
-        # Search with both text query and project filter
-        criteria = SearchCriteria(query=search_term, project_name=project_name)
+        # Search with both text query and project_id filter
+        criteria = SearchCriteria(query=search_term, project_id=target_project.id)
         results = orchestrator.search_tasks(criteria)
 
         # Verify that only the task matching both criteria is in the results
         result_ids = [task.id for task in results]
         assert (
             target_task.id in result_ids
-        ), f"Task in project '{project_name}' with matching text should be in results"
+        ), f"Task in project ID '{target_project.id}' with matching text should be in results"
         assert other_task.id not in result_ids, f"Task in other project should NOT be in results"
         assert (
             non_matching_task.id not in result_ids
@@ -346,13 +346,13 @@ def test_project_filter_with_text_query(project_name: str) -> None:
 
 @given(project_name=project_name_strategy)
 @settings(max_examples=100)
-def test_project_filter_with_status_filter(project_name: str) -> None:
+def test_project_id_filter_with_status_filter(project_name: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 18: Search filters by project
+    Feature: rest-api-improvements, Property 18: Project filter returns only matching tasks
 
-    Test that project filtering works correctly when combined with status filter.
+    Test that project ID filtering works correctly when combined with status filter.
 
-    Validates: Requirements 4.5
+    Validates: Requirements 4.6
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -417,15 +417,15 @@ def test_project_filter_with_status_filter(project_name: str) -> None:
         )
         store.create_task(task_in_progress)
 
-        # Search with both project and status filters
-        criteria = SearchCriteria(project_name=project_name, status=[Status.NOT_STARTED])
+        # Search with both project_id and status filters
+        criteria = SearchCriteria(project_id=target_project.id, status=[Status.NOT_STARTED])
         results = orchestrator.search_tasks(criteria)
 
         # Verify that only the task matching both criteria is in the results
         result_ids = [task.id for task in results]
         assert (
             task_not_started.id in result_ids
-        ), f"Task with status NOT_STARTED in project '{project_name}' should be in results"
+        ), f"Task with status NOT_STARTED in project ID '{target_project.id}' should be in results"
         assert (
             task_in_progress.id not in result_ids
         ), f"Task with status IN_PROGRESS should NOT be in results"

@@ -17,7 +17,9 @@ import { TasksView } from '../components/TasksView';
 import { TaskListView } from '../components/TaskListView';
 import { ProjectView } from '../components/ProjectView';
 import { TaskDetailModal } from '../components/TaskDetailModal';
-import { applyTheme, getTheme, loadSavedTheme, saveTheme } from '../styles/themes';
+import { applyTheme, getTheme, loadSavedTheme, saveTheme, fonts, applyFont, loadSavedFont } from '../styles/themes';
+import { useToast } from '../context/ToastContext';
+import { Spinner } from '../components/ui/Spinner';
 import styles from "./Dashboard.module.css";
 
 export const Dashboard: React.FC = () => {
@@ -30,7 +32,7 @@ export const Dashboard: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedTaskList, setSelectedTaskList] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const [showTaskListModal, setShowTaskListModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -44,10 +46,17 @@ export const Dashboard: React.FC = () => {
   >({});
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     const selectedTheme = getTheme(theme);
     applyTheme(selectedTheme);
+    
+    // Load saved font
+    const savedFont = loadSavedFont();
+    const fontValue = fonts[savedFont as keyof typeof fonts]?.value || fonts.inter.value;
+    applyFont(fontValue);
   }, [theme]);
 
   const handleThemeChange = (newTheme: string) => {
@@ -92,9 +101,10 @@ export const Dashboard: React.FC = () => {
       }
       
       setSelectedTask(updatedTask);
+      toast.success("Task updated successfully");
     } catch (error) {
       console.error("Failed to update task:", error);
-      alert("Failed to update task");
+      toast.error("Failed to update task");
     }
   };
 
@@ -147,6 +157,7 @@ export const Dashboard: React.FC = () => {
 
   const loadTaskLists = async (projectId: string) => {
     try {
+      setTasksLoading(true);
       const data = await api.getTaskLists(projectId);
       setTaskLists(data);
 
@@ -170,15 +181,20 @@ export const Dashboard: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to load task lists:", error);
+    } finally {
+      setTasksLoading(false);
     }
   };
 
   const loadTasks = async (taskListId: string) => {
     try {
+      setTasksLoading(true);
       const data = await api.getTasks(taskListId);
       setTasks(data);
     } catch (error) {
       console.error("Failed to load tasks:", error);
+    } finally {
+      setTasksLoading(false);
     }
   };
 
@@ -208,15 +224,14 @@ export const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className={styles.loading}>
-        <div className={styles.spinner}></div>
-        <p>Loading...</p>
+      <div className={styles.loadingContainer}>
+        <Spinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className={styles.dashboard}>
+    <div className={styles.container}>
       <header className={styles.header}>
         <div className={styles.headerContent}>
           <div className={styles.headerLeft}>
@@ -249,24 +264,27 @@ export const Dashboard: React.FC = () => {
       </header>
 
       {currentView === 'tasks' && (
-        <TasksView
-          projects={projects}
-          taskLists={taskLists}
-          tasks={tasks}
-          projectStats={projectStats}
-          taskListStats={taskListStats}
-          selectedProject={selectedProject}
-          selectedTaskList={selectedTaskList}
-          searchQuery={searchQuery}
-          onSelectProject={setSelectedProject}
-          onSelectTaskList={setSelectedTaskList}
-          onSearchChange={setSearchQuery}
-          onTaskClick={handleTaskClick}
-        />
+        <div className={styles.main}>
+          <TasksView
+            projects={projects}
+            taskLists={taskLists}
+            tasks={tasks}
+            projectStats={projectStats}
+            taskListStats={taskListStats}
+            selectedProject={selectedProject}
+            selectedTaskList={selectedTaskList}
+            searchQuery={searchQuery}
+            onSelectProject={setSelectedProject}
+            onSelectTaskList={setSelectedTaskList}
+            onSearchChange={setSearchQuery}
+            onTaskClick={handleTaskClick}
+            loading={tasksLoading}
+          />
+        </div>
       )}
 
       {currentView === 'taskLists' && (
-        <div className={styles.content}>
+        <div className={styles.main}>
           <TaskListView 
             projects={allProjects}
             taskLists={allTaskLists}
@@ -278,7 +296,7 @@ export const Dashboard: React.FC = () => {
       )}
 
       {currentView === 'projects' && (
-        <div className={styles.content}>
+        <div className={styles.main}>
           <ProjectView 
             projects={projects}
             taskLists={allTaskLists}
@@ -323,6 +341,7 @@ export const Dashboard: React.FC = () => {
               loadTasks(selectedTaskList);
             }
           }}
+          availableTasks={allTasks}
         />
       )}
 

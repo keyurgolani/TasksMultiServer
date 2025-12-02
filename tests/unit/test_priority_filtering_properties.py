@@ -1,6 +1,6 @@
 """Property-based tests for priority filtering functionality.
 
-Feature: agent-ux-enhancements, Property 16: Search filters by priority
+Feature: rest-api-improvements, Property 16: Priority filter returns only matching tasks
 """
 
 import tempfile
@@ -51,12 +51,12 @@ priority_strategy = st.sampled_from(list(Priority))
 @settings(max_examples=100)
 def test_search_filters_by_single_priority(filter_priority: Priority) -> None:
     """
-    Feature: agent-ux-enhancements, Property 16: Search filters by priority
+    Feature: rest-api-improvements, Property 16: Priority filter returns only matching tasks
 
     Test that for any set of tasks with different priorities, filtering by a
     specific priority returns only tasks with that priority.
 
-    Validates: Requirements 4.3
+    Validates: Requirements 4.4
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -114,12 +114,12 @@ def test_search_filters_by_single_priority(filter_priority: Priority) -> None:
 @settings(max_examples=100)
 def test_search_filters_by_multiple_priorities(filter_priorities: list[Priority]) -> None:
     """
-    Feature: agent-ux-enhancements, Property 16: Search filters by priority
+    Feature: rest-api-improvements, Property 16: Priority filter returns only matching tasks
 
     Test that filtering by multiple priorities returns only tasks with one of
     those priorities.
 
-    Validates: Requirements 4.3
+    Validates: Requirements 4.4
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -183,12 +183,12 @@ def test_search_filters_by_multiple_priorities(filter_priorities: list[Priority]
 @settings(max_examples=100)
 def test_search_with_no_matching_priority_returns_empty(filter_priority: Priority) -> None:
     """
-    Feature: agent-ux-enhancements, Property 16: Search filters by priority
+    Feature: rest-api-improvements, Property 16: Priority filter returns only matching tasks
 
     Test that filtering by a priority when no tasks have that priority returns
     an empty list.
 
-    Validates: Requirements 4.3
+    Validates: Requirements 4.4
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -235,11 +235,11 @@ def test_search_with_no_matching_priority_returns_empty(filter_priority: Priorit
 @settings(max_examples=100)
 def test_priority_filter_with_text_query(filter_priority: Priority) -> None:
     """
-    Feature: agent-ux-enhancements, Property 16: Search filters by priority
+    Feature: rest-api-improvements, Property 16: Priority filter returns only matching tasks
 
     Test that priority filtering works correctly when combined with text query.
 
-    Validates: Requirements 4.3
+    Validates: Requirements 4.4
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -309,11 +309,11 @@ def test_priority_filter_with_status_filter(
     filter_priority: Priority, filter_status: Status
 ) -> None:
     """
-    Feature: agent-ux-enhancements, Property 16: Search filters by priority
+    Feature: rest-api-improvements, Property 16: Priority filter returns only matching tasks
 
     Test that priority filtering works correctly when combined with status filter.
 
-    Validates: Requirements 4.3
+    Validates: Requirements 4.4
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:

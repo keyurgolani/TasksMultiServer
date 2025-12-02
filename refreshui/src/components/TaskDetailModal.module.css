@@ -26,10 +26,11 @@
   width: 100%;
   max-width: 1200px;
   height: calc(100vh - 40px);
-  background: var(--bg-surface);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
   border-radius: 16px 16px 0 0;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--border);
+  box-shadow: var(--glass-shadow), 0 -8px 32px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
   border-bottom: none;
   display: flex;
   flex-direction: column;
@@ -137,7 +138,7 @@
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--glow-primary);
 }
 
 .closeButton {
@@ -157,6 +158,46 @@
 .closeButton:hover {
   background: rgba(239, 68, 68, 0.2);
   transform: scale(1.05);
+  box-shadow: var(--glow-danger);
+}
+
+/* Status Indicator Dots */
+:global {
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.9); }
+  }
+}
+
+.statusIndicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+.statusIndicator[data-status="COMPLETED"] {
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+  animation: none; /* No pulse for completed */
+}
+
+.statusIndicator[data-status="IN_PROGRESS"] {
+  background: var(--warning);
+  box-shadow: 0 0 8px var(--warning);
+}
+
+.statusIndicator[data-status="BLOCKED"] {
+  background: var(--error);
+  box-shadow: 0 0 8px var(--error);
+}
+
+.statusIndicator[data-status="NOT_STARTED"] {
+  background: var(--text-tertiary);
+  box-shadow: 0 0 4px var(--text-tertiary);
+  animation: none; /* No pulse for not started */
 }
 
 /* Hero Section */
@@ -244,11 +285,19 @@
   gap: 4px;
   padding: 6px 12px;
   border-radius: 8px;
-  background: rgba(var(--primary-rgb, 107, 115, 255), 0.15);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
   color: var(--primary);
   font-size: 12px;
   font-weight: 500;
-  border: 1px solid rgba(var(--primary-rgb, 107, 115, 255), 0.2);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transition: all 0.2s;
+}
+
+.tag:hover {
+  box-shadow: var(--glow-primary), var(--glass-shadow);
+  transform: translateY(-1px);
 }
 
 .tagRemove {

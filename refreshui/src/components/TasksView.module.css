@@ -1,3 +1,17 @@
+/* Glassmorphism & Glow Effects */
+
+@keyframes pulse-glow-primary {
+  0% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(var(--primary-rgb), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0); }
+}
+
+@keyframes flash-ready {
+  0% { opacity: 1; text-shadow: 0 0 10px var(--warning); }
+  50% { opacity: 0.7; text-shadow: none; }
+  100% { opacity: 1; text-shadow: 0 0 10px var(--warning); }
+}
+
 .content {
   display: flex;
   flex-direction: column;
@@ -5,39 +19,38 @@
   gap: 16px;
   overflow: hidden;
   padding: 16px;
+  background: radial-gradient(circle at top right, rgba(var(--primary-rgb), 0.05), transparent 40%),
+              radial-gradient(circle at bottom left, rgba(var(--secondary-rgb), 0.05), transparent 40%);
 }
 
-/* Top Section: Projects and Task Lists */
-/* Top Section: Projects and Task Lists */
-/* Top Section: Projects and Task Lists */
 /* Top Section: Projects and Task Lists */
 .topSection {
   display: flex;
   flex-direction: column;
-  gap: 8px; /* Reduced gap from 16px */
+  gap: 8px;
   flex-shrink: 0;
-  padding-bottom: 8px; /* Reduced padding from 12px */
-  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--glass-border);
 }
 
 /* New 2-Column Section Layout */
 .sectionContainer {
   display: flex;
   flex-direction: row;
-  gap: 12px; /* Reduced gap from 16px */
+  gap: 12px;
   align-items: stretch;
-  min-height: 70px; /* Reduced height for flatter cards */
+  min-height: 70px;
 }
 
 /* Column 1: Header & Filter */
 .headerColumn {
   display: flex;
   flex-direction: column;
-  gap: 4px; /* Reduced gap from 8px */
+  gap: 4px;
   width: 130px;
   min-width: 130px;
-  justify-content: center; /* Center vertically */
-  padding-top: 0; /* Remove top padding */
+  justify-content: center;
+  padding-top: 0;
 }
 
 .sectionHeader {
@@ -50,12 +63,13 @@
 }
 
 .sectionHeader h3 {
-  font-size: 13px; /* Smaller title */
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  text-shadow: 0 0 10px rgba(var(--primary-rgb), 0.3); /* Subtle text glow */
 }
 
 .sidebarFilter {
@@ -63,8 +77,18 @@
 }
 
 .miniInput {
-  height: 26px; /* Smaller input */
+  height: 26px;
   font-size: 11px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  color: var(--text-primary);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.miniInput:focus {
+  border-color: var(--primary);
+  box-shadow: var(--glow-primary);
 }
 
 /* Column 2: Scrollable Cards */
@@ -86,33 +110,36 @@
 
 /* Horizontal Project Card */
 .projectCard {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 8px; /* Slightly smaller radius */
-  padding: 4px 12px; /* Minimal vertical padding */
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 4px 12px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px; /* Minimal gap */
-  min-width: 140px; /* Further reduced default width */
-  width: auto; /* Allow width to grow */
-  height: 60px; /* Minimal fixed height */
+  gap: 2px;
+  min-width: 140px;
+  width: auto;
+  height: 60px;
   position: relative;
-  overflow: visible; /* Allow content to determine width */
+  overflow: visible;
+  box-shadow: var(--glass-shadow);
 }
 
 .projectCard:hover {
   border-color: var(--primary);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px var(--shadow);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: var(--glow-primary), var(--glass-shadow);
+  background: rgba(var(--primary-rgb), 0.1);
 }
 
 .projectCard.active {
-  background: var(--bg-surface-active);
+  background: rgba(var(--primary-rgb), 0.15);
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-light);
+  box-shadow: var(--glow-primary);
 }
 
 /* Row 1: Project Name */
@@ -121,7 +148,6 @@
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
-  /* Remove truncation to allow width growth */
   line-height: 1.2;
 }
 
@@ -154,16 +180,17 @@
 .progressBar {
   flex: 1;
   height: 4px;
-  background: var(--bg-app);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+  background: linear-gradient(90deg, var(--primary), var(--primary-light));
   border-radius: 2px;
   transition: width 0.5s ease-out;
+  box-shadow: 0 0 8px var(--primary);
 }
 
 .progressText {
@@ -176,31 +203,34 @@
 
 /* Task List Card (Horizontal & Flat) */
 .taskListCard {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
-  padding: 8px 12px; /* Very compact */
+  padding: 8px 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
-  gap: 4px; /* Tight gap */
+  gap: 4px;
   min-width: 180px;
-  width: auto; /* Allow width to grow */
-  height: 60px; /* Fixed height */
+  width: auto;
+  height: 60px;
   justify-content: center;
+  box-shadow: var(--glass-shadow);
 }
 
 .taskListCard:hover {
   border-color: var(--primary);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px var(--shadow);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: var(--glow-primary), var(--glass-shadow);
+  background: rgba(var(--primary-rgb), 0.1);
 }
 
 .taskListCard.active {
-  background: var(--bg-surface-active);
+  background: rgba(var(--primary-rgb), 0.15);
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-light);
+  box-shadow: var(--glow-primary);
 }
 
 .itemName {
@@ -222,6 +252,7 @@
   color: var(--warning);
   font-weight: 600;
   white-space: nowrap;
+  animation: flash-ready 2s infinite; /* Flashing indicator */
 }
 
 .taskListProgress {
@@ -235,7 +266,7 @@
 .taskListProgressBar {
   flex: 1;
   height: 3px;
-  background: var(--bg-app);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
   overflow: hidden;
   min-width: 30px;
@@ -270,9 +301,10 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;
+  overflow-y: auto; /* Ready tasks scroll independently */
   padding-right: 12px;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--glass-border);
+  min-height: 0; /* Important for flex child to scroll */
 }
 
 .sidebarSection {
@@ -289,19 +321,21 @@
 }
 
 .readyTaskItem {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-left: 3px solid var(--warning);
   border-radius: 8px;
   padding: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s;
+  box-shadow: var(--glass-shadow);
 }
 
 .readyTaskItem:hover {
   transform: translateX(4px);
-  box-shadow: 0 2px 8px var(--shadow);
-  border-color: var(--primary);
+  box-shadow: var(--glow-warning), var(--glass-shadow);
+  border-color: var(--warning);
 }
 
 .readyTaskHeader {
@@ -334,6 +368,7 @@
   padding: 2px 6px;
   border-radius: 4px;
   text-transform: uppercase;
+  box-shadow: 0 0 8px rgba(0,0,0,0.2);
 }
 
 .readyTaskDesc {
@@ -348,13 +383,13 @@
 }
 
 /* Main Content */
-/* Main Content */
 .main {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow: hidden;
+  overflow: hidden; /* Prevent main from scrolling */
+  min-height: 0; /* Important for flex child to scroll */
 }
 
 .mainHeader {
@@ -372,7 +407,7 @@
 }
 
 .searchContainer {
-  width: 240px; /* Fixed width for search */
+  width: 240px;
 }
 
 .sectionTitle {
@@ -383,6 +418,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  text-shadow: 0 0 15px rgba(var(--primary-rgb), 0.4); /* Stronger glow for main title */
 }
 
 .sectionTitle::before {
@@ -391,23 +427,34 @@
   height: 20px;
   background: var(--primary);
   border-radius: 2px;
+  box-shadow: 0 0 10px var(--primary); /* Glowing accent */
 }
 
 .taskGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 16px;
-  overflow-y: auto; /* Added scroll to grid only */
-  padding-right: 4px; /* Space for scrollbar */
+  overflow-y: auto; /* Tasks grid scrolls independently */
+  padding-right: 4px;
   flex: 1; /* Take remaining space */
-  align-content: start; /* Align grid items to top */
+  align-content: start;
+  min-height: 0; /* Important for flex child to scroll */
 }
 
 .taskCard {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Glassmorphism applied via Card component, but ensuring here too if needed */
+  background: transparent; 
 }
+
+/* Enhancing the Card component wrapper styles if possible, 
+   but assuming .taskCard is inside a Card component which might need its own styles updated.
+   Ideally, we target the Card component class if we can, or just style the content here.
+   If Card component has its own styles, we might need to override them or update Card.tsx.
+   For now, let's assume Card component accepts className or we style the inner div.
+*/
 
 .taskTitle {
   font-size: 15px;
@@ -445,10 +492,16 @@
 .tag {
   font-size: 11px;
   color: var(--text-secondary);
-  background: var(--bg-app);
+  background: rgba(255, 255, 255, 0.05);
   padding: 2px 8px;
   border-radius: 4px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tag:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--text-secondary);
 }
 
 .emptyState {
@@ -479,7 +532,7 @@
 .metaProgressBar {
   width: 40px;
   height: 4px;
-  background: var(--bg-app);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -487,9 +540,11 @@
 .metaProgressFill {
   height: 100%;
   background: var(--success);
+  box-shadow: 0 0 8px var(--success);
 }
 
 .metaProgressText {
   font-size: 10px;
   color: var(--text-tertiary);
 }
+

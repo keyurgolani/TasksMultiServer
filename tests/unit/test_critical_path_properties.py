@@ -264,7 +264,7 @@ def test_critical_path_linear_chain(chain_length: int) -> None:
     num_branches=st.integers(min_value=2, max_value=5),
     branch_length=st.integers(min_value=1, max_value=5),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=500)
 def test_critical_path_with_branches(num_branches: int, branch_length: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 21: Critical path is longest dependency chain

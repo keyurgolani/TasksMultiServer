@@ -330,3 +330,186 @@ def test_validation_error_empty_task_title(test_client):
     assert "error" in data
     assert data["error"]["code"] == "VALIDATION_ERROR"
     assert "title" in data["error"]["message"].lower()
+
+
+def test_validation_error_includes_emoji(test_client):
+    """Test that validation error messages include emoji visual indicators.
+
+    Requirements: 7.6
+    """
+    # Trigger validation error
+    response = test_client.post("/projects", json={})
+
+    assert response.status_code == 400
+    data = response.json()
+    message = data["error"]["message"]
+
+    # Verify emoji indicators are present
+    has_emoji = any(indicator in message for indicator in ["❌", "💡", "📝", "🔧"])
+    assert has_emoji, f"Error message should include emoji: {message}"
+
+
+def test_validation_error_includes_guidance(test_client):
+    """Test that validation error messages include guidance text.
+
+    Requirements: 7.7
+    """
+    # Trigger validation error
+    response = test_client.post("/projects", json={})
+
+    assert response.status_code == 400
+    data = response.json()
+    message = data["error"]["message"]
+
+    # Verify guidance is present
+    has_guidance = any(
+        phrase in message.lower()
+        for phrase in [
+            "common fixes",
+            "try",
+            "check",
+            "verify",
+            "ensure",
+        ]
+    )
+    assert has_guidance, f"Error message should include guidance: {message}"
+
+
+def test_not_found_error_includes_emoji(test_client):
+    """Test that not found error messages include emoji visual indicators.
+
+    Requirements: 7.6
+    """
+    fake_id = str(uuid4())
+    response = test_client.get(f"/projects/{fake_id}")
+
+    assert response.status_code == 404
+    data = response.json()
+    message = data["error"]["message"]
+
+    # Verify emoji indicators are present
+    has_emoji = any(indicator in message for indicator in ["❌", "💡", "📝", "🔧"])
+    assert has_emoji, f"Error message should include emoji: {message}"
+
+
+def test_not_found_error_includes_guidance(test_client):
+    """Test that not found error messages include guidance text.
+
+    Requirements: 7.7
+    """
+    fake_id = str(uuid4())
+    response = test_client.get(f"/projects/{fake_id}")
+
+    assert response.status_code == 404
+    data = response.json()
+    message = data["error"]["message"]
+
+    # Verify guidance is present
+    has_guidance = any(
+        phrase in message.lower()
+        for phrase in [
+            "common fixes",
+            "try",
+            "check",
+            "verify",
+            "ensure",
+        ]
+    )
+    assert has_guidance, f"Error message should include guidance: {message}"
+
+
+def test_business_logic_error_includes_emoji(test_client):
+    """Test that business logic error messages include emoji visual indicators.
+
+    Requirements: 7.6
+    """
+    # Create a project
+    test_client.post("/projects", json={"name": "Test Project"})
+
+    # Try to create duplicate
+    response = test_client.post("/projects", json={"name": "Test Project"})
+
+    assert response.status_code == 409
+    data = response.json()
+    message = data["error"]["message"]
+
+    # Verify emoji indicators are present
+    has_emoji = any(indicator in message for indicator in ["❌", "💡", "📝", "🔧"])
+    assert has_emoji, f"Error message should include emoji: {message}"
+
+
+def test_business_logic_error_includes_guidance(test_client):
+    """Test that business logic error messages include guidance text.
+
+    Requirements: 7.7
+    """
+    # Create a project
+    test_client.post("/projects", json={"name": "Test Project"})
+
+    # Try to create duplicate
+    response = test_client.post("/projects", json={"name": "Test Project"})
+
+    assert response.status_code == 409
+    data = response.json()
+    message = data["error"]["message"]
+
+    # Verify guidance is present
+    has_guidance = any(
+        phrase in message.lower()
+        for phrase in [
+            "common fixes",
+            "try",
+            "check",
+            "verify",
+            "ensure",
+            "use",
+            "choose",
+        ]
+    )
+    assert has_guidance, f"Error message should include guidance: {message}"
+
+
+def test_error_code_validation_error_mapping(test_client):
+    """Test that validation errors map to VALIDATION_ERROR code and HTTP 400.
+
+    Requirements: 7.2
+    """
+    # Trigger validation error
+    response = test_client.post("/projects", json={})
+
+    assert response.status_code == 400, "Validation errors must return HTTP 400"
+    data = response.json()
+    assert (
+        data["error"]["code"] == "VALIDATION_ERROR"
+    ), "Validation errors must have code VALIDATION_ERROR"
+
+
+def test_error_code_not_found_mapping(test_client):
+    """Test that not found errors map to NOT_FOUND code and HTTP 404.
+
+    Requirements: 7.3
+    """
+    fake_id = str(uuid4())
+    response = test_client.get(f"/projects/{fake_id}")
+
+    assert response.status_code == 404, "Not found errors must return HTTP 404"
+    data = response.json()
+    assert data["error"]["code"] == "NOT_FOUND", "Not found errors must have code NOT_FOUND"
+
+
+def test_error_code_business_logic_mapping(test_client):
+    """Test that business logic errors map to BUSINESS_LOGIC_ERROR code and HTTP 409.
+
+    Requirements: 7.4
+    """
+    # Create a project
+    test_client.post("/projects", json={"name": "Test Project"})
+
+    # Try to create duplicate
+    response = test_client.post("/projects", json={"name": "Test Project"})
+
+    assert response.status_code == 409, "Business logic errors must return HTTP 409"
+    data = response.json()
+    assert (
+        data["error"]["code"] == "BUSINESS_LOGIC_ERROR"
+    ), "Business logic errors must have code BUSINESS_LOGIC_ERROR"

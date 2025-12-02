@@ -57,6 +57,8 @@ def test_valid_semantic_versions_are_accepted(major: int, minor: int, patch: int
             and not s.endswith("-")  # Cannot end with hyphen
             and ".." not in s  # No consecutive dots
             and "--" not in s  # No consecutive hyphens
+            and ".-" not in s  # No dot followed by hyphen
+            and "-." not in s  # No hyphen followed by dot
         )
     ),
 )

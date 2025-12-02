@@ -20,7 +20,7 @@ class SearchOrchestrator:
     - Status filtering (exact match)
     - Priority filtering (exact match)
     - Tag filtering (exact match)
-    - Project filtering (by project name)
+    - Project filtering (by project ID or project name)
     - Pagination (limit and offset)
     - Sorting (relevance, created_at, updated_at, priority)
 
@@ -151,7 +151,8 @@ class SearchOrchestrator:
         - Status (if specified)
         - Priority (if specified)
         - Tags (if specified)
-        - Project name (if specified)
+        - Project ID (if specified)
+        - Project name (if specified, deprecated)
         - Text query (if specified)
 
         Args:
@@ -161,7 +162,7 @@ class SearchOrchestrator:
         Returns:
             Filtered list of tasks
 
-        Requirements: 4.1, 4.2, 4.3, 4.4, 4.5
+        Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6
         """
         filtered = tasks
 
@@ -182,8 +183,11 @@ class SearchOrchestrator:
                 if task.tags and any(tag in task.tags for tag in criteria.tags)
             ]
 
-        # Filter by project name
-        if criteria.project_name:
+        # Filter by project ID (takes precedence over project name)
+        if criteria.project_id:
+            filtered = self._filter_by_project_id(filtered, criteria.project_id)
+        elif criteria.project_name:
+            # Fallback to project name for backward compatibility
             filtered = self._filter_by_project(filtered, criteria.project_name)
 
         # Filter by text query
@@ -191,6 +195,25 @@ class SearchOrchestrator:
             filtered = self._filter_by_text(filtered, criteria.query)
 
         return filtered
+
+    def _filter_by_project_id(self, tasks: list[Task], project_id) -> list[Task]:
+        """Filter tasks by project ID.
+
+        Args:
+            tasks: List of tasks to filter
+            project_id: UUID of the project to filter by
+
+        Returns:
+            Tasks belonging to the specified project
+
+        Requirements: 4.6
+        """
+        # Get all task lists for this project
+        task_lists = self.data_store.list_task_lists(project_id)
+        task_list_ids = {tl.id for tl in task_lists}
+
+        # Filter tasks by task list membership
+        return [task for task in tasks if task.task_list_id in task_list_ids]
 
     def _filter_by_project(self, tasks: list[Task], project_name: str) -> list[Task]:
         """Filter tasks by project name.

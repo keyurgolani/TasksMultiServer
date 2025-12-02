@@ -37,7 +37,8 @@ def test_error_message_contains_visual_indicators(test_client):
 
     assert response.status_code == 400
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Check for visual indicators (emoji)
     assert "❌" in error_message  # Error indicator
@@ -55,7 +56,8 @@ def test_error_message_includes_field_name(test_client):
 
     assert response.status_code == 400
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Check that field name is mentioned
     assert "name" in error_message.lower()
@@ -71,7 +73,8 @@ def test_error_message_provides_guidance(test_client):
 
     assert response.status_code == 400
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Check for guidance indicator and actionable text
     assert "💡" in error_message
@@ -89,7 +92,8 @@ def test_error_message_includes_example(test_client):
 
     assert response.status_code == 400
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Check for example indicator
     assert "📝" in error_message or "Example" in error_message
@@ -123,13 +127,14 @@ def test_error_message_for_invalid_enum_lists_valid_values(test_client):
 
     assert response.status_code == 400
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else str(error_obj)
 
     # Should mention valid values or contain them in details
     assert (
         "NOT_STARTED" in error_message
         or "IN_PROGRESS" in error_message
-        or "valid_values" in str(data["error"]["details"])
+        or "valid_values" in str(error_obj.get("details", {}))
     )
 
 
@@ -146,7 +151,8 @@ def test_multiple_errors_formatted_separately(test_client):
 
     assert response.status_code == 400
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Should have clear structure with visual indicators
     assert "❌" in error_message
@@ -163,7 +169,8 @@ def test_not_found_error_has_visual_indicators(test_client):
 
     assert response.status_code == 404
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Should have visual indicators
     assert "❌" in error_message
@@ -185,7 +192,8 @@ def test_business_logic_error_has_visual_indicators(test_client):
 
     assert response.status_code == 409
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Should have visual indicators
     assert "❌" in error_message
@@ -207,7 +215,8 @@ def test_storage_error_has_visual_indicators(test_client):
     # Should get a proper error response with visual indicators
     assert response.status_code in [404, 500]
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Should have visual indicators
     assert "❌" in error_message
@@ -223,7 +232,8 @@ def test_error_message_has_common_fixes_section(test_client):
 
     assert response.status_code == 400
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Check for fixes indicator
     assert "🔧" in error_message
@@ -240,7 +250,8 @@ def test_invalid_uuid_error_formatting(test_client):
 
     assert response.status_code == 400
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Should have visual indicators
     assert "❌" in error_message
@@ -258,7 +269,8 @@ def test_empty_field_error_formatting(test_client):
 
     assert response.status_code == 400
     data = response.json()
-    error_message = data["error"]["message"]
+    error_obj = data["error"]
+    error_message = error_obj["message"] if isinstance(error_obj, dict) else error_obj
 
     # Should have visual indicators
     assert "❌" in error_message

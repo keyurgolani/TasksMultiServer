@@ -15,6 +15,7 @@ import pytest
 from task_manager.data.access.filesystem_store import FilesystemStoreError
 from task_manager.data.access.postgresql_store import StorageError
 from task_manager.interfaces.mcp.server import TaskManagerMCPServer
+from task_manager.orchestration.task_orchestrator import BusinessLogicError
 
 
 class TestMCPErrorHandling:
@@ -194,9 +195,11 @@ class TestMCPErrorHandling:
     @pytest.mark.asyncio
     async def test_update_task_status_exit_criteria_error(self, server):
         """Test exit criteria validation error in update_task_status."""
-        # Mock orchestrator to raise ValueError for incomplete exit criteria
+        # Mock orchestrator to raise BusinessLogicError for incomplete exit criteria
         server.task_orchestrator.update_status = Mock(
-            side_effect=ValueError("Cannot mark task as COMPLETED: 2 exit criteria are incomplete")
+            side_effect=BusinessLogicError(
+                "Cannot mark task as COMPLETED: 2 exit criteria are incomplete"
+            )
         )
 
         # Call handler
@@ -206,7 +209,7 @@ class TestMCPErrorHandling:
 
         # Verify error response
         assert len(result) == 1
-        assert "Validation error in update_task_status" in result[0].text
+        assert "Unexpected error in update_task_status" in result[0].text
         assert "exit criteria are incomplete" in result[0].text
 
     @pytest.mark.asyncio

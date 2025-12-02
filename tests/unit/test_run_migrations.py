@@ -41,7 +41,7 @@ class TestRunMigrationsMain:
         mock_initialize.assert_called_once_with("postgresql://test:test@localhost/test")
 
     @patch("task_manager.data.access.run_migrations.drop_all_tables")
-    @patch("sqlalchemy.create_engine")
+    @patch("task_manager.data.access.run_migrations.create_engine")
     @patch("builtins.input", return_value="yes")
     @patch.dict(os.environ, {"POSTGRES_URL": "postgresql://test:test@localhost/test"})
     @patch("sys.argv", ["run_migrations.py", "drop"])
@@ -67,7 +67,7 @@ class TestRunMigrationsMain:
         mock_drop.assert_not_called()
 
     @patch("task_manager.data.access.run_migrations.drop_all_tables")
-    @patch("sqlalchemy.create_engine")
+    @patch("task_manager.data.access.run_migrations.create_engine")
     @patch("builtins.input", return_value="YES")
     @patch.dict(os.environ, {"POSTGRES_URL": "postgresql://test:test@localhost/test"})
     @patch("sys.argv", ["run_migrations.py", "drop"])
@@ -81,7 +81,7 @@ class TestRunMigrationsMain:
         mock_drop.assert_called_once_with(mock_engine)
 
     @patch("task_manager.data.access.run_migrations.check_schema_exists")
-    @patch("sqlalchemy.create_engine")
+    @patch("task_manager.data.access.run_migrations.create_engine")
     @patch.dict(os.environ, {"POSTGRES_URL": "postgresql://test:test@localhost/test"})
     @patch("sys.argv", ["run_migrations.py", "check"])
     def test_main_check_command_exists(self, mock_create_engine, mock_check):
@@ -96,7 +96,7 @@ class TestRunMigrationsMain:
         mock_check.assert_called_once_with(mock_engine)
 
     @patch("task_manager.data.access.run_migrations.check_schema_exists")
-    @patch("sqlalchemy.create_engine")
+    @patch("task_manager.data.access.run_migrations.create_engine")
     @patch.dict(os.environ, {"POSTGRES_URL": "postgresql://test:test@localhost/test"})
     @patch("sys.argv", ["run_migrations.py", "check"])
     def test_main_check_command_not_exists(self, mock_create_engine, mock_check):

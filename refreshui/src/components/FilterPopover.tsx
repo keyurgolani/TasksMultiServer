@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { Button } from './ui';
 import styles from './FilterPopover.module.css';
@@ -21,13 +21,34 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
   onFilterChange,
   onClear,
 }) => {
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    // Add delay to prevent immediate closure when opening
+    setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const statuses = ['NOT_STARTED', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED'];
   const priorities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'TRIVIAL'];
 
   return (
-    <div className={styles.popover}>
+    <div ref={popoverRef} className={styles.popover}>
       <div className={styles.header}>
         <h3>Filters</h3>
         <button className={styles.closeButton} onClick={onClose}>

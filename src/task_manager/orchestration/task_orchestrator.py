@@ -18,6 +18,14 @@ from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
 from task_manager.orchestration.dependency_orchestrator import DependencyOrchestrator
 
 
+class BusinessLogicError(Exception):
+    """Raised when business logic constraints are violated."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
 class TaskOrchestrator:
     """Manages task lifecycle and enforces business rules.
 
@@ -41,6 +49,38 @@ class TaskOrchestrator:
         """
         self.data_store = data_store
         self.dependency_orchestrator = DependencyOrchestrator(data_store)
+
+    def validate_exit_criteria_for_completion(self, task: Task) -> None:
+        """Validate that all exit criteria are complete before allowing task completion.
+
+        Checks if all exit criteria for the task are marked as COMPLETE. If any
+        exit criteria are incomplete, raises a BusinessLogicError with details
+        about which criteria are incomplete.
+
+        Args:
+            task: The task being marked complete
+
+        Raises:
+            BusinessLogicError: If any exit criteria are incomplete, with details
+                               of the incomplete criteria
+
+        Requirements: 7.1, 7.2, 7.3, 7.4
+        """
+        if not task.exit_criteria:
+            return
+
+        incomplete_criteria = [
+            criterion.criteria
+            for criterion in task.exit_criteria
+            if criterion.status != ExitCriteriaStatus.COMPLETE
+        ]
+
+        if incomplete_criteria:
+            raise BusinessLogicError(
+                f"Cannot mark task as COMPLETED: {len(incomplete_criteria)} "
+                f"exit criteria are incomplete: {', '.join(incomplete_criteria)}. "
+                f"All exit criteria must be marked COMPLETE before the task can be completed."
+            )
 
     def create_task(
         self,
@@ -470,10 +510,10 @@ class TaskOrchestrator:
             The updated task
 
         Raises:
-            ValueError: If the task does not exist or validation fails
-                       (attempting to mark complete with incomplete exit criteria)
+            ValueError: If the task does not exist
+            BusinessLogicError: If attempting to mark complete with incomplete exit criteria
 
-        Requirements: 7.1, 7.2, 7.4
+        Requirements: 7.1, 7.2, 7.4, 7.5
         """
         # Retrieve existing task
         task = self.data_store.get_task(task_id)
@@ -482,17 +522,7 @@ class TaskOrchestrator:
 
         # If marking as complete, validate exit criteria
         if status == Status.COMPLETED:
-            if not task.can_mark_complete():
-                incomplete_criteria = [
-                    ec.criteria
-                    for ec in task.exit_criteria
-                    if ec.status != ExitCriteriaStatus.COMPLETE
-                ]
-                raise ValueError(
-                    f"Cannot mark task as COMPLETED: {len(incomplete_criteria)} "
-                    f"exit criteria are incomplete. All exit criteria must be "
-                    f"marked COMPLETE before the task can be completed."
-                )
+            self.validate_exit_criteria_for_completion(task)
 
         # Update status
         task.status = status

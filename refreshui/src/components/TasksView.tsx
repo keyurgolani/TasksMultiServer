@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Button, Card, Badge, Input } from "../components/ui";
+import { Button, Card, Input, Skeleton } from "../components/ui";
+import { StatusIndicator } from './StatusIndicator';
+import { ReadyTasksCount } from './ReadyTasksCount';
 import { Search, Filter } from "lucide-react";
 import { FilterPopover } from './FilterPopover';
 import type {
@@ -24,6 +26,7 @@ interface TasksViewProps {
   onSelectTaskList: (id: string) => void;
   onSearchChange: (query: string) => void;
   onTaskClick: (task: Task) => void;
+  loading?: boolean;
 }
 
 export const TasksView: React.FC<TasksViewProps> = ({
@@ -39,6 +42,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   onSelectTaskList,
   onSearchChange,
   onTaskClick,
+  loading = false,
 }) => {
   const [projectFilter, setProjectFilter] = useState('');
   const [listFilter, setListFilter] = useState('');
@@ -73,16 +77,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
     (selectedProject ? l.project_id === selectedProject : true)
   );
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "COMPLETED": return "#2ed573";
-      case "IN_PROGRESS": return "#ffa502";
-      case "BLOCKED": return "#ff4757";
-      case "NOT_STARTED": return "#a4b0be";
-      default: return "#a4b0be";
-    }
-  };
-
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "CRITICAL": return "#FF4757";
@@ -93,16 +87,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
     }
   };
 
-  const getStatusBadgeVariant = (status: string): "success" | "warning" | "info" | "error" | undefined => {
-    switch (status) {
-      case "COMPLETED":
-        return "success";
-      case "IN_PROGRESS":
-        return "warning";
-      default:
-        return undefined;
-    }
-  };
+
 
   // Filter tasks based on search, project, list, and filters
   const filteredTasks = tasks.filter((task) => {
@@ -151,6 +136,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
               icon={<Search size={12} />}
               value={projectFilter}
               onChange={(e) => setProjectFilter(e.target.value)}
+              onClear={() => setProjectFilter('')}
             />
           </div>
           <div className={styles.cardsColumn}>
@@ -179,7 +165,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     <>
                       <div className={styles.projectStats}>
                         <span className={styles.statItem}>
-                          <span style={{ color: 'var(--warning)', fontWeight: 700 }}>{stats.ready_tasks}</span> Ready
+                          <ReadyTasksCount count={stats.ready_tasks} variant="default" />
                         </span>
                         <span className={styles.statItem}>
                           <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{stats.task_list_count}</span> {listText}
@@ -215,6 +201,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
               icon={<Search size={12} />}
               value={listFilter}
               onChange={(e) => setListFilter(e.target.value)}
+              onClear={() => setListFilter('')}
             />
           </div>
           <div className={styles.cardsColumn}>
@@ -235,7 +222,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   <span className={styles.itemName}>{taskList.name}</span>
                   {stats && (
                     <div className={styles.taskListMetaRow}>
-                      <span className={styles.readyCount}>{stats.ready_tasks} Ready</span>
+                      <ReadyTasksCount count={stats.ready_tasks} variant="default" />
                       <div className={styles.taskListProgress}>
                         <div className={styles.taskListProgressBar}>
                           <div
@@ -298,6 +285,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 placeholder="Search tasks..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
+                onClear={() => onSearchChange('')}
               />
             </div>
             <div style={{ position: 'relative' }}>
@@ -319,26 +307,57 @@ export const TasksView: React.FC<TasksViewProps> = ({
           </div>
         </div>
         <div className={styles.taskGrid}>
-          {mainTasks.map((task) => (
-            <Card key={task.id} interactive onClick={() => onTaskClick(task)}>
-              <div className={styles.taskCard}>
-                <h3 className={styles.taskTitle}>{task.title}</h3>
+          {loading ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} style={{ height: '200px' }}>
+                <div style={{ padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <Skeleton width="60%" height="24px" />
+                    <Skeleton variant="circle" width="12px" height="12px" />
+                  </div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <Skeleton width="100%" height="16px" />
+                    <Skeleton width="80%" height="16px" style={{ marginTop: '8px' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Skeleton width="40px" height="20px" />
+                    <Skeleton width="40px" height="20px" />
+                  </div>
+                </div>
+              </Card>
+            ))
+          ) : (
+            mainTasks.map((task) => {
+            const getStatusBackground = (status: string) => {
+              switch (status) {
+                case 'IN_PROGRESS':
+                  return 'radial-gradient(circle at top right, color-mix(in srgb, var(--warning) 15%, transparent) 0%, transparent 60%)';
+                case 'COMPLETED':
+                  return 'radial-gradient(circle at top right, color-mix(in srgb, var(--success) 15%, transparent) 0%, transparent 60%)';
+                case 'BLOCKED':
+                  return 'radial-gradient(circle at top right, color-mix(in srgb, var(--error) 15%, transparent) 0%, transparent 60%)';
+                default:
+                  return undefined;
+              }
+            };
 
-                <div className={styles.taskMetaRow}>
-                  <Badge variant={getStatusBadgeVariant(task.status)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div 
-                        style={{ 
-                          width: '6px', 
-                          height: '6px', 
-                          borderRadius: '50%', 
-                          backgroundColor: getStatusColor(task.status),
-                          flexShrink: 0
-                        }}
-                      />
-                      {task.status.replace("_", " ")}
-                    </div>
-                  </Badge>
+            return (
+              <Card 
+                key={task.id} 
+                interactive 
+                onClick={() => onTaskClick(task)}
+                style={{ 
+                  background: getStatusBackground(task.status),
+                  borderColor: task.status === 'IN_PROGRESS' || task.status === 'BLOCKED' ? 'transparent' : undefined
+                }}
+              >
+                <div className={styles.taskCard}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                    <h3 className={styles.taskTitle}>{task.title}</h3>
+                    <StatusIndicator status={task.status} variant="dot" />
+                  </div>
+
+                  <div className={styles.taskMetaRow}>
                   {task.action_plan && task.action_plan.length > 0 && (
                     <span
                       className={styles.metaCount}
@@ -393,10 +412,12 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 )}
               </div>
             </Card>
-          ))}
+          );
+        })
+        )}
         </div>
 
-        {filteredTasks.length === 0 && (
+        {!loading && filteredTasks.length === 0 && (
           <div className={styles.emptyState}>
             <p>No tasks found</p>
           </div>

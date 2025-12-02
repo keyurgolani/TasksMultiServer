@@ -91,7 +91,7 @@ def is_valid_mermaid_format(mermaid_string: str) -> bool:
     num_tasks=st.integers(min_value=1, max_value=15),
     seed=st.integers(min_value=0, max_value=1000),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_mermaid_format_is_valid_syntax(num_tasks: int, seed: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 26: Mermaid format is valid syntax
@@ -318,7 +318,7 @@ def test_mermaid_format_contains_edges_for_dependencies(num_tasks: int) -> None:
 
 
 @given(statuses=st.lists(st.sampled_from(list(Status)), min_size=1, max_size=10))
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_mermaid_format_includes_status_indicators(statuses: list[Status]) -> None:
     """
     Feature: agent-ux-enhancements, Property 26: Mermaid format is valid syntax

@@ -65,14 +65,34 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  color: var(--text-primary);
   cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.checkboxLabel:hover {
+  background: rgba(107, 115, 255, 0.05);
+}
+
+.radioLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 4px;
+  transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.radioLabel:hover {
+  background: rgba(107, 115, 255, 0.05);
 }
 
 .footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
+  gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }

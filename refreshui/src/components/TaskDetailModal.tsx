@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Edit2, Save, Trash2, Calendar, Tag, CheckSquare, FileText, Target, Plus } from 'lucide-react';
-import { Badge } from './ui';
+import { StatusIndicator } from './StatusIndicator';
 import { PrioritySelector } from './PrioritySelector';
 import { ExitCriteriaItem } from './ExitCriteriaItem';
 import { ActionPlanItem } from './ActionPlanItem';
@@ -190,14 +190,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     setNewNote('');
   };
 
-  const getStatusBadgeVariant = (status: Task['status']): 'success' | 'warning' | 'error' | 'info' => {
-    switch (status) {
-      case 'COMPLETED': return 'success';
-      case 'IN_PROGRESS': return 'info';
-      case 'BLOCKED': return 'error';
-      default: return 'warning';
-    }
-  };
+
 
   const completedCriteria = exitCriteria.filter(c => c.status === 'COMPLETE').length;
   const totalCriteria = exitCriteria.length;
@@ -267,10 +260,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       <option value="COMPLETED">Completed</option>
                     </select>
                   ) : (
-                    <Badge variant={getStatusBadgeVariant(task.status)}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: 'currentColor', marginRight: 6 }} />
-                      {task.status.replace('_', ' ')}
-                    </Badge>
+                    <StatusIndicator status={task.status} variant="badge" />
                   )}
 
                   <PrioritySelector 

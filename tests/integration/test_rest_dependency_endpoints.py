@@ -559,3 +559,319 @@ def test_visualize_dependencies_nonexistent_task_list(test_client):
     error = response.json()
     assert "error" in error
     assert error["error"]["code"] == "NOT_FOUND"
+
+
+# ============================================================================
+# Generic Dependency Endpoints Tests
+# ============================================================================
+
+
+def test_generic_analyze_dependencies_project_scope(test_client):
+    """Test generic analyze endpoint with project scope.
+
+    Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9
+    """
+    # Create a project
+    project_response = test_client.post("/projects", json={"name": "Test Project"})
+    assert project_response.status_code == 200
+    project_id = project_response.json()["project"]["id"]
+
+    # Create a task list
+    task_list_response = test_client.post(
+        "/task-lists", json={"name": "Test Task List", "project_name": "Test Project"}
+    )
+    assert task_list_response.status_code == 200
+    task_list_id = task_list_response.json()["task_list"]["id"]
+
+    # Create a simple task
+    task_response = test_client.post(
+        "/tasks",
+        json={
+            "task_list_id": task_list_id,
+            "title": "Test Task",
+            "description": "A test task",
+            "status": "NOT_STARTED",
+            "priority": "MEDIUM",
+            "dependencies": [],
+            "exit_criteria": [{"criteria": "Done", "status": "INCOMPLETE"}],
+            "notes": [],
+        },
+    )
+    assert task_response.status_code == 200
+
+    # Analyze using generic endpoint
+    analysis_response = test_client.get(
+        f"/dependencies/analyze?scope_type=project&scope_id={project_id}"
+    )
+    assert analysis_response.status_code == 200
+
+    analysis = analysis_response.json()
+    assert "analysis" in analysis
+    assert analysis["scope_type"] == "project"
+    assert analysis["scope_id"] == project_id
+
+    # Verify analysis structure
+    analysis_data = analysis["analysis"]
+    assert "critical_path" in analysis_data
+    assert "critical_path_length" in analysis_data
+    assert "bottleneck_tasks" in analysis_data
+    assert "leaf_tasks" in analysis_data
+    assert "completion_progress" in analysis_data
+    assert "total_tasks" in analysis_data
+    assert "completed_tasks" in analysis_data
+    assert "circular_dependencies" in analysis_data
+
+
+def test_generic_analyze_dependencies_task_list_scope(test_client):
+    """Test generic analyze endpoint with task_list scope.
+
+    Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9
+    """
+    # Create a task list
+    task_list_response = test_client.post("/task-lists", json={"name": "Test Task List"})
+    assert task_list_response.status_code == 200
+    task_list_id = task_list_response.json()["task_list"]["id"]
+
+    # Create a simple task
+    task_response = test_client.post(
+        "/tasks",
+        json={
+            "task_list_id": task_list_id,
+            "title": "Test Task",
+            "description": "A test task",
+            "status": "COMPLETED",
+            "priority": "HIGH",
+            "dependencies": [],
+            "exit_criteria": [{"criteria": "Done", "status": "COMPLETE"}],
+            "notes": [],
+        },
+    )
+    assert task_response.status_code == 200
+
+    # Analyze using generic endpoint
+    analysis_response = test_client.get(
+        f"/dependencies/analyze?scope_type=task_list&scope_id={task_list_id}"
+    )
+    assert analysis_response.status_code == 200
+
+    analysis = analysis_response.json()
+    assert "analysis" in analysis
+    assert analysis["scope_type"] == "task_list"
+    assert analysis["scope_id"] == task_list_id
+
+    # Verify progress calculation
+    analysis_data = analysis["analysis"]
+    assert analysis_data["total_tasks"] == 1
+    assert analysis_data["completed_tasks"] == 1
+    assert analysis_data["completion_progress"] == 100.0
+
+
+def test_generic_analyze_dependencies_invalid_scope_type(test_client):
+    """Test generic analyze endpoint with invalid scope_type.
+
+    Requirements: 5.1, 5.2, 5.3
+    """
+    from uuid import uuid4
+
+    fake_id = str(uuid4())
+    response = test_client.get(f"/dependencies/analyze?scope_type=invalid&scope_id={fake_id}")
+    assert response.status_code == 400
+
+    error = response.json()
+    assert "error" in error
+    assert error["error"]["code"] == "VALIDATION_ERROR"
+    assert "scope_type" in error["error"]["message"].lower()
+
+
+def test_generic_analyze_dependencies_invalid_scope_id(test_client):
+    """Test generic analyze endpoint with invalid scope_id format.
+
+    Requirements: 5.1, 5.2, 5.3
+    """
+    response = test_client.get("/dependencies/analyze?scope_type=project&scope_id=invalid-uuid")
+    assert response.status_code == 400
+
+    error = response.json()
+    assert "error" in error
+    assert error["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_generic_visualize_dependencies_project_ascii(test_client):
+    """Test generic visualize endpoint with project scope and ASCII format.
+
+    Requirements: 5.1, 5.2, 5.3, 5.8, 5.9, 5.10
+    """
+    # Create a project
+    project_response = test_client.post("/projects", json={"name": "Test Project"})
+    assert project_response.status_code == 200
+    project_id = project_response.json()["project"]["id"]
+
+    # Create a task list
+    task_list_response = test_client.post(
+        "/task-lists", json={"name": "Test Task List", "project_name": "Test Project"}
+    )
+    assert task_list_response.status_code == 200
+    task_list_id = task_list_response.json()["task_list"]["id"]
+
+    # Create a simple task
+    task_response = test_client.post(
+        "/tasks",
+        json={
+            "task_list_id": task_list_id,
+            "title": "Test Task",
+            "description": "A test task",
+            "status": "NOT_STARTED",
+            "priority": "MEDIUM",
+            "dependencies": [],
+            "exit_criteria": [{"criteria": "Done", "status": "INCOMPLETE"}],
+            "notes": [],
+        },
+    )
+    assert task_response.status_code == 200
+
+    # Visualize using generic endpoint
+    viz_response = test_client.get(
+        f"/dependencies/visualize?scope_type=project&scope_id={project_id}&format=ascii"
+    )
+    assert viz_response.status_code == 200
+
+    viz = viz_response.json()
+    assert "visualization" in viz
+    assert viz["format"] == "ascii"
+    assert viz["scope_type"] == "project"
+    assert viz["scope_id"] == project_id
+
+    # Verify visualization content
+    visualization = viz["visualization"]
+    assert "Dependency Graph:" in visualization
+    assert "Test Task" in visualization
+
+
+def test_generic_visualize_dependencies_task_list_dot(test_client):
+    """Test generic visualize endpoint with task_list scope and DOT format.
+
+    Requirements: 5.1, 5.2, 5.3, 5.8, 5.9, 5.10
+    """
+    # Create a task list
+    task_list_response = test_client.post("/task-lists", json={"name": "Test Task List"})
+    assert task_list_response.status_code == 200
+    task_list_id = task_list_response.json()["task_list"]["id"]
+
+    # Create a simple task
+    task_response = test_client.post(
+        "/tasks",
+        json={
+            "task_list_id": task_list_id,
+            "title": "Test Task",
+            "description": "A test task",
+            "status": "IN_PROGRESS",
+            "priority": "LOW",
+            "dependencies": [],
+            "exit_criteria": [{"criteria": "Done", "status": "INCOMPLETE"}],
+            "notes": [],
+        },
+    )
+    assert task_response.status_code == 200
+
+    # Visualize using generic endpoint
+    viz_response = test_client.get(
+        f"/dependencies/visualize?scope_type=task_list&scope_id={task_list_id}&format=dot"
+    )
+    assert viz_response.status_code == 200
+
+    viz = viz_response.json()
+    assert "visualization" in viz
+    assert viz["format"] == "dot"
+    assert viz["scope_type"] == "task_list"
+    assert viz["scope_id"] == task_list_id
+
+    # Verify DOT format
+    visualization = viz["visualization"]
+    assert "digraph G {" in visualization
+    assert "Test Task" in visualization
+
+
+def test_generic_visualize_dependencies_mermaid(test_client):
+    """Test generic visualize endpoint with Mermaid format.
+
+    Requirements: 5.1, 5.2, 5.3, 5.8, 5.9, 5.10
+    """
+    # Create a task list
+    task_list_response = test_client.post("/task-lists", json={"name": "Test Task List"})
+    assert task_list_response.status_code == 200
+    task_list_id = task_list_response.json()["task_list"]["id"]
+
+    # Create a simple task
+    task_response = test_client.post(
+        "/tasks",
+        json={
+            "task_list_id": task_list_id,
+            "title": "Test Task",
+            "description": "A test task",
+            "status": "BLOCKED",
+            "priority": "CRITICAL",
+            "dependencies": [],
+            "exit_criteria": [{"criteria": "Done", "status": "INCOMPLETE"}],
+            "notes": [],
+        },
+    )
+    assert task_response.status_code == 200
+
+    # Visualize using generic endpoint
+    viz_response = test_client.get(
+        f"/dependencies/visualize?scope_type=task_list&scope_id={task_list_id}&format=mermaid"
+    )
+    assert viz_response.status_code == 200
+
+    viz = viz_response.json()
+    assert "visualization" in viz
+    assert viz["format"] == "mermaid"
+    assert viz["scope_type"] == "task_list"
+    assert viz["scope_id"] == task_list_id
+
+    # Verify Mermaid format
+    visualization = viz["visualization"]
+    assert "graph TD" in visualization
+    assert "Test Task" in visualization
+
+
+def test_generic_visualize_dependencies_invalid_format(test_client):
+    """Test generic visualize endpoint with invalid format.
+
+    Requirements: 5.10
+    """
+    # Create a task list
+    task_list_response = test_client.post("/task-lists", json={"name": "Test Task List"})
+    assert task_list_response.status_code == 200
+    task_list_id = task_list_response.json()["task_list"]["id"]
+
+    # Try to visualize with invalid format
+    response = test_client.get(
+        f"/dependencies/visualize?scope_type=task_list&scope_id={task_list_id}&format=invalid"
+    )
+    assert response.status_code == 400
+
+    error = response.json()
+    assert "error" in error
+    assert error["error"]["code"] == "VALIDATION_ERROR"
+    assert "format" in error["error"]["message"].lower()
+
+
+def test_generic_visualize_dependencies_default_format(test_client):
+    """Test generic visualize endpoint with default format (ascii).
+
+    Requirements: 5.10
+    """
+    # Create a task list
+    task_list_response = test_client.post("/task-lists", json={"name": "Test Task List"})
+    assert task_list_response.status_code == 200
+    task_list_id = task_list_response.json()["task_list"]["id"]
+
+    # Visualize without specifying format (should default to ascii)
+    viz_response = test_client.get(
+        f"/dependencies/visualize?scope_type=task_list&scope_id={task_list_id}"
+    )
+    assert viz_response.status_code == 200
+
+    viz = viz_response.json()
+    assert viz["format"] == "ascii"

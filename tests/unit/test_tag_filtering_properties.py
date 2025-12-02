@@ -1,6 +1,6 @@
 """Property-based tests for tag filtering functionality.
 
-Feature: agent-ux-enhancements, Property 17: Search filters by tags
+Feature: rest-api-improvements, Property 17: Tag filter returns only matching tasks
 """
 
 import tempfile
@@ -58,12 +58,12 @@ tag_strategy = st.text(
 @settings(max_examples=100)
 def test_search_filters_by_single_tag(filter_tag: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 17: Search filters by tags
+    Feature: rest-api-improvements, Property 17: Tag filter returns only matching tasks
 
     Test that for any set of tasks with different tags, filtering by a
     specific tag returns only tasks with that tag.
 
-    Validates: Requirements 4.4
+    Validates: Requirements 4.5
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -129,12 +129,12 @@ def test_search_filters_by_single_tag(filter_tag: str) -> None:
 @settings(max_examples=100)
 def test_search_filters_by_multiple_tags(filter_tags: list[str]) -> None:
     """
-    Feature: agent-ux-enhancements, Property 17: Search filters by tags
+    Feature: rest-api-improvements, Property 17: Tag filter returns only matching tasks
 
     Test that filtering by multiple tags returns only tasks with at least
     one of those tags.
 
-    Validates: Requirements 4.4
+    Validates: Requirements 4.5
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -201,12 +201,12 @@ def test_search_filters_by_multiple_tags(filter_tags: list[str]) -> None:
 @settings(max_examples=100)
 def test_search_with_no_matching_tag_returns_empty(filter_tag: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 17: Search filters by tags
+    Feature: rest-api-improvements, Property 17: Tag filter returns only matching tasks
 
     Test that filtering by a tag when no tasks have that tag returns
     an empty list.
 
-    Validates: Requirements 4.4
+    Validates: Requirements 4.5
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -251,11 +251,11 @@ def test_search_with_no_matching_tag_returns_empty(filter_tag: str) -> None:
 @settings(max_examples=100)
 def test_tag_filter_with_text_query(filter_tag: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 17: Search filters by tags
+    Feature: rest-api-improvements, Property 17: Tag filter returns only matching tasks
 
     Test that tag filtering works correctly when combined with text query.
 
-    Validates: Requirements 4.4
+    Validates: Requirements 4.5
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -328,11 +328,11 @@ def test_tag_filter_with_text_query(filter_tag: str) -> None:
 @settings(max_examples=100)
 def test_task_with_multiple_tags_matches_single_filter(filter_tag: str) -> None:
     """
-    Feature: agent-ux-enhancements, Property 17: Search filters by tags
+    Feature: rest-api-improvements, Property 17: Tag filter returns only matching tasks
 
     Test that a task with multiple tags is found when filtering by one of them.
 
-    Validates: Requirements 4.4
+    Validates: Requirements 4.5
     """
     # Create a temporary filesystem store
     with tempfile.TemporaryDirectory() as tmp_dir:

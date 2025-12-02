@@ -1,7 +1,7 @@
 """Parameter preprocessing for agent-friendly type conversion."""
 
 import json
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 
 class ParameterPreprocessor:
@@ -59,7 +59,7 @@ class ParameterPreprocessor:
                 result[key] = value
         return result
 
-    def _convert_to_number(self, value: Any, target_type: type) -> Optional[int | float]:
+    def _convert_to_number(self, value: Any, target_type: type) -> Optional[Union[int, float]]:
         """
         Convert string numbers to numeric types.
 

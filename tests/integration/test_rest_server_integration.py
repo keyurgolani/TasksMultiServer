@@ -377,7 +377,7 @@ def test_delete_project(test_client):
     assert response.status_code == 200
     data = response.json()
     assert "message" in data
-    assert data["project_id"] == project_id
+    assert "Project deleted successfully" in data["message"]
 
     # Verify project was deleted
     get_response = test_client.get(f"/projects/{project_id}")
@@ -705,7 +705,7 @@ def test_delete_task_list(test_client):
     assert response.status_code == 200
     data = response.json()
     assert "message" in data
-    assert data["task_list_id"] == task_list_id
+    assert "Task list deleted successfully" in data["message"]
 
     # Verify task list was deleted
     get_response = test_client.get(f"/task-lists/{task_list_id}")

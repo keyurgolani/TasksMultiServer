@@ -41,20 +41,23 @@ class TaskListOrchestrator:
     def create_task_list(
         self,
         name: str,
+        project_id: Optional[UUID] = None,
         project_name: Optional[str] = None,
         repeatable: bool = False,
         agent_instructions_template: Optional[str] = None,
     ) -> TaskList:
         """Create a new task list with project assignment logic.
 
-        Project assignment rules:
-        - If repeatable=True: assign to "Repeatable" project
-        - If project_name is None: assign to "Chore" project
-        - If project_name is specified: assign to that project (create if needed)
+        Project assignment rules (in priority order):
+        1. If repeatable=True: assign to "Repeatable" project
+        2. If project_id is provided: assign to that project (must exist)
+        3. If project_name is provided: assign to that project (create if needed)
+        4. Otherwise: assign to "Chore" project
 
         Args:
             name: The name of the task list (must be non-empty)
-            project_name: Optional name of the project to assign to
+            project_id: Optional UUID of the project to assign to
+            project_name: Optional name of the project to assign to (deprecated)
             repeatable: Whether this is a repeatable task list
             agent_instructions_template: Optional template for agent instructions
 
@@ -62,27 +65,31 @@ class TaskListOrchestrator:
             The created task list with all fields populated
 
         Raises:
-            ValueError: If the name is empty
+            ValueError: If the name is empty or if project_id doesn't exist
 
-        Requirements: 4.1, 4.2, 4.3, 4.4, 4.5
+        Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 1.1, 1.2, 1.3, 1.4, 11.1, 11.2, 11.3, 11.4
         """
         # Validate name
         if not name or not name.strip():
             raise ValueError("Task list name cannot be empty")
 
-        # Determine target project based on rules
+        # Determine target project based on precedence rules
         if repeatable:
-            # Rule 1: Repeatable flag → "Repeatable" project
+            # Rule 1: Repeatable flag → "Repeatable" project (ignores project_id/project_name)
             target_project_name = "Repeatable"
-        elif project_name is None:
-            # Rule 2: No project specified → "Chore" project
-            target_project_name = "Chore"
+            project = self._find_or_create_project(target_project_name)
+        elif project_id is not None:
+            # Rule 2: project_id provided → use that project (must exist)
+            project = self.data_store.get_project(project_id)
+            if project is None:
+                raise ValueError(f"Project with id '{project_id}' does not exist")
+        elif project_name is not None:
+            # Rule 3: project_name provided → use that project (create if needed)
+            project = self._find_or_create_project(project_name)
         else:
-            # Rule 3: Project specified → use that project
-            target_project_name = project_name
-
-        # Find or create the target project
-        project = self._find_or_create_project(target_project_name)
+            # Rule 4: No project specified → "Chore" project
+            target_project_name = "Chore"
+            project = self._find_or_create_project(target_project_name)
 
         # Create task list with timestamps
         now = datetime.now(timezone.utc)

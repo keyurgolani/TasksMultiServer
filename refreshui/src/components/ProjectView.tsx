@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { Project, TaskList, ProjectStats, Task } from '../api/client';
 import { Folder, List, Search, Filter } from 'lucide-react';
 import { Input, Button, Badge } from './ui';
-import { FilterPopover } from './FilterPopover';
+import { ProjectFilterPopover } from './ProjectFilterPopover';
 import styles from './ProjectView.module.css';
 
 interface ProjectViewProps {
@@ -24,26 +24,22 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const [filters, setFilters] = useState({
-    status: [] as string[],
-    priority: [] as string[],
+    completion: 'all',
+    taskCount: 'all',
+    isDefault: 'all',
   });
 
-  const handleFilterChange = (type: 'status' | 'priority', value: string) => {
-    setFilters(prev => {
-      const current = prev[type];
-      const updated = current.includes(value)
-        ? current.filter(item => item !== value)
-        : [...current, value];
-      return { ...prev, [type]: updated };
-    });
+  const handleFilterChange = (type: 'completion' | 'taskCount' | 'isDefault', value: string) => {
+    setFilters(prev => ({ ...prev, [type]: value }));
   };
 
   const clearFilters = () => {
-    setFilters({ status: [], priority: [] });
+    setFilters({ completion: 'all', taskCount: 'all', isDefault: 'all' });
   };
 
-  // Filter projects by search query and task filters
+  // Filter projects by search query and project filters
   const filteredProjects = projects.filter(project => {
     // Search filter
     const projectMatches = project.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -56,24 +52,33 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
       return false;
     }
 
-    // Status/Priority filter - check if project has tasks matching the filters
-    if (filters.status.length > 0 || filters.priority.length > 0) {
-      const projectTasks = tasks.filter(task => {
-        const taskList = taskLists.find(list => list.id === task.task_list_id);
-        return taskList?.project_id === project.id;
-      });
+    // Calculate project stats for filtering
+    const projectTasks = tasks.filter(task => {
+      const taskList = taskLists.find(list => list.id === task.task_list_id);
+      return taskList?.project_id === project.id;
+    });
 
-      if (projectTasks.length === 0) {
-        return false;
-      }
+    const totalTasks = projectTasks.length;
+    const completed = projectTasks.filter(t => t.status === 'COMPLETED').length;
+    const completionPercentage = totalTasks > 0 ? (completed / totalTasks) * 100 : 0;
 
-      const hasMatchingTasks = projectTasks.some(task => {
-        const statusMatch = filters.status.length === 0 || filters.status.includes(task.status);
-        const priorityMatch = filters.priority.length === 0 || filters.priority.includes(task.priority);
-        return statusMatch && priorityMatch;
-      });
+    // Completion filter
+    if (filters.completion !== 'all') {
+      if (filters.completion === 'low' && (completionPercentage > 33 || totalTasks === 0)) return false;
+      if (filters.completion === 'medium' && (completionPercentage < 34 || completionPercentage > 66)) return false;
+      if (filters.completion === 'high' && completionPercentage < 67) return false;
+    }
 
-      return hasMatchingTasks;
+    // Task count filter
+    if (filters.taskCount !== 'all') {
+      if (filters.taskCount === 'empty' && totalTasks > 0) return false;
+      if (filters.taskCount === 'hasTasks' && totalTasks === 0) return false;
+    }
+
+    // Default filter
+    if (filters.isDefault !== 'all') {
+      if (filters.isDefault === 'default' && !project.is_default) return false;
+      if (filters.isDefault === 'nonDefault' && project.is_default) return false;
     }
 
     return true;
@@ -88,22 +93,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
             placeholder="Search projects or lists..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onClear={() => setSearchQuery('')}
           />
         </div>
         <div style={{ position: 'relative' }}>
           <Button 
-            variant={filters.status.length > 0 || filters.priority.length > 0 ? "primary" : "secondary"} 
+            ref={filterButtonRef}
+            variant={filters.completion !== 'all' || filters.taskCount !== 'all' || filters.isDefault !== 'all' ? "primary" : "secondary"} 
             icon={<Filter size={16} />}
             onClick={() => setIsFilterOpen(!isFilterOpen)}
           >
             Filter
           </Button>
-          <FilterPopover
+          <ProjectFilterPopover
             isOpen={isFilterOpen}
             onClose={() => setIsFilterOpen(false)}
             filters={filters}
             onFilterChange={handleFilterChange}
             onClear={clearFilters}
+            buttonRef={filterButtonRef}
           />
         </div>
       </div>

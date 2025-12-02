@@ -139,7 +139,8 @@ class SearchCriteria:
         status: Optional list of status values to filter by
         priority: Optional list of priority values to filter by
         tags: Optional list of tags to filter by
-        project_name: Optional project name to filter by
+        project_id: Optional project ID to filter by
+        project_name: Optional project name to filter by (deprecated, use project_id)
         limit: Maximum number of results to return (default: 50)
         offset: Number of results to skip for pagination (default: 0)
         sort_by: Sort criteria - "relevance", "created_at", "updated_at", or "priority" (default: "relevance")
@@ -149,6 +150,7 @@ class SearchCriteria:
     status: Optional[list[Status]] = None
     priority: Optional[list[Priority]] = None
     tags: Optional[list[str]] = None
+    project_id: Optional[UUID] = None
     project_name: Optional[str] = None
     limit: int = 50
     offset: int = 0
