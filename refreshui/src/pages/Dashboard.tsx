@@ -17,7 +17,6 @@ import { TasksView } from '../components/TasksView';
 import { TaskListView } from '../components/TaskListView';
 import { ProjectView } from '../components/ProjectView';
 import { TaskDetailModal } from '../components/TaskDetailModal';
-import { applyTheme, getTheme, loadSavedTheme, saveTheme, fonts, applyFont, loadSavedFont } from '../styles/themes';
 import { useToast } from '../context/ToastContext';
 import { Spinner } from '../components/ui/Spinner';
 import styles from "./Dashboard.module.css";
@@ -37,7 +36,6 @@ export const Dashboard: React.FC = () => {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [currentView, setCurrentView] = useState<DashboardView>('projects'); // Default to projects
-  const [theme, setTheme] = useState<string>(() => loadSavedTheme()); // Load saved theme or default to light
   const [projectStats, setProjectStats] = useState<
     Record<string, ProjectStats>
   >({});
@@ -48,21 +46,6 @@ export const Dashboard: React.FC = () => {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [tasksLoading, setTasksLoading] = useState(false);
   const toast = useToast();
-
-  useEffect(() => {
-    const selectedTheme = getTheme(theme);
-    applyTheme(selectedTheme);
-    
-    // Load saved font
-    const savedFont = loadSavedFont();
-    const fontValue = fonts[savedFont as keyof typeof fonts]?.value || fonts.inter.value;
-    applyFont(fontValue);
-  }, [theme]);
-
-  const handleThemeChange = (newTheme: string) => {
-    setTheme(newTheme);
-    saveTheme(newTheme);
-  };
 
   // Navigation handlers
   const handleProjectClick = (projectId: string) => {
@@ -255,10 +238,7 @@ export const Dashboard: React.FC = () => {
             />
           </div>
           <div className={styles.headerControls}>
-            <ThemeSelector 
-              currentTheme={theme} 
-              onThemeChange={handleThemeChange} 
-            />
+            <ThemeSelector />
           </div>
         </div>
       </header>

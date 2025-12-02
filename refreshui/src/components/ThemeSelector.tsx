@@ -1,191 +1,204 @@
-import React, { useState } from 'react';
-import { ChevronDown, Check } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import ReactDOM from 'react-dom';
-import { themes, type Theme, fonts, applyFont, saveFont, loadSavedFont } from '../styles/themes';
-import styles from './ThemeSelector.module.css';
+import React, { useState, useRef, useEffect } from "react";
+import { Palette, ChevronDown } from "lucide-react";
+import { 
+  colorThemes, 
+  fontThemes, 
+  type EffectSettings 
+} from "../styles/themes";
+import { useTheme } from "../context/ThemeContext";
+import { ThemePreview } from "./ThemePreview";
+import styles from "./ThemeSelector.module.css";
 
-interface ThemeSelectorProps {
-  currentTheme: string;
-  onThemeChange: (theme: string) => void;
-}
+export const ThemeSelector: React.FC = () => {
+  const { 
+    activeColorTheme, 
+    activeFontTheme, 
+    activeEffectSettings,
+    setColorTheme, 
+    setFontTheme, 
+    setEffectSettings 
+  } = useTheme();
 
-export const ThemeSelector: React.FC<ThemeSelectorProps> = ({ currentTheme, onThemeChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [currentFont, setCurrentFont] = useState(() => loadSavedFont());
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const currentThemeData = themes[currentTheme] || themes.light;
-  const themeList = Object.values(themes);
-  const fontList = Object.entries(fonts);
+  // Local state for preview
+  const [localColorId, setLocalColorId] = useState(activeColorTheme.id);
+  const [localFontId, setLocalFontId] = useState(activeFontTheme.id);
+  const [localEffects, setLocalEffects] = useState<EffectSettings>(activeEffectSettings);
 
-  const handleFontChange = (fontKey: string, fontValue: string) => {
-    setCurrentFont(fontKey);
-    applyFont(fontValue);
-    saveFont(fontKey);
+
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleToggle = () => {
+    if (!isOpen) {
+      // Reset to current active state when opening
+      setLocalColorId(activeColorTheme.id);
+      setLocalFontId(activeFontTheme.id);
+      setLocalEffects(activeEffectSettings);
+    }
+    setIsOpen(!isOpen);
   };
 
-  // Helper to render the skeleton UI
-  const renderPreview = (theme: Theme, isMini: boolean) => (
-    <div 
-      className={isMini ? styles.miniPreview : styles.themePreviewLarge}
-      style={{ 
-        backgroundColor: theme.colors.bgApp,
-        borderColor: theme.colors.border 
-      }}
-    >
-      {/* Sidebar */}
-      <div 
-        className={styles.previewSidebar} 
-        style={{ 
-          backgroundColor: theme.colors.bgSurface,
-          borderRight: `1px solid ${theme.colors.border}`
-        }} 
-      />
-      
-      {/* Header */}
-      <div 
-        className={styles.previewHeader} 
-        style={{ 
-          backgroundColor: theme.colors.bgSurface,
-          borderBottom: `1px solid ${theme.colors.border}`
-        }} 
-      />
+  const handleApply = () => {
+    setColorTheme(localColorId);
+    setFontTheme(localFontId);
+    setEffectSettings(localEffects);
+    setIsOpen(false);
+  };
 
-      {/* Content - Task Cards */}
-      <div className={styles.previewContent}>
-        <div 
-          className={styles.previewCard} 
-          style={{ 
-            backgroundColor: theme.colors.bgSurface,
-            borderColor: theme.colors.border
-          }} 
-        />
-        <div 
-          className={styles.previewCard} 
-          style={{ 
-            backgroundColor: theme.colors.bgSurface,
-            borderColor: theme.colors.border,
-            opacity: 0.6
-          }} 
-        />
-      </div>
+  const handleUpdateEffect = (key: keyof EffectSettings, value: number) => {
+    setLocalEffects(prev => ({ ...prev, [key]: value }));
+  };
 
-      {/* FAB */}
-      <div 
-        className={styles.previewFab} 
-        style={{ backgroundColor: theme.colors.primary }} 
-      />
-    </div>
-  );
+  const previewColorTheme = colorThemes[localColorId] || colorThemes.light;
+  const previewFontTheme = fontThemes[localFontId] || fontThemes.inter;
 
   return (
-    <>
-      <div className={styles.container}>
-        <button
-          className={styles.trigger}
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          <div className={styles.currentTheme}>
-            {renderPreview(currentThemeData, true)}
-            <span>{currentThemeData.name}</span>
+    <div className={styles.container} ref={containerRef}>
+      <button className={styles.trigger} onClick={handleToggle}>
+        <span className={styles.icon}>
+          <Palette size={16} />
+        </span>
+        <span>Theme</span>
+        <ChevronDown size={14} />
+      </button>
+
+      {isOpen && (
+        <div className={styles.dropdown}>
+          {/* Preview Section */}
+          <div className={styles.previewSection}>
+            <ThemePreview 
+              colorTheme={previewColorTheme}
+              fontTheme={previewFontTheme}
+              effectSettings={localEffects}
+            />
           </div>
-          <ChevronDown size={16} className={isOpen ? styles.iconRotated : ''} />
-        </button>
-      </div>
 
-      {ReactDOM.createPortal(
-        <AnimatePresence>
-          {isOpen && (
-            <>
-              <motion.div 
-                className={styles.backdrop}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2, ease: 'easeInOut' }}
-                onClick={() => setIsOpen(false)}
-              />
-              <motion.div
-                className={styles.popup}
-                initial={{ opacity: 0, scale: 0.92, x: "-50%", y: "-50%" }}
-                animate={{ opacity: 1, scale: 1, x: "-50%", y: "-50%" }}
-                exit={{ opacity: 0, scale: 0.92, x: "-50%", y: "-50%" }}
-                transition={{ 
-                  type: 'spring',
-                  damping: 25,
-                  stiffness: 300,
-                  mass: 0.8
-                }}
-              >
-                <div className={styles.popupHeader}>
-                  <h3>Appearance</h3>
-                  <button className={styles.closeButton} onClick={() => setIsOpen(false)}>
-                    ×
-                  </button>
+          {/* Controls Section */}
+          <div className={styles.controlsSection}>
+            
+            {/* Colors */}
+            <div>
+              <div className={styles.sectionTitle}>Colors</div>
+              <div className={styles.scrollRow}>
+                {Object.values(colorThemes).map((theme) => (
+                  <div
+                    key={theme.id}
+                    className={`${styles.colorOption} ${
+                      localColorId === theme.id ? styles.active : ""
+                    }`}
+                    onClick={() => setLocalColorId(theme.id)}
+                    title={theme.name}
+                  >
+                    <div 
+                      className={styles.colorPreview}
+                      style={{ background: theme.colors.bgApp }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Fonts */}
+            <div>
+              <div className={styles.sectionTitle}>Fonts</div>
+              <div className={styles.scrollRow}>
+                {Object.values(fontThemes).map((theme) => (
+                  <div
+                    key={theme.id}
+                    className={`${styles.fontOption} ${
+                      localFontId === theme.id ? styles.active : ""
+                    }`}
+                    onClick={() => setLocalFontId(theme.id)}
+                    style={{ fontFamily: theme.fontFamily }}
+                  >
+                    {theme.name}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Effects */}
+            <div>
+              <div className={styles.sectionTitle}>Effects</div>
+              <div className={styles.effectControl}>
+                <div className={styles.effectLabel}>
+                  <span>Glow Strength</span>
+                  <span>{localEffects.glowStrength}%</span>
                 </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  value={localEffects.glowStrength}
+                  onChange={(e) => handleUpdateEffect('glowStrength', parseInt(e.target.value))}
+                  className={styles.rangeInput}
+                />
+              </div>
 
-                <div className={styles.sectionTitle}>Theme</div>
-                <div className={styles.themeGrid}>
-                  {themeList.map((theme, index) => (
-                    <motion.button
-                      key={theme.id}
-                      className={`${styles.themeOption} ${currentTheme === theme.id ? styles.active : ''}`}
-                      onClick={() => {
-                        onThemeChange(theme.id);
-                      }}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ 
-                        delay: index * 0.05,
-                        duration: 0.3,
-                        ease: 'easeOut'
-                      }}
-                    >
-                      {renderPreview(theme, false)}
-                      <div className={styles.themeInfo}>
-                        <div className={styles.themeName}>{theme.name}</div>
-                        <div className={styles.themeDescription}>{theme.description}</div>
-                      </div>
-                      {currentTheme === theme.id && (
-                        <motion.div 
-                          className={styles.activeBadge}
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ 
-                            type: 'spring',
-                            stiffness: 500,
-                            damping: 25
-                          }}
-                        >
-                          <Check size={12} />
-                        </motion.div>
-                      )}
-                    </motion.button>
-                  ))}
+              <div className={styles.effectControl}>
+                <div className={styles.effectLabel}>
+                  <span>Glass Opacity</span>
+                  <span>{localEffects.glassOpacity}%</span>
                 </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  value={localEffects.glassOpacity}
+                  onChange={(e) => handleUpdateEffect('glassOpacity', parseInt(e.target.value))}
+                  className={styles.rangeInput}
+                />
+              </div>
 
-                <div className={styles.sectionTitle}>Font</div>
-                <div className={styles.fontGrid}>
-                  {fontList.map(([key, font]) => (
-                    <button
-                      key={key}
-                      className={`${styles.fontOption} ${currentFont === key ? styles.active : ''}`}
-                      onClick={() => handleFontChange(key, font.value)}
-                      style={{ fontFamily: font.value }}
-                    >
-                      <span className={styles.fontName}>{font.name}</span>
-                      <span className={styles.fontPreview}>Aa</span>
-                      {currentFont === key && <Check size={16} className={styles.checkIcon} />}
-                    </button>
-                  ))}
+              <div className={styles.effectControl}>
+                <div className={styles.effectLabel}>
+                  <span>Glass Blur</span>
+                  <span>{localEffects.glassBlur}px</span>
                 </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="20" 
+                  value={localEffects.glassBlur}
+                  onChange={(e) => handleUpdateEffect('glassBlur', parseInt(e.target.value))}
+                  className={styles.rangeInput}
+                />
+              </div>
+            </div>
+          </div>
 
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>,
-        document.body
+          {/* Footer */}
+          <div className={styles.footer}>
+            <button 
+              className={`${styles.button} ${styles.buttonSecondary}`}
+              onClick={() => setIsOpen(false)}
+            >
+              Cancel
+            </button>
+            <button 
+              className={`${styles.button} ${styles.buttonPrimary}`}
+              onClick={handleApply}
+            >
+              Apply Changes
+            </button>
+          </div>
+        </div>
       )}
-    </>
+    </div>
   );
 };

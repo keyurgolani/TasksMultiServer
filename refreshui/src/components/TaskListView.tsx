@@ -236,32 +236,40 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                         </div>
                       </div>
 
-                      <div className={styles.tasksContainer}>
-                        {stats.tasks.length > 0 ? (
-                          stats.tasks
-                            .slice(0, 5)
-                            .map((task) => (
-                              <SmallTaskCard
-                                key={task.id}
-                                task={task}
-                                onClick={() => onTaskClick(task)}
-                              />
-                            ))
-                        ) : (
-                          <div className={styles.emptyList}>
-                            <Circle size={32} className={styles.emptyIcon} />
-                            <span>No tasks yet</span>
-                          </div>
-                        )}
-                        {stats.tasks.length > 5 && (
-                          <div
-                            className={styles.viewMore}
-                            onClick={() => onTaskListClick(list.id, project.id)}
-                          >
-                            View {stats.tasks.length - 5} more task
-                            {stats.tasks.length - 5 !== 1 ? "s" : ""}
-                          </div>
-                        )}
+
+                      <div className={styles.tasksSection}>
+                        <div className={styles.tasksSectionHeader}>
+                          <h4 className={styles.tasksSectionTitle}>
+                            Tasks ({stats.total})
+                          </h4>
+                        </div>
+                        <div className={styles.tasksContainer}>
+                          {stats.tasks.length > 0 ? (
+                            stats.tasks
+                              .slice(0, 5)
+                              .map((task) => (
+                                <SmallTaskCard
+                                  key={task.id}
+                                  task={task}
+                                  onClick={() => onTaskClick(task)}
+                                />
+                              ))
+                          ) : (
+                            <div className={styles.emptyList}>
+                              <Circle size={32} className={styles.emptyIcon} />
+                              <span>No tasks yet</span>
+                            </div>
+                          )}
+                          {stats.tasks.length > 5 && (
+                            <div
+                              className={styles.viewMore}
+                              onClick={() => onTaskListClick(list.id, project.id)}
+                            >
+                              View {stats.tasks.length - 5} more task
+                              {stats.tasks.length - 5 !== 1 ? "s" : ""}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );

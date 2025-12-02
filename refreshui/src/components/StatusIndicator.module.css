@@ -1,16 +1,12 @@
 /* Status Indicator Dots */
-:global {
-  @keyframes status-pulse {
-    0%, 100% { 
-      opacity: 1; 
-      transform: scale(1);
-      filter: brightness(1) drop-shadow(0 0 0px transparent);
-    }
-    50% { 
-      opacity: 0.3; 
-      transform: scale(1.6);
-      filter: brightness(2) drop-shadow(0 0 8px currentColor);
-    }
+@keyframes ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
   }
 }
 
@@ -20,29 +16,49 @@
   border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
-  animation: status-pulse 2s ease-in-out infinite;
+  position: relative; /* Needed for pseudo-element positioning */
+}
+
+/* Create the ripple element */
+.statusIndicator::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: inherit; /* Use the same color as the parent */
+  z-index: -1; /* Place behind the dot */
+  opacity: 0;
 }
 
 .statusIndicator[data-status="COMPLETED"] {
   background: var(--success);
   box-shadow: 0 0 8px var(--success);
-  animation: none; /* No pulse for completed */
 }
 
 .statusIndicator[data-status="IN_PROGRESS"] {
   background: var(--warning);
-  box-shadow: 0 0 12px var(--warning), 0 0 20px rgba(var(--warning-rgb, 255, 165, 2), 0.5);
+  box-shadow: 0 0 8px var(--warning);
+}
+
+.statusIndicator[data-status="IN_PROGRESS"]::after {
+  animation: ripple 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 .statusIndicator[data-status="BLOCKED"] {
   background: var(--error);
-  box-shadow: 0 0 12px var(--error), 0 0 20px rgba(var(--error-rgb, 239, 68, 68), 0.5);
+  box-shadow: 0 0 8px var(--error);
+}
+
+.statusIndicator[data-status="BLOCKED"]::after {
+  animation: ripple 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 .statusIndicator[data-status="NOT_STARTED"] {
-  background: var(--text-tertiary);
-  box-shadow: 0 0 4px var(--text-tertiary);
-  animation: none; /* No pulse for not started */
+  background: #808080;
+  box-shadow: 0 0 4px #808080;
 }
 
 .statusBadgeWrapper {

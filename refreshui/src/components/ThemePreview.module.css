@@ -1,0 +1,124 @@
+.previewContainer {
+  width: 100%;
+  height: 200px;
+  background-color: var(--bg-app);
+  border-radius: var(--border-radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  position: relative;
+  transition: all 0.3s ease;
+  font-family: var(--font-default);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  opacity: 0.8;
+}
+
+.content {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+}
+
+.sidebar {
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebarItem {
+  height: 8px;
+  width: 100%;
+  border-radius: 4px;
+  background-color: var(--bg-surface-hover);
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  background-color: var(--bg-surface);
+  border-radius: var(--border-radius);
+  padding: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0,0,0, calc(var(--shadow-strength) * 0.005));
+  position: relative;
+  overflow: hidden;
+}
+
+/* Apply glass effect if opacity > 0 */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--glass-bg);
+  opacity: var(--glass-opacity);
+  backdrop-filter: blur(var(--glass-blur));
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cardContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cardTitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  /* Glow effect */
+  text-shadow: 0 0 calc(var(--glow-strength) * 0.1px) var(--glow-primary);
+}
+
+.cardLine {
+  height: 6px;
+  width: 60%;
+  border-radius: 3px;
+  background-color: var(--text-tertiary);
+  opacity: 0.3;
+}
+
+.indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--success);
+  box-shadow: 0 0 calc(var(--glow-strength) * 0.2px) var(--glow-success);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

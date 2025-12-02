@@ -181,9 +181,17 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
                           <span className={styles.listName}>{list.name}</span>
                         </div>
                         <div className={styles.listMeta}>
-                          <span className={styles.listCount}>
-                            {listCompleted}/{listTotal} done
-                          </span>
+                          <div className={styles.listProgress}>
+                            <div className={styles.listProgressBar}>
+                              <div 
+                                className={styles.listProgressFill}
+                                style={{ width: `${listTotal > 0 ? (listCompleted / listTotal) * 100 : 0}%` }}
+                              />
+                            </div>
+                            <span className={styles.listCount}>
+                              {listCompleted}/{listTotal}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );

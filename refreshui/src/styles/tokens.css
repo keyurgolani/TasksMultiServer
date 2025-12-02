@@ -74,7 +74,14 @@
 
 /* Shadows */
 :root {
-  --shadow-sm: 0 2px 4px var(--shadow-color);
-  --shadow-md: 0 4px 12px var(--shadow-color);
-  --shadow-lg: 0 8px 24px var(--shadow-color);
+  --shadow-sm: 0 2px 4px var(--shadow);
+  --shadow-md: 0 4px 12px var(--shadow);
+  --shadow-lg: 0 8px 24px var(--shadow);
+
+  /* Default Effect Variables (overridden by JS) */
+  --glow-strength: 50;
+  --glass-opacity: 0.7;
+  --glass-blur: 10px;
+  --shadow-strength: 0.4;
+  --border-radius: 12px;
 }

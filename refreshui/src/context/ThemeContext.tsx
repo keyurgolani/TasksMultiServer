@@ -1,74 +1,77 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
-  type Theme, 
-  type ThemeConfig, 
+  type ColorTheme, 
+  type FontTheme, 
+  type EffectSettings,
   applyTheme, 
-  getTheme, 
   loadSavedTheme, 
   saveTheme, 
-  themes 
+  colorThemes,
+  fontThemes,
+  defaultEffectSettings
 } from '../styles/themes';
 
 interface ThemeContextType {
-  currentTheme: Theme;
-  setTheme: (themeId: string) => void;
-  config: ThemeConfig;
-  updateConfig: (config: Partial<ThemeConfig>) => void;
-  resetConfig: () => void;
+  activeColorTheme: ColorTheme;
+  activeFontTheme: FontTheme;
+  activeEffectSettings: EffectSettings;
+  setColorTheme: (id: string) => void;
+  setFontTheme: (id: string) => void;
+  setEffectSettings: (settings: EffectSettings) => void;
+  updateEffectSetting: (key: keyof EffectSettings, value: number) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [themeId, setThemeId] = useState<string>(loadSavedTheme());
-  const [customConfig, setCustomConfig] = useState<Partial<ThemeConfig>>({});
+  // Initialize state from local storage or defaults
+  const saved = loadSavedTheme();
+  
+  const [colorId, setColorId] = useState<string>(saved?.colorId || 'light');
+  const [fontId, setFontId] = useState<string>(saved?.fontId || 'inter');
+  const [effectSettings, setEffectSettingsState] = useState<EffectSettings>(saved?.effects || defaultEffectSettings);
 
-  const currentTheme = getTheme(themeId);
-
-  // Merge theme default config with custom config
-  const activeConfig: ThemeConfig = React.useMemo(() => ({
-    intensity: customConfig.intensity || currentTheme.config?.intensity || 'moderate',
-    radius: customConfig.radius || currentTheme.config?.radius || 'rounded',
-    shadow: customConfig.shadow || currentTheme.config?.shadow || 'moderate',
-  }), [customConfig, currentTheme.config]);
+  const activeColorTheme = colorThemes[colorId] || colorThemes.light;
+  const activeFontTheme = fontThemes[fontId] || fontThemes.inter;
 
   useEffect(() => {
-    // Apply theme with merged config
-    const themeWithConfig = {
-      ...currentTheme,
-      config: activeConfig
-    };
-    applyTheme(themeWithConfig);
-    saveTheme(themeId);
-  }, [themeId, customConfig, currentTheme, activeConfig]);
+    applyTheme(activeColorTheme, activeFontTheme, effectSettings);
+    saveTheme(colorId, fontId, effectSettings);
+  }, [activeColorTheme, activeFontTheme, effectSettings, colorId, fontId]);
 
-  const handleSetTheme = (id: string) => {
-    if (themes[id]) {
-      setThemeId(id);
-      // Optional: Reset custom config when switching themes? 
-      // For now, let's keep it to allow "applying my preferences to any theme"
-      // But maybe some themes don't support some configs.
-      // Let's reset custom config to ensure we see the theme as intended first.
-      setCustomConfig({});
+  const setColorTheme = (id: string) => {
+    if (colorThemes[id]) {
+      setColorId(id);
     }
   };
 
-  const updateConfig = (newConfig: Partial<ThemeConfig>) => {
-    setCustomConfig(prev => ({ ...prev, ...newConfig }));
+  const setFontTheme = (id: string) => {
+    if (fontThemes[id]) {
+      setFontId(id);
+    }
   };
 
-  const resetConfig = () => {
-    setCustomConfig({});
+  const setEffectSettings = (settings: EffectSettings) => {
+    setEffectSettingsState(settings);
+  };
+
+  const updateEffectSetting = (key: keyof EffectSettings, value: number) => {
+    setEffectSettingsState(prev => ({
+      ...prev,
+      [key]: value
+    }));
   };
 
   return (
     <ThemeContext.Provider 
       value={{ 
-        currentTheme, 
-        setTheme: handleSetTheme, 
-        config: activeConfig, 
-        updateConfig,
-        resetConfig
+        activeColorTheme, 
+        activeFontTheme, 
+        activeEffectSettings: effectSettings,
+        setColorTheme, 
+        setFontTheme, 
+        setEffectSettings,
+        updateEffectSetting
       }}
     >
       {children}

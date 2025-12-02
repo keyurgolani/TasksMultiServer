@@ -40,9 +40,9 @@
 .input {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 0, 0, 0.06); /* Increased contrast */
   color: var(--text-primary);
   font-size: 16px;
   transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
@@ -79,21 +79,23 @@
 
 .input:focus {
   background: var(--bg-surface);
-  border-color: #6B73FF;
+  border-color: var(--primary);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(107, 115, 255, 0.1);
+  box-shadow: 
+    0 0 0 1px var(--primary),
+    0 0 calc(var(--glow-strength) * 0.2px) var(--glow-primary);
 }
 
 /* Dark mode specific styles */
 :global([data-theme="dark"]) .input {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08); /* Increased contrast */
+  border-color: var(--border);
   color: var(--text-primary);
 }
 
 :global([data-theme="dark"]) .input:focus {
   background: var(--bg-surface);
-  border-color: #6B73FF;
+  border-color: var(--primary);
 }
 
 .input::placeholder {

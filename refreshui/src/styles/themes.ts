@@ -1,15 +1,7 @@
 export type ThemeCategory = 'glass' | 'tactile' | 'bold' | 'minimal' | 'vibrant' | 'futuristic';
-export type VisualIntensity = 'subtle' | 'moderate' | 'bold';
-export type BorderRadius = 'sharp' | 'rounded' | 'pill';
-export type ShadowDepth = 'none' | 'subtle' | 'moderate' | 'dramatic';
 
-export interface ThemeConfig {
-  intensity: VisualIntensity;
-  radius: BorderRadius;
-  shadow: ShadowDepth;
-}
-
-export interface Theme {
+// --- Colors ---
+export interface ColorTheme {
   id: string;
   name: string;
   description: string;
@@ -43,22 +35,20 @@ export interface Theme {
     scrollbarThumbHover: string;
     scrollbarThumbActive: string;
 
-    // Glassmorphism
+    // Glassmorphism (Base colors for glass effect)
     glassBg: string;
     glassBorder: string;
     glassShadow: string;
-    glassBlur: string;
 
-    // Glow effects
+    // Glow effects (Base colors for glow)
     glowPrimary: string;
     glowSuccess: string;
     glowWarning: string;
     glowDanger: string;
   };
-  config?: ThemeConfig;
 }
 
-export const themes: Record<string, Theme> = {
+export const colorThemes: Record<string, ColorTheme> = {
   light: {
     id: 'light',
     category: 'minimal',
@@ -83,18 +73,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-
-      // Glassmorphism - Light theme
       glassBg: 'rgba(255, 255, 255, 0.85)',
       glassBorder: 'rgba(0, 0, 0, 0.1)',
       glassShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)',
-      glassBlur: 'blur(10px)',
-
-      // Glow effects - Light theme
-      glowPrimary: '0 4px 12px rgba(107, 115, 255, 0.3)',
-      glowSuccess: '0 4px 12px rgba(46, 213, 115, 0.3)',
-      glowWarning: '0 4px 12px rgba(255, 165, 2, 0.3)',
-      glowDanger: '0 4px 12px rgba(255, 71, 87, 0.3)',
+      glowPrimary: 'rgba(107, 115, 255, 0.3)',
+      glowSuccess: 'rgba(46, 213, 115, 0.3)',
+      glowWarning: 'rgba(255, 165, 2, 0.3)',
+      glowDanger: 'rgba(255, 71, 87, 0.3)',
     },
   },
   dark: {
@@ -121,17 +106,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   ocean: {
@@ -158,17 +139,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   sunset: {
@@ -195,17 +172,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   forest: {
@@ -232,17 +205,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   lavender: {
@@ -269,17 +238,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Light theme
       glassBg: 'rgba(255, 255, 255, 0.6)',
       glassBorder: 'rgba(59, 7, 100, 0.1)',
       glassShadow: '0 8px 32px 0 rgba(168, 85, 247, 0.15)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   coral: {
@@ -306,17 +271,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Light theme
       glassBg: 'rgba(255, 255, 255, 0.6)',
       glassBorder: 'rgba(127, 29, 29, 0.1)',
       glassShadow: '0 8px 32px 0 rgba(251, 113, 133, 0.15)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   nord: {
@@ -343,17 +304,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   dracula: {
@@ -380,17 +337,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   monokai: {
@@ -417,17 +370,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   solarized: {
@@ -454,17 +403,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   gruvbox: {
@@ -491,17 +436,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   tokyoNight: {
@@ -528,17 +469,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   catppuccin: {
@@ -565,17 +502,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   oneDark: {
@@ -602,17 +535,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   material: {
@@ -639,17 +568,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   synthwave: {
@@ -676,17 +601,13 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
   rosePine: {
@@ -713,345 +634,119 @@ export const themes: Record<string, Theme> = {
       scrollbarThumb: 'rgba(107, 115, 255, 0.4)',
       scrollbarThumbHover: 'rgba(107, 115, 255, 0.6)',
       scrollbarThumbActive: 'rgba(107, 115, 255, 0.8)',
-      // Glassmorphism - Dark theme
       glassBg: 'rgba(30, 33, 40, 0.75)',
       glassBorder: 'rgba(255, 255, 255, 0.08)',
       glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(12px)',
-
-      // Glow effects - Dark theme
-      glowPrimary: '0 0 20px rgba(107, 115, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
-    },
-  },
-  glassmorphism: {
-    id: 'glassmorphism',
-    name: 'Glassmorphism',
-    description: 'Frosted glass effects',
-    category: 'glass',
-    config: { intensity: 'bold', radius: 'rounded', shadow: 'moderate' },
-    colors: {
-      bgApp: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      bgSurface: 'rgba(255, 255, 255, 0.1)',
-      bgSurfaceHover: 'rgba(255, 255, 255, 0.2)',
-      textPrimary: '#ffffff',
-      textSecondary: 'rgba(255, 255, 255, 0.8)',
-      textTertiary: 'rgba(255, 255, 255, 0.6)',
-      primary: '#ffffff',
-      primaryDark: '#e0e0e0',
-      success: '#2ed573',
-      warning: '#ffa502',
-      error: '#ff4757',
-      info: '#3498db',
-      border: 'rgba(255, 255, 255, 0.2)',
-      borderLight: 'rgba(255, 255, 255, 0.1)',
-      shadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-      scrollbarThumb: 'rgba(255, 255, 255, 0.3)',
-      scrollbarThumbHover: 'rgba(255, 255, 255, 0.5)',
-      scrollbarThumbActive: 'rgba(255, 255, 255, 0.7)',
-      glassBg: 'rgba(255, 255, 255, 0.1)',
-      glassBorder: 'rgba(255, 255, 255, 0.2)',
-      glassShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-      glassBlur: 'blur(20px)',
-      glowPrimary: '0 0 20px rgba(255, 255, 255, 0.4)',
-      glowSuccess: '0 0 15px rgba(46, 213, 115, 0.4)',
-      glowWarning: '0 0 15px rgba(255, 165, 2, 0.4)',
-      glowDanger: '0 0 15px rgba(255, 71, 87, 0.4)',
-    },
-  },
-  frost: {
-    id: 'frost',
-    name: 'Frost UI',
-    description: 'Subtle transparency',
-    category: 'glass',
-    config: { intensity: 'subtle', radius: 'rounded', shadow: 'subtle' },
-    colors: {
-      bgApp: '#f0f2f5',
-      bgSurface: 'rgba(255, 255, 255, 0.7)',
-      bgSurfaceHover: 'rgba(255, 255, 255, 0.8)',
-      textPrimary: '#1a202c',
-      textSecondary: '#4a5568',
-      textTertiary: '#718096',
-      primary: '#3182ce',
-      primaryDark: '#2c5282',
-      success: '#38a169',
-      warning: '#d69e2e',
-      error: '#e53e3e',
-      info: '#3182ce',
-      border: 'rgba(255, 255, 255, 0.5)',
-      borderLight: 'rgba(255, 255, 255, 0.3)',
-      shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-      scrollbarThumb: 'rgba(49, 130, 206, 0.4)',
-      scrollbarThumbHover: 'rgba(49, 130, 206, 0.6)',
-      scrollbarThumbActive: 'rgba(49, 130, 206, 0.8)',
-      glassBg: 'rgba(255, 255, 255, 0.7)',
-      glassBorder: 'rgba(255, 255, 255, 0.5)',
-      glassShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-      glassBlur: 'blur(10px)',
-      glowPrimary: '0 4px 12px rgba(49, 130, 206, 0.3)',
-      glowSuccess: '0 4px 12px rgba(56, 161, 105, 0.3)',
-      glowWarning: '0 4px 12px rgba(214, 158, 46, 0.3)',
-      glowDanger: '0 4px 12px rgba(229, 62, 62, 0.3)',
-    },
-  },
-  neumorphismLight: {
-    id: 'neumorphismLight',
-    name: 'Neumorphism (Light)',
-    description: 'Soft tactile feel',
-    category: 'tactile',
-    config: { intensity: 'moderate', radius: 'rounded', shadow: 'moderate' },
-    colors: {
-      bgApp: '#e0e5ec',
-      bgSurface: '#e0e5ec',
-      bgSurfaceHover: '#e0e5ec', // Neumorphism relies on shadows, not bg color changes
-      textPrimary: '#4a5568',
-      textSecondary: '#718096',
-      textTertiary: '#a0aec0',
-      primary: '#667eea',
-      primaryDark: '#5a67d8',
-      success: '#48bb78',
-      warning: '#ed8936',
-      error: '#f56565',
-      info: '#4299e1',
-      border: 'transparent',
-      borderLight: 'transparent',
-      shadow: '9px 9px 16px rgb(163,177,198,0.6), -9px -9px 16px rgba(255,255,255, 0.5)',
-      scrollbarThumb: '#a3b1c6',
-      scrollbarThumbHover: '#8d9db6',
-      scrollbarThumbActive: '#7a8ba6',
-      glassBg: 'rgba(255, 255, 255, 0.5)',
-      glassBorder: 'rgba(255, 255, 255, 0.2)',
-      glassShadow: 'none',
-      glassBlur: 'none',
-      glowPrimary: 'none',
-      glowSuccess: 'none',
-      glowWarning: 'none',
-      glowDanger: 'none',
-    },
-  },
-  claymorphismLight: {
-    id: 'claymorphismLight',
-    name: 'Claymorphism',
-    description: 'Playful 3D',
-    category: 'tactile',
-    config: { intensity: 'bold', radius: 'pill', shadow: 'dramatic' },
-    colors: {
-      bgApp: '#f0f4f8',
-      bgSurface: '#ffffff',
-      bgSurfaceHover: '#f8fafc',
-      textPrimary: '#2d3748',
-      textSecondary: '#4a5568',
-      textTertiary: '#718096',
-      primary: '#ff6b6b',
-      primaryDark: '#ee5253',
-      success: '#1dd1a1',
-      warning: '#feca57',
-      error: '#ff6b6b',
-      info: '#54a0ff',
-      border: 'rgba(255, 255, 255, 0.5)',
-      borderLight: 'rgba(255, 255, 255, 0.3)',
-      shadow: '8px 8px 16px rgba(163, 177, 198, 0.2), -8px -8px 16px rgba(255, 255, 255, 0.8), inset 2px 2px 4px rgba(255, 255, 255, 0.5), inset -2px -2px 4px rgba(0, 0, 0, 0.05)',
-      scrollbarThumb: '#ff6b6b',
-      scrollbarThumbHover: '#ee5253',
-      scrollbarThumbActive: '#d63031',
-      glassBg: 'rgba(255, 255, 255, 0.8)',
-      glassBorder: 'rgba(255, 255, 255, 0.5)',
-      glassShadow: '8px 8px 16px rgba(0,0,0,0.1)',
-      glassBlur: 'blur(10px)',
-      glowPrimary: '0 10px 20px rgba(255, 107, 107, 0.3)',
-      glowSuccess: '0 10px 20px rgba(29, 209, 161, 0.3)',
-      glowWarning: '0 10px 20px rgba(254, 202, 87, 0.3)',
-      glowDanger: '0 10px 20px rgba(255, 107, 107, 0.3)',
-    },
-  },
-  neoBrutalism: {
-    id: 'neoBrutalism',
-    name: 'Neo-Brutalism',
-    description: 'Bold and raw',
-    category: 'bold',
-    config: { intensity: 'bold', radius: 'sharp', shadow: 'dramatic' },
-    colors: {
-      bgApp: '#fffdf5',
-      bgSurface: '#ffffff',
-      bgSurfaceHover: '#e2e8f0',
-      textPrimary: '#000000',
-      textSecondary: '#1a202c',
-      textTertiary: '#2d3748',
-      primary: '#8b5cf6',
-      primaryDark: '#7c3aed',
-      success: '#4ade80',
-      warning: '#facc15',
-      error: '#f87171',
-      info: '#60a5fa',
-      border: '#000000',
-      borderLight: '#000000',
-      shadow: '4px 4px 0px #000000',
-      scrollbarThumb: '#000000',
-      scrollbarThumbHover: '#333333',
-      scrollbarThumbActive: '#000000',
-      glassBg: '#ffffff',
-      glassBorder: '#000000',
-      glassShadow: '4px 4px 0px #000000',
-      glassBlur: 'none',
-      glowPrimary: 'none',
-      glowSuccess: 'none',
-      glowWarning: 'none',
-      glowDanger: 'none',
-    },
-  },
-  aurora: {
-    id: 'aurora',
-    name: 'Aurora',
-    description: 'Glowing light streaks',
-    category: 'vibrant',
-    config: { intensity: 'moderate', radius: 'rounded', shadow: 'moderate' },
-    colors: {
-      bgApp: '#0f172a',
-      bgSurface: 'rgba(30, 41, 59, 0.7)',
-      bgSurfaceHover: 'rgba(51, 65, 85, 0.7)',
-      textPrimary: '#f8fafc',
-      textSecondary: '#cbd5e1',
-      textTertiary: '#94a3b8',
-      primary: '#38bdf8',
-      primaryDark: '#0ea5e9',
-      success: '#4ade80',
-      warning: '#facc15',
-      error: '#f87171',
-      info: '#818cf8',
-      border: 'rgba(255, 255, 255, 0.1)',
-      borderLight: 'rgba(255, 255, 255, 0.05)',
-      shadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
-      scrollbarThumb: 'rgba(56, 189, 248, 0.4)',
-      scrollbarThumbHover: 'rgba(56, 189, 248, 0.6)',
-      scrollbarThumbActive: 'rgba(56, 189, 248, 0.8)',
-      glassBg: 'rgba(30, 41, 59, 0.7)',
-      glassBorder: 'rgba(255, 255, 255, 0.1)',
-      glassShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-      glassBlur: 'blur(16px)',
-      glowPrimary: '0 0 30px rgba(56, 189, 248, 0.5)',
-      glowSuccess: '0 0 20px rgba(74, 222, 128, 0.5)',
-      glowWarning: '0 0 20px rgba(250, 204, 21, 0.5)',
-      glowDanger: '0 0 20px rgba(248, 113, 113, 0.5)',
-    },
-  },
-  cyber: {
-    id: 'cyber',
-    name: 'Cyberpunk',
-    description: 'High tech low life',
-    category: 'futuristic',
-    config: { intensity: 'bold', radius: 'sharp', shadow: 'dramatic' },
-    colors: {
-      bgApp: '#000000',
-      bgSurface: '#121212',
-      bgSurfaceHover: '#1e1e1e',
-      textPrimary: '#00ff41',
-      textSecondary: '#008f11',
-      textTertiary: '#003b00',
-      primary: '#fdf500',
-      primaryDark: '#d1cb00',
-      success: '#00ff41',
-      warning: '#fdf500',
-      error: '#ff003c',
-      info: '#00f0ff',
-      border: '#00ff41',
-      borderLight: '#008f11',
-      shadow: '0 0 10px #00ff41',
-      scrollbarThumb: '#00ff41',
-      scrollbarThumbHover: '#008f11',
-      scrollbarThumbActive: '#003b00',
-      glassBg: 'rgba(0, 0, 0, 0.8)',
-      glassBorder: '#00ff41',
-      glassShadow: '0 0 15px #00ff41',
-      glassBlur: 'blur(2px)',
-      glowPrimary: '0 0 20px #fdf500',
-      glowSuccess: '0 0 20px #00ff41',
-      glowWarning: '0 0 20px #fdf500',
-      glowDanger: '0 0 20px #ff003c',
+      glowPrimary: 'rgba(107, 115, 255, 0.4)',
+      glowSuccess: 'rgba(46, 213, 115, 0.4)',
+      glowWarning: 'rgba(255, 165, 2, 0.4)',
+      glowDanger: 'rgba(255, 71, 87, 0.4)',
     },
   },
 };
 
-export const fonts = {
-  inter: { name: 'Inter', value: '"Inter", sans-serif' },
-  roboto: { name: 'Roboto', value: '"Roboto", sans-serif' },
-  quicksand: { name: 'Quicksand', value: '"Quicksand", sans-serif' },
-  fira: { name: 'Fira Code', value: '"Fira Code", monospace' },
-  space: { name: 'Space Grotesk', value: '"Space Grotesk", sans-serif' },
+// --- Fonts ---
+export interface FontTheme {
+  id: string;
+  name: string;
+  fontFamily: string;
+}
+
+export const fontThemes: Record<string, FontTheme> = {
+  inter: { id: 'inter', name: 'Inter', fontFamily: '"Inter", sans-serif' },
+  roboto: { id: 'roboto', name: 'Roboto', fontFamily: '"Roboto", sans-serif' },
+  quicksand: { id: 'quicksand', name: 'Quicksand', fontFamily: '"Quicksand", sans-serif' },
+  firaCode: { id: 'firaCode', name: 'Fira Code', fontFamily: '"Fira Code", monospace' },
+  spaceGrotesk: { id: 'spaceGrotesk', name: 'Space Grotesk', fontFamily: '"Space Grotesk", sans-serif' },
 };
 
-export const applyTheme = (theme: Theme) => {
+// --- Effects ---
+export interface EffectSettings {
+  glowStrength: number; // 0 to 100
+  glassOpacity: number; // 0 to 100
+  glassBlur: number; // 0 to 20 (px)
+  shadowStrength: number; // 0 to 100
+  borderRadius: number; // 0 to 24 (px)
+}
+
+export const defaultEffectSettings: EffectSettings = {
+  glowStrength: 50,
+  glassOpacity: 70,
+  glassBlur: 10,
+  shadowStrength: 40,
+  borderRadius: 12,
+};
+
+// --- Utilities ---
+
+export const getThemeCssVariables = (
+  colorTheme: ColorTheme,
+  fontTheme: FontTheme,
+  effects: EffectSettings
+): React.CSSProperties => {
+  const cssVars: any = {};
+
+  // Apply Colors
+  Object.entries(colorTheme.colors).forEach(([key, value]) => {
+    // Convert camelCase to kebab-case for CSS variables
+    const cssVar = `--${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+    cssVars[cssVar] = value;
+  });
+
+  // Apply Fonts
+  cssVars['--font-default'] = fontTheme.fontFamily;
+
+  // Apply Effects
+  cssVars['--glow-strength'] = effects.glowStrength.toString();
+  cssVars['--glass-opacity'] = (effects.glassOpacity / 100).toString();
+  cssVars['--glass-blur'] = `${effects.glassBlur}px`;
+  cssVars['--shadow-strength'] = (effects.shadowStrength / 100).toString();
+  cssVars['--border-radius'] = `${effects.borderRadius}px`;
+
+  return cssVars;
+};
+
+export const applyTheme = (
+  colorTheme: ColorTheme,
+  fontTheme: FontTheme,
+  effects: EffectSettings
+) => {
   const root = document.documentElement;
-  
-  // Apply all color variables
-  root.style.setProperty('--bg-app', theme.colors.bgApp);
-  root.style.setProperty('--bg-surface', theme.colors.bgSurface);
-  root.style.setProperty('--bg-surface-hover', theme.colors.bgSurfaceHover);
-  root.style.setProperty('--text-primary', theme.colors.textPrimary);
-  root.style.setProperty('--text-secondary', theme.colors.textSecondary);
-  root.style.setProperty('--text-tertiary', theme.colors.textTertiary);
-  root.style.setProperty('--primary', theme.colors.primary);
-  root.style.setProperty('--primary-dark', theme.colors.primaryDark);
-  root.style.setProperty('--success', theme.colors.success);
-  root.style.setProperty('--warning', theme.colors.warning);
-  root.style.setProperty('--error', theme.colors.error);
-  root.style.setProperty('--info', theme.colors.info);
-  root.style.setProperty('--border', theme.colors.border);
-  root.style.setProperty('--border-light', theme.colors.borderLight);
-  root.style.setProperty('--shadow', theme.colors.shadow);
-  
-  // Apply glassmorphism variables
-  root.style.setProperty('--glass-bg', theme.colors.glassBg);
-  root.style.setProperty('--glass-border', theme.colors.glassBorder);
-  root.style.setProperty('--glass-shadow', theme.colors.glassShadow);
-  root.style.setProperty('--glass-blur', theme.colors.glassBlur);
-  
-  // Apply glow effect variables
-  root.style.setProperty('--glow-primary', theme.colors.glowPrimary);
-  root.style.setProperty('--glow-success', theme.colors.glowSuccess);
-  root.style.setProperty('--glow-warning', theme.colors.glowWarning);
-  root.style.setProperty('--glow-danger', theme.colors.glowDanger);
+  const cssVars = getThemeCssVariables(colorTheme, fontTheme, effects);
 
-  // Apply config
-  const config = theme.config || { intensity: 'moderate', radius: 'rounded', shadow: 'moderate' };
-  root.setAttribute('data-intensity', config.intensity);
-  root.setAttribute('data-radius', config.radius);
-  root.setAttribute('data-shadow', config.shadow);
-  
-  // Set data-theme attribute for compatibility
-  // Light themes: light, lavender, coral, frost, neumorphismLight
-  const lightThemes = ['light', 'lavender', 'coral', 'frost', 'neumorphismLight', 'claymorphismLight', 'minimalLight'];
-  root.setAttribute('data-theme', lightThemes.includes(theme.id) ? 'light' : 'dark');
+  Object.entries(cssVars).forEach(([key, value]) => {
+    root.style.setProperty(key, value as string);
+  });
 };
 
-export const applyFont = (fontValue: string) => {
-  document.documentElement.style.setProperty('--font-default', fontValue);
-};
-
-export const saveTheme = (themeId: string) => {
-  localStorage.setItem('preferred-theme', themeId);
-};
-
-export const saveFont = (fontKey: string) => {
-  localStorage.setItem('preferred-font', fontKey);
-};
-
-export const loadSavedTheme = (): string => {
-  const saved = localStorage.getItem('preferred-theme');
-  if (saved) return saved;
-  
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    return 'dark';
+export const loadSavedTheme = () => {
+  try {
+    const saved = localStorage.getItem('theme_preference');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('Failed to load theme', e);
   }
-  
-  return 'light';
+  return null;
 };
 
-export const loadSavedFont = (): string => {
-  return localStorage.getItem('preferred-font') || 'inter';
+export const saveTheme = (
+  colorId: string,
+  fontId: string,
+  effects: EffectSettings
+) => {
+  try {
+    localStorage.setItem('theme_preference', JSON.stringify({
+      colorId,
+      fontId,
+      effects
+    }));
+  } catch (e) {
+    console.error('Failed to save theme', e);
+  }
 };
 
-export const getTheme = (themeId: string): Theme => {
-  return themes[themeId] || themes.light;
+export const getTheme = (id: string): ColorTheme => {
+  return colorThemes[id] || colorThemes.light;
 };

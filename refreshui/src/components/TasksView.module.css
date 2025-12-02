@@ -30,7 +30,8 @@
   gap: 8px;
   flex-shrink: 0;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: 8px;
+  /* border-bottom: 1px solid var(--glass-border); Removed to prevent shadow artifacts */
 }
 
 /* New 2-Column Section Layout */
@@ -77,6 +78,11 @@
 }
 
 .miniInput {
+  /* Override default Input styles for compact filter inputs */
+  display: flex;
+}
+
+.miniInput input {
   height: 26px;
   font-size: 11px;
   background: var(--glass-bg);
@@ -84,11 +90,14 @@
   backdrop-filter: var(--glass-blur);
   color: var(--text-primary);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 4px 8px 4px 28px !important; /* Space for icon on left */
 }
 
-.miniInput:focus {
+.miniInput input:focus {
   border-color: var(--primary);
-  box-shadow: var(--glow-primary);
+  box-shadow: 
+    0 0 0 1px var(--primary),
+    0 0 calc(var(--glow-strength) * 0.2px) var(--glow-primary);
 }
 
 /* Column 2: Scrollable Cards */
@@ -98,9 +107,12 @@
   gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px;
+  padding: 40px 12px; /* Large padding for glass shadow (0 8px 32px) */
+  margin: -32px 0; /* Negative margin to counteract padding */
   align-items: center;
   scrollbar-width: none; 
+  position: relative;
+  z-index: 1; 
   -ms-overflow-style: none;
 }
 
@@ -132,14 +144,17 @@
 .projectCard:hover {
   border-color: var(--primary);
   transform: translateY(-2px) scale(1.02);
-  box-shadow: var(--glow-primary), var(--glass-shadow);
+  box-shadow: 
+    var(--glass-shadow),
+    0 0 calc(var(--glow-strength) * 0.2px) var(--glow-primary);
   background: rgba(var(--primary-rgb), 0.1);
 }
 
 .projectCard.active {
   background: rgba(var(--primary-rgb), 0.15);
   border-color: var(--primary);
-  box-shadow: var(--glow-primary);
+  box-shadow: 
+    0 0 calc(var(--glow-strength) * 0.2px) var(--glow-primary);
 }
 
 /* Row 1: Project Name */
@@ -223,7 +238,9 @@
 .taskListCard:hover {
   border-color: var(--primary);
   transform: translateY(-2px) scale(1.02);
-  box-shadow: var(--glow-primary), var(--glass-shadow);
+  box-shadow: 
+    var(--glass-shadow),
+    0 0 calc(var(--glow-strength) * 0.2px) var(--glow-primary);
   background: rgba(var(--primary-rgb), 0.1);
 }
 
@@ -334,8 +351,10 @@
 
 .readyTaskItem:hover {
   transform: translateX(4px);
-  box-shadow: var(--glow-warning), var(--glass-shadow);
-  border-color: var(--warning);
+  box-shadow: 
+    var(--glass-shadow),
+    0 0 calc(var(--glow-strength) * 0.2px) var(--glow-primary);
+  border-color: var(--primary);
 }
 
 .readyTaskHeader {
@@ -404,7 +423,8 @@
   display: flex;
   gap: 12px;
   align-items: center;
-  flex: 1
+  flex: 1;
+  padding: 4px; /* Prevent focus ring clipping */
 }
 
 .searchContainer {

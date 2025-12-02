@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button, Card, Input, Skeleton } from "../components/ui";
 import { StatusIndicator } from './StatusIndicator';
 import { ReadyTasksCount } from './ReadyTasksCount';
@@ -47,19 +47,23 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [projectFilter, setProjectFilter] = useState('');
   const [listFilter, setListFilter] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const [filters, setFilters] = useState({
     status: [] as string[],
     priority: [] as string[],
   });
 
-  const handleFilterChange = (type: 'status' | 'priority', value: string) => {
-    setFilters(prev => {
-      const current = prev[type];
-      const updated = current.includes(value)
-        ? current.filter(item => item !== value)
-        : [...current, value];
-      return { ...prev, [type]: updated };
-    });
+  const handleFilterChange = (type: 'status' | 'priority' | 'hasExitCriteria' | 'hasDependencies', value: string) => {
+    if (type === 'status' || type === 'priority') {
+      setFilters(prev => {
+        const current = prev[type];
+        const updated = current.includes(value)
+          ? current.filter(item => item !== value)
+          : [...current, value];
+        return { ...prev, [type]: updated };
+      });
+    }
+    // hasExitCriteria and hasDependencies are not used in TasksView, so we ignore them
   };
 
   const clearFilters = () => {
@@ -290,6 +294,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
             </div>
             <div style={{ position: 'relative' }}>
               <Button 
+                ref={filterButtonRef}
                 variant={filters.status.length > 0 || filters.priority.length > 0 ? "primary" : "secondary"} 
                 icon={<Filter size={16} />}
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
@@ -302,6 +307,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 filters={filters}
                 onFilterChange={handleFilterChange}
                 onClear={clearFilters}
+                buttonRef={filterButtonRef}
               />
             </div>
           </div>
@@ -336,6 +342,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   return 'radial-gradient(circle at top right, color-mix(in srgb, var(--success) 15%, transparent) 0%, transparent 60%)';
                 case 'BLOCKED':
                   return 'radial-gradient(circle at top right, color-mix(in srgb, var(--error) 15%, transparent) 0%, transparent 60%)';
+                case 'NOT_STARTED':
+                  return 'radial-gradient(circle at top right, color-mix(in srgb, var(--text-primary) 5%, transparent) 0%, transparent 60%)';
                 default:
                   return undefined;
               }
@@ -348,7 +356,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 onClick={() => onTaskClick(task)}
                 style={{ 
                   background: getStatusBackground(task.status),
-                  borderColor: task.status === 'IN_PROGRESS' || task.status === 'BLOCKED' ? 'transparent' : undefined
                 }}
               >
                 <div className={styles.taskCard}>
