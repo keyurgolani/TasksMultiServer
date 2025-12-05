@@ -5,6 +5,7 @@ import type { Project, TaskList, Task } from "../api/client";
 import { StatsPanel } from "./StatsPanel";
 import { SearchFilterToolbar } from "./SearchFilterToolbar";
 import { TaskListFilterPopover } from "./TaskListFilterPopover";
+import { ActionMenu } from "./ActionMenu";
 import styles from "./TaskListView.module.css";
 
 interface TaskListViewProps {
@@ -13,6 +14,8 @@ interface TaskListViewProps {
   tasks: Task[];
   onTaskClick: (task: Task) => void;
   onTaskListClick: (taskListId: string, projectId: string) => void;
+  onTaskListEdit?: (taskListId: string, projectId: string) => void;
+  onTaskListDelete?: (taskListId: string, projectId: string) => void;
 }
 
 export const TaskListView: React.FC<TaskListViewProps> = ({
@@ -21,6 +24,8 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
   tasks,
   onTaskClick,
   onTaskListClick,
+  onTaskListEdit,
+  onTaskListDelete,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -30,6 +35,18 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
     priority: [] as string[],
     taskCount: 'all',
     completion: 'all',
+  });
+
+  const [sort, setSort] = useState<{
+    projectField: 'name' | 'listCount';
+    projectDirection: 'asc' | 'desc';
+    listField: 'name' | 'taskCount' | 'completion';
+    listDirection: 'asc' | 'desc';
+  }>({
+    projectField: 'listCount',
+    projectDirection: 'desc',
+    listField: 'taskCount',
+    listDirection: 'desc'
   });
 
   const handleFilterChange = (type: "status" | "priority" | "taskCount" | "completion", value: string) => {
@@ -46,8 +63,22 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
     }
   };
 
+  const handleSortChange = (type: 'projectField' | 'listField', field: string, direction: 'asc' | 'desc') => {
+    setSort(prev => ({
+      ...prev,
+      [type]: field,
+      [type === 'projectField' ? 'projectDirection' : 'listDirection']: direction
+    }));
+  };
+
   const clearFilters = () => {
     setFilters({ status: [], priority: [], taskCount: 'all', completion: 'all' });
+    setSort({
+      projectField: 'listCount',
+      projectDirection: 'desc',
+      listField: 'taskCount',
+      listDirection: 'desc'
+    });
   };
 
   // Calculate stats for a task list
@@ -120,7 +151,17 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
         onClearSearch={() => setSearchQuery('')}
         isFilterOpen={isFilterOpen}
         setIsFilterOpen={setIsFilterOpen}
-        isFilterActive={filters.status.length > 0 || filters.priority.length > 0 || filters.taskCount !== 'all' || filters.completion !== 'all'}
+        isFilterActive={
+          filters.status.length > 0 || 
+          filters.priority.length > 0 || 
+          filters.taskCount !== 'all' || 
+          filters.completion !== 'all' ||
+          sort.projectField !== 'listCount' ||
+          sort.projectDirection !== 'desc' ||
+          sort.listField !== 'taskCount' ||
+          sort.listDirection !== 'desc'
+        }
+        onReset={clearFilters}
         filterButtonRef={filterButtonRef as React.RefObject<HTMLButtonElement>}
         placeholder="Search task lists or tasks..."
       >
@@ -128,7 +169,9 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
           isOpen={isFilterOpen}
           onClose={() => setIsFilterOpen(false)}
           filters={filters}
+          sort={sort}
           onFilterChange={handleFilterChange}
+          onSortChange={handleSortChange}
           onClear={clearFilters}
           buttonRef={filterButtonRef}
         />
@@ -137,19 +180,42 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
       <div className={styles.content}>
         {filteredProjects
           .sort((a, b) => {
-            // Sort projects by task list count (descending)
-            const aListCount = taskLists.filter(l => l.project_id === a.id).length;
-            const bListCount = taskLists.filter(l => l.project_id === b.id).length;
-            return bListCount - aListCount;
+            const direction = sort.projectDirection === 'asc' ? 1 : -1;
+            
+            if (sort.projectField === 'name') {
+              return a.name.localeCompare(b.name) * direction;
+            }
+            
+            if (sort.projectField === 'listCount') {
+              const aListCount = taskLists.filter(l => l.project_id === a.id).length;
+              const bListCount = taskLists.filter(l => l.project_id === b.id).length;
+              return (aListCount - bListCount) * direction;
+            }
+            
+            return 0;
           })
           .map((project) => {
           const projectLists = taskLists
             .filter((list) => list.project_id === project.id)
             .sort((a, b) => {
-              // Sort task lists by task count (descending)
-              const aTaskCount = tasks.filter(t => t.task_list_id === a.id).length;
-              const bTaskCount = tasks.filter(t => t.task_list_id === b.id).length;
-              return bTaskCount - aTaskCount;
+              const direction = sort.listDirection === 'asc' ? 1 : -1;
+              
+              if (sort.listField === 'name') {
+                return a.name.localeCompare(b.name) * direction;
+              }
+              
+              const statsA = getListStats(a.id);
+              const statsB = getListStats(b.id);
+              
+              if (sort.listField === 'taskCount') {
+                return (statsA.total - statsB.total) * direction;
+              }
+              
+              if (sort.listField === 'completion') {
+                return (statsA.completionRate - statsB.completionRate) * direction;
+              }
+              
+              return 0;
             })
             .filter((list) => {
               // Apply task count filter
@@ -178,27 +244,22 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
           // Dynamic width calculation
           // Base width of a card is roughly 400px (380px min-width + gap)
           // We limit the max columns to 4 to prevent it from becoming too wide on huge screens
-          const columnsNeeded = Math.min(projectLists.length, 4);
+          // const columnsNeeded = Math.min(projectLists.length, 4);
 
           // Calculate flex-basis: roughly columns * 400px
           // We use a percentage calculation for better responsiveness
           // 1 col ~ 25%, 2 cols ~ 50%, etc., but with some flexibility
           // Using a pixel basis is safer for the masonry-like wrap effect
-          const flexBasis = `${columnsNeeded * 400}px`;
+          // const flexBasis = `${columnsNeeded * 400}px`;
 
           // If it has many lists, let it grow to fill the row.
           // If it has few, it stays compact.
-          const flexGrow = projectLists.length > 3 ? 1 : 0;
+          // const flexGrow = projectLists.length > 3 ? 1 : 0;
 
           return (
             <div
               key={project.id}
               className={styles.projectSection}
-              style={{
-                flexBasis: flexBasis,
-                flexGrow: flexGrow,
-                maxWidth: "100%", // Ensure it doesn't overflow container
-              }}
             >
               <div className={styles.projectHeader}>
                 <h2 className={styles.projectName}>{project.name}</h2>
@@ -213,15 +274,23 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                   const stats = getListStats(list.id);
 
                   return (
-                    <div key={list.id} className={styles.listCard}>
+                    <div key={list.id} className={`${styles.listCard} hover-lift`}>
                       <div
                         className={styles.listHeader}
                         onClick={() => onTaskListClick(list.id, project.id)}
                       >
-                        <div className={styles.listTitleRow}>
+                      <div className={styles.listTitleRow}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <List size={18} className={styles.listIcon} />
                           <h3 className={styles.listName}>{list.name}</h3>
                         </div>
+                        {(onTaskListEdit || onTaskListDelete) && (
+                          <ActionMenu
+                            onEdit={onTaskListEdit ? () => onTaskListEdit(list.id, project.id) : undefined}
+                            onDelete={onTaskListDelete ? () => onTaskListDelete(list.id, project.id) : undefined}
+                          />
+                        )}
+                      </div>
 
                         <div className={styles.listMetrics}>
                           <StatsPanel 

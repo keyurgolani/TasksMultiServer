@@ -12,7 +12,14 @@ interface TaskListFilterPopoverProps {
     taskCount: string;
     completion: string;
   };
+  sort: {
+    projectField: 'name' | 'listCount';
+    projectDirection: 'asc' | 'desc';
+    listField: 'name' | 'taskCount' | 'completion';
+    listDirection: 'asc' | 'desc';
+  };
   onFilterChange: (type: 'status' | 'priority' | 'taskCount' | 'completion', value: string) => void;
+  onSortChange: (type: 'projectField' | 'listField', field: string, direction: 'asc' | 'desc') => void;
   onClear: () => void;
   buttonRef?: React.RefObject<HTMLButtonElement | null>;
 }
@@ -21,7 +28,9 @@ export const TaskListFilterPopover: React.FC<TaskListFilterPopoverProps> = ({
   isOpen,
   onClose,
   filters,
+  sort,
   onFilterChange,
+  onSortChange,
   onClear,
   buttonRef,
 }) => {
@@ -54,13 +63,117 @@ export const TaskListFilterPopover: React.FC<TaskListFilterPopoverProps> = ({
   return (
     <div ref={popoverRef} className={styles.popover}>
       <div className={styles.header}>
-        <h3>Filters</h3>
+        <h3>Sort & Filter</h3>
         <button className={styles.closeButton} onClick={onClose}>
           <X size={16} />
         </button>
       </div>
 
       <div className={styles.gridContainer}>
+        {/* Project Sort */}
+        <div className={styles.section}>
+          <h4>Sort Projects By</h4>
+          <div className={styles.options}>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="projectSort"
+                checked={sort.projectField === 'name' && sort.projectDirection === 'asc'}
+                onChange={() => onSortChange('projectField', 'name', 'asc')}
+              />
+              Name (A-Z)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="projectSort"
+                checked={sort.projectField === 'name' && sort.projectDirection === 'desc'}
+                onChange={() => onSortChange('projectField', 'name', 'desc')}
+              />
+              Name (Z-A)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="projectSort"
+                checked={sort.projectField === 'listCount' && sort.projectDirection === 'desc'}
+                onChange={() => onSortChange('projectField', 'listCount', 'desc')}
+              />
+              List Count (High-Low)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="projectSort"
+                checked={sort.projectField === 'listCount' && sort.projectDirection === 'asc'}
+                onChange={() => onSortChange('projectField', 'listCount', 'asc')}
+              />
+              List Count (Low-High)
+            </label>
+          </div>
+        </div>
+
+        {/* List Sort */}
+        <div className={styles.section}>
+          <h4>Sort Lists By</h4>
+          <div className={styles.options}>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="listSort"
+                checked={sort.listField === 'name' && sort.listDirection === 'asc'}
+                onChange={() => onSortChange('listField', 'name', 'asc')}
+              />
+              Name (A-Z)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="listSort"
+                checked={sort.listField === 'name' && sort.listDirection === 'desc'}
+                onChange={() => onSortChange('listField', 'name', 'desc')}
+              />
+              Name (Z-A)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="listSort"
+                checked={sort.listField === 'taskCount' && sort.listDirection === 'desc'}
+                onChange={() => onSortChange('listField', 'taskCount', 'desc')}
+              />
+              Task Count (High-Low)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="listSort"
+                checked={sort.listField === 'taskCount' && sort.listDirection === 'asc'}
+                onChange={() => onSortChange('listField', 'taskCount', 'asc')}
+              />
+              Task Count (Low-High)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="listSort"
+                checked={sort.listField === 'completion' && sort.listDirection === 'desc'}
+                onChange={() => onSortChange('listField', 'completion', 'desc')}
+              />
+              Completion (High-Low)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="listSort"
+                checked={sort.listField === 'completion' && sort.listDirection === 'asc'}
+                onChange={() => onSortChange('listField', 'completion', 'asc')}
+              />
+              Completion (Low-High)
+            </label>
+          </div>
+        </div>
+
         {/* Task Status Filters */}
         <div className={styles.section}>
           <h4>Task Status</h4>

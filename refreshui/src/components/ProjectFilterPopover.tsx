@@ -11,7 +11,12 @@ interface ProjectFilterPopoverProps {
     taskCount: string; // 'all' | 'empty' | 'hasTasks'
     isDefault: string; // 'all' | 'default' | 'nonDefault'
   };
+  sort: {
+    field: 'name' | 'created_at' | 'completion' | 'taskCount';
+    direction: 'asc' | 'desc';
+  };
   onFilterChange: (type: 'completion' | 'taskCount' | 'isDefault', value: string) => void;
+  onSortChange: (field: 'name' | 'created_at' | 'completion' | 'taskCount', direction: 'asc' | 'desc') => void;
   onClear: () => void;
   buttonRef?: React.RefObject<HTMLButtonElement | null>;
 }
@@ -20,7 +25,9 @@ export const ProjectFilterPopover: React.FC<ProjectFilterPopoverProps> = ({
   isOpen,
   onClose,
   filters,
+  sort,
   onFilterChange,
+  onSortChange,
   onClear,
   buttonRef,
 }) => {
@@ -54,13 +61,91 @@ export const ProjectFilterPopover: React.FC<ProjectFilterPopoverProps> = ({
   return (
     <div ref={popoverRef} className={styles.popover}>
       <div className={styles.header}>
-        <h3>Filters</h3>
+        <h3>Sort & Filter</h3>
         <button className={styles.closeButton} onClick={onClose}>
           <X size={16} />
         </button>
       </div>
       
       <div className={styles.gridContainer}>
+        <div className={styles.section}>
+          <h4>Sort By</h4>
+          <div className={styles.options}>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="sort"
+                checked={sort.field === 'name' && sort.direction === 'asc'}
+                onChange={() => onSortChange('name', 'asc')}
+              />
+              Name (A-Z)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="sort"
+                checked={sort.field === 'name' && sort.direction === 'desc'}
+                onChange={() => onSortChange('name', 'desc')}
+              />
+              Name (Z-A)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="sort"
+                checked={sort.field === 'created_at' && sort.direction === 'desc'}
+                onChange={() => onSortChange('created_at', 'desc')}
+              />
+              Newest First
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="sort"
+                checked={sort.field === 'created_at' && sort.direction === 'asc'}
+                onChange={() => onSortChange('created_at', 'asc')}
+              />
+              Oldest First
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="sort"
+                checked={sort.field === 'completion' && sort.direction === 'desc'}
+                onChange={() => onSortChange('completion', 'desc')}
+              />
+              Completion (High-Low)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="sort"
+                checked={sort.field === 'completion' && sort.direction === 'asc'}
+                onChange={() => onSortChange('completion', 'asc')}
+              />
+              Completion (Low-High)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="sort"
+                checked={sort.field === 'taskCount' && sort.direction === 'desc'}
+                onChange={() => onSortChange('taskCount', 'desc')}
+              />
+              Task Count (High-Low)
+            </label>
+            <label className={styles.radioLabel}>
+              <input
+                type="radio"
+                name="sort"
+                checked={sort.field === 'taskCount' && sort.direction === 'asc'}
+                onChange={() => onSortChange('taskCount', 'asc')}
+              />
+              Task Count (Low-High)
+            </label>
+          </div>
+        </div>
+
         <div className={styles.section}>
           <h4>Completion</h4>
           <div className={styles.options}>

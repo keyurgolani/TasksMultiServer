@@ -57,13 +57,34 @@
   gap: var(--space-4);
 }
 
-.error {
-  background: rgba(255, 71, 87, 0.1);
-  border: 1px solid #FF4757;
-  color: #FF4757;
+/* Submit Error - Using Design System Error Tokens */
+.submitError {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--status-error-bg);
+  border: 1px solid var(--error);
+  color: var(--status-error-text);
   padding: var(--space-3);
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  animation: errorSlideIn 0.3s ease-out;
+}
+
+.submitErrorIcon {
+  flex-shrink: 0;
+  color: var(--error);
+}
+
+@keyframes errorSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .actions {

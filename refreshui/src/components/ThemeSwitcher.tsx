@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { themes, type ThemeCategory, type VisualIntensity, type BorderRadius, type ShadowDepth } from '../styles/themes';
+import { colorThemes, type ThemeCategory } from '../styles/themes';
 
 const categories: { id: ThemeCategory; label: string }[] = [
   { id: 'minimal', label: 'Minimal & Clean' },
@@ -12,12 +12,60 @@ const categories: { id: ThemeCategory; label: string }[] = [
 ];
 
 export const ThemeSwitcher: React.FC = () => {
-  const { currentTheme, setTheme, config, updateConfig, resetConfig } = useTheme();
+  const { 
+    activeColorTheme, 
+    setColorTheme, 
+    activeEffectSettings, 
+    updateEffectSetting
+  } = useTheme();
+  
   const [isOpen, setIsOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<ThemeCategory>('minimal');
 
-  const themeList = Object.values(themes);
+  const themeList = Object.values(colorThemes);
   const filteredThemes = themeList.filter(t => (t.category || 'minimal') === activeCategory);
+
+  // Helper to determine current intensity/radius/shadow state for UI
+  const getIntensity = (glow: number) => {
+    if (glow <= 30) return 'subtle';
+    if (glow <= 60) return 'moderate';
+    return 'bold';
+  };
+
+  const getRadius = (radius: number) => {
+    if (radius === 0) return 'sharp';
+    if (radius <= 12) return 'rounded';
+    return 'pill';
+  };
+
+  const getShadow = (shadow: number) => {
+    if (shadow === 0) return 'none';
+    if (shadow <= 20) return 'subtle';
+    if (shadow <= 50) return 'moderate';
+    return 'dramatic';
+  };
+
+  const handleIntensityChange = (val: string) => {
+    let glow = 50;
+    if (val === 'subtle') glow = 20;
+    if (val === 'bold') glow = 80;
+    updateEffectSetting('glowStrength', glow);
+  };
+
+  const handleRadiusChange = (val: string) => {
+    let radius = 12;
+    if (val === 'sharp') radius = 0;
+    if (val === 'pill') radius = 24;
+    updateEffectSetting('borderRadius', radius);
+  };
+
+  const handleShadowChange = (val: string) => {
+    let shadow = 40;
+    if (val === 'none') shadow = 0;
+    if (val === 'subtle') shadow = 20;
+    if (val === 'dramatic') shadow = 80;
+    updateEffectSetting('shadowStrength', shadow);
+  };
 
   if (!isOpen) {
     return (
@@ -82,20 +130,20 @@ export const ThemeSwitcher: React.FC = () => {
                 {filteredThemes.map(theme => (
                   <button
                     key={theme.id}
-                    onClick={() => setTheme(theme.id)}
+                    onClick={() => setColorTheme(theme.id)}
                     className={`group relative p-4 rounded-xl border-2 transition-all text-left ${
-                      currentTheme.id === theme.id 
+                      activeColorTheme.id === theme.id 
                         ? 'border-primary ring-2 ring-primary/20' 
                         : 'border-border hover:border-primary/50'
                     }`}
                     style={{ 
-                      borderColor: currentTheme.id === theme.id ? 'var(--primary)' : 'var(--border)',
+                      borderColor: activeColorTheme.id === theme.id ? 'var(--primary)' : 'var(--border)',
                       backgroundColor: theme.colors.bgApp 
                     }}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium" style={{ color: theme.colors.textPrimary }}>{theme.name}</span>
-                      {currentTheme.id === theme.id && (
+                      {activeColorTheme.id === theme.id && (
                         <span className="bg-primary text-white text-xs px-2 py-1 rounded-full" style={{ backgroundColor: theme.colors.primary }}>Active</span>
                       )}
                     </div>
@@ -115,13 +163,7 @@ export const ThemeSwitcher: React.FC = () => {
             <div className="border-t border-border pt-8" style={{ borderColor: 'var(--border)' }}>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-semibold">Customization</h3>
-                <button 
-                  onClick={resetConfig}
-                  className="text-sm text-primary hover:underline"
-                  style={{ color: 'var(--primary)' }}
-                >
-                  Reset to Defaults
-                </button>
+                {/* Reset button removed for simplicity or can be re-added if needed */}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -129,13 +171,13 @@ export const ThemeSwitcher: React.FC = () => {
                 <div className="space-y-4">
                   <label className="block text-sm font-medium text-text-secondary" style={{ color: 'var(--text-secondary)' }}>Visual Intensity</label>
                   <div className="flex flex-col gap-2">
-                    {(['subtle', 'moderate', 'bold'] as VisualIntensity[]).map(val => (
+                    {['subtle', 'moderate', 'bold'].map(val => (
                       <label key={val} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-surface-hover">
                         <input 
                           type="radio" 
                           name="intensity" 
-                          checked={config.intensity === val}
-                          onChange={() => updateConfig({ intensity: val })}
+                          checked={getIntensity(activeEffectSettings.glowStrength) === val}
+                          onChange={() => handleIntensityChange(val)}
                           className="accent-primary"
                         />
                         <span className="capitalize">{val}</span>
@@ -148,13 +190,13 @@ export const ThemeSwitcher: React.FC = () => {
                 <div className="space-y-4">
                   <label className="block text-sm font-medium text-text-secondary" style={{ color: 'var(--text-secondary)' }}>Border Radius</label>
                   <div className="flex flex-col gap-2">
-                    {(['sharp', 'rounded', 'pill'] as BorderRadius[]).map(val => (
+                    {['sharp', 'rounded', 'pill'].map(val => (
                       <label key={val} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-surface-hover">
                         <input 
                           type="radio" 
                           name="radius" 
-                          checked={config.radius === val}
-                          onChange={() => updateConfig({ radius: val })}
+                          checked={getRadius(activeEffectSettings.borderRadius) === val}
+                          onChange={() => handleRadiusChange(val)}
                           className="accent-primary"
                         />
                         <span className="capitalize">{val}</span>
@@ -167,13 +209,13 @@ export const ThemeSwitcher: React.FC = () => {
                 <div className="space-y-4">
                   <label className="block text-sm font-medium text-text-secondary" style={{ color: 'var(--text-secondary)' }}>Shadow Depth</label>
                   <div className="flex flex-col gap-2">
-                    {(['none', 'subtle', 'moderate', 'dramatic'] as ShadowDepth[]).map(val => (
+                    {['none', 'subtle', 'moderate', 'dramatic'].map(val => (
                       <label key={val} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-surface-hover">
                         <input 
                           type="radio" 
                           name="shadow" 
-                          checked={config.shadow === val}
-                          onChange={() => updateConfig({ shadow: val })}
+                          checked={getShadow(activeEffectSettings.shadowStrength) === val}
+                          onChange={() => handleShadowChange(val)}
                           className="accent-primary"
                         />
                         <span className="capitalize">{val}</span>

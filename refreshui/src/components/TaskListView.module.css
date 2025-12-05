@@ -20,22 +20,25 @@
 }
 
 .content {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  align-items: flex-start;
-  overflow-y: auto; /* Only content scrolls */
-  flex: 1; /* Take remaining space */
-  padding-bottom: 24px;
+  column-count: 2;
+  column-gap: 24px;
+  padding: 20px 12px 24px 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+@media (max-width: 1400px) {
+  .content {
+    column-count: 1;
+  }
 }
 
 .projectSection {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  flex-grow: 1;
-  min-width: 400px; /* Minimum width for at least one list */
-  /* max-width and flex-basis will be handled in JS */
+  break-inside: avoid;
+  margin-bottom: 24px;
 }
 
 .projectHeader {
@@ -82,9 +85,20 @@
 
 /* Grid layout for lists within a project */
 .listsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 16px;
+  column-count: 3;
+  column-gap: 16px;
+}
+
+@media (max-width: 1600px) {
+  .listsGrid {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 900px) {
+  .listsGrid {
+    column-count: 1;
+  }
 }
 
 .listCard {
@@ -98,15 +112,12 @@
   gap: 8px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: var(--glass-shadow);
-  margin-bottom: 0;
-  max-height: 600px;
+  margin-bottom: 16px;
+  height: fit-content;
+  break-inside: avoid;
 }
 
-.listCard:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--glow-primary), var(--glass-shadow);
-  border-color: var(--primary);
-}
+
 
 .listHeader {
   padding: 12px;
@@ -119,15 +130,15 @@
   transition: background 0.2s;
 }
 
-.listHeader:hover {
-  background: var(--bg-surface-hover);
-  border-radius: 8px;
-}
-
 .listTitleRow {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
+}
+
+.listTitleRow:hover .container {
+  opacity: 1;
 }
 
 .listIcon {
@@ -172,12 +183,12 @@
 }
 
 .tasksContainer {
-  padding: 8px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   flex: 1;
-  min-height: 80px;
+  min-height: 0;
   max-height: 400px;
   overflow-y: auto;
 }

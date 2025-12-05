@@ -1,15 +1,38 @@
 .toolbar {
   display: flex;
   gap: 12px;
-  margin-bottom: 24px;
-  align-items: center;
+  margin-bottom: 12px;
 }
 
 .searchContainer {
   flex: 1;
-  position: relative;
 }
 
 .filterContainer {
   position: relative;
+}
+
+.filterButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resetIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2);
+  font-size: 14px;
+  line-height: 1;
+  margin-left: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.resetIcon:hover {
+  background-color: rgba(255, 255, 255, 0.4);
 }

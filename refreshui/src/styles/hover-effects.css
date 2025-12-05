@@ -1,0 +1,161 @@
+/* ============================================
+   UNIFIED HOVER EFFECTS SYSTEM
+   ============================================
+   
+   Two main hover effect types:
+   1. Lift Effect - Elements raise towards user
+   2. Slide Effect - Elements move to the right
+   
+   Both integrate with customization settings:
+   - --glow-strength (0-100)
+   - --parallax-strength (0-100)
+   - --animation-speed (0.5-2.0)
+============================================ */
+
+/* ============================================
+   LIFT EFFECT
+   For: Cards, Modals, Primary Interactive Elements
+   ============================================ */
+
+.hover-lift {
+  transition: all calc(var(--duration-normal) * 1s) cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px)
+    rotateX(calc(var(--parallax-strength, 0) * 0.02deg))
+    rotateY(calc(var(--parallax-strength, 0) * 0.02deg));
+  box-shadow: var(--glass-shadow),
+    0 0 calc(var(--glow-strength, 50) * 0.2px) var(--glow-primary);
+  border-color: var(--primary);
+}
+
+/* Subtle lift for smaller elements */
+.hover-lift-subtle {
+  transition: all calc(var(--duration-normal) * 1s) cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.hover-lift-subtle:hover {
+  transform: translateY(-2px)
+    rotateX(calc(var(--parallax-strength, 0) * 0.01deg))
+    rotateY(calc(var(--parallax-strength, 0) * 0.01deg));
+  box-shadow: 0 2px 8px var(--shadow),
+    0 0 calc(var(--glow-strength, 50) * 0.15px) var(--glow-primary);
+}
+
+/* ============================================
+   SLIDE EFFECT
+   For: Sidebar Items, List Items, Secondary Elements
+   ============================================ */
+
+.hover-slide {
+  transition: all calc(var(--duration-normal) * 1s) cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.hover-slide:hover {
+  transform: translateX(4px)
+    rotateX(calc(var(--parallax-strength, 0) * 0.015deg))
+    rotateY(calc(var(--parallax-strength, 0) * 0.015deg));
+  box-shadow: var(--glass-shadow),
+    0 0 calc(var(--glow-strength, 50) * 0.2px) var(--glow-primary);
+  border-color: var(--primary);
+}
+
+/* Subtle slide for smaller elements */
+.hover-slide-subtle {
+  transition: all calc(var(--duration-normal) * 1s) cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.hover-slide-subtle:hover {
+  transform: translateX(2px)
+    rotateX(calc(var(--parallax-strength, 0) * 0.01deg))
+    rotateY(calc(var(--parallax-strength, 0) * 0.01deg));
+  box-shadow: 0 2px 8px var(--shadow),
+    0 0 calc(var(--glow-strength, 50) * 0.1px) var(--glow-primary);
+}
+
+/* ============================================
+   SCALE EFFECT (for buttons and small items)
+   ============================================ */
+
+.hover-scale {
+  transition: all calc(var(--duration-fast) * 1s) cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.hover-scale:hover {
+  transform: scale(1.02) rotateX(calc(var(--parallax-strength, 0) * 0.01deg))
+    rotateY(calc(var(--parallax-strength, 0) * 0.01deg));
+  box-shadow: 0 0 calc(var(--glow-strength, 50) * 0.15px) var(--glow-primary);
+}
+
+/* ============================================
+   GLOW VARIANTS
+   For elements that need specific glow colors
+   ============================================ */
+
+/* Base glow effect - adds primary glow on hover */
+.hover-glow:hover {
+  box-shadow: var(--glass-shadow),
+    0 0 calc(var(--glow-strength, 50) * 0.2px) var(--glow-primary);
+}
+
+.hover-glow-success:hover {
+  box-shadow: var(--glass-shadow),
+    0 0 calc(var(--glow-strength, 50) * 0.2px) var(--glow-success) !important;
+}
+
+.hover-glow-warning:hover {
+  box-shadow: var(--glass-shadow),
+    0 0 calc(var(--glow-strength, 50) * 0.2px) var(--glow-warning) !important;
+}
+
+.hover-glow-danger:hover {
+  box-shadow: var(--glass-shadow),
+    0 0 calc(var(--glow-strength, 50) * 0.2px) var(--glow-danger) !important;
+}
+
+/* ============================================
+   PARALLAX TILT ENHANCEMENT
+   For elements that need more pronounced tilt
+   ============================================ */
+
+.hover-parallax-strong {
+  perspective: 1000px;
+}
+
+.hover-parallax-strong:hover {
+  transform: translateY(-4px)
+    rotateX(calc(var(--parallax-strength, 0) * 0.05deg))
+    rotateY(calc(var(--parallax-strength, 0) * 0.05deg));
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Disable hover effects when parallax is 0 */
+@media (prefers-reduced-motion: reduce) {
+  .hover-lift:hover,
+  .hover-lift-subtle:hover,
+  .hover-slide:hover,
+  .hover-slide-subtle:hover,
+  .hover-scale:hover,
+  .hover-parallax-strong:hover {
+    transform: none !important;
+  }
+}
+
+/* Smooth transition for all hover effects */
+.hover-transition {
+  transition: all calc(var(--duration-normal) * 1s) cubic-bezier(0.4, 0, 0.2, 1);
+}

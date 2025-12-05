@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', '.vite']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -18,6 +18,12 @@ export default defineConfig([
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+    },
+    rules: {
+      // Disable incompatible-library warning for TanStack Virtual
+      // This is a known limitation with React 19 compiler and TanStack Virtual
+      // The library works correctly, but the compiler cannot memoize it
+      'react-hooks/incompatible-library': 'off',
     },
   },
 ])

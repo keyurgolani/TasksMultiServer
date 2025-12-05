@@ -1,0 +1,94 @@
+/**
+ * Navigation Styles
+ * 
+ * Provides styling for the main navigation component.
+ * Uses CSS variables from the design token system.
+ * 
+ * Requirements: 9.6
+ */
+
+.container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-surface);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+:global([data-theme="light"]) .container {
+  border-color: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.06);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Compact variant */
+.compact {
+  padding: 2px;
+  gap: 2px;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.compact .navLink {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.navLink:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+:global([data-theme="dark"]) .navLink:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.navLink.active {
+  background: var(--primary);
+  color: white;
+  box-shadow: var(--glow-primary), 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-weight: 600;
+}
+
+:global([data-theme="dark"]) .navLink.active {
+  background: var(--primary);
+  color: white;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.label {
+  white-space: nowrap;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .container:not(.compact) .label {
+    display: none;
+  }
+  
+  .container:not(.compact) .navLink {
+    padding: 8px;
+  }
+}

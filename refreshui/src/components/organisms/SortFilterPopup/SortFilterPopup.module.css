@@ -1,0 +1,217 @@
+/**
+ * SortFilterPopup Styles
+ *
+ * Requirements: 27.4, 49.1, 49.2, 49.3, 49.4, 49.5
+ * - Apply glassmorphism effect and position relative to button
+ * - Consistent styling with design system
+ * - Two-column layout with sort on left, filter on right
+ * - Responsive collapse to single-column on narrow viewports
+ */
+
+/* Popup container with glassmorphism - Requirements: 27.4, 49.1, 49.4 */
+.popup {
+  position: absolute;
+  top: calc(100% + var(--space-2, 8px));
+  left: 0;
+  min-width: 420px;
+  max-width: 520px;
+  z-index: 100;
+
+  /* Glassmorphism effect */
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border, var(--border));
+  border-radius: var(--border-radius, 12px);
+  box-shadow:
+    var(--glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.3)),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+/* Two-column layout container - Requirements: 49.1, 49.2, 49.3 */
+.columnsContainer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+/* Glassmorphism effect overlay */
+.popup::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--glass-bg, rgba(255, 255, 255, 0.1));
+  opacity: var(--glass-opacity, 0.7);
+  backdrop-filter: blur(var(--glass-blur, 10px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 10px));
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure content is above the glass effect */
+.popup > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Section container */
+.section {
+  padding: var(--space-3, 12px);
+}
+
+/* Section title */
+.sectionTitle {
+  display: block;
+  padding: 0 var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* Filter group container */
+.filterGroup {
+  margin-bottom: var(--space-2, 8px);
+}
+
+.filterGroup:last-child {
+  margin-bottom: 0;
+}
+
+/* Group title for filter groups */
+.groupTitle {
+  display: block;
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* Options list */
+.optionsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+/* Individual option button */
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: transparent;
+  border: none;
+  border-radius: var(--border-radius-sm, 6px);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.option:hover {
+  background: rgba(var(--primary-rgb), 0.08);
+  color: var(--text-primary);
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* Active option state */
+.optionActive {
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary);
+}
+
+.optionActive:hover {
+  background: rgba(var(--primary-rgb), 0.16);
+}
+
+/* Option icon container */
+.optionIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+/* Option label */
+.optionLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Check icon for active sort option */
+.checkIcon {
+  flex-shrink: 0;
+  color: var(--primary);
+  margin-left: auto;
+}
+
+/* Checkbox/radio icon container */
+.checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+/* Divider between sections - used in single-column mode */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0;
+}
+
+/* Vertical divider between columns - Requirements: 49.2, 49.3 */
+.columnDivider {
+  width: 1px;
+  background: var(--border);
+  margin: var(--space-3, 12px) 0;
+}
+
+/* Left column for sort options - Requirements: 49.2 */
+.leftColumn {
+  border-right: 1px solid var(--border);
+}
+
+/* Right column for filter options - Requirements: 49.3 */
+.rightColumn {
+  /* No additional styles needed, inherits from section */
+}
+
+/* Responsive adjustments - Requirements: 49.5 */
+@media (max-width: 480px) {
+  .popup {
+    min-width: 200px;
+    max-width: calc(100vw - var(--space-8, 32px));
+  }
+
+  /* Collapse to single-column on narrow viewports - Requirements: 49.5 */
+  .columnsContainer {
+    grid-template-columns: 1fr;
+  }
+
+  .leftColumn {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .option {
+    padding: var(--space-3, 12px);
+  }
+}

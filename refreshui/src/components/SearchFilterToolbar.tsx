@@ -10,9 +10,11 @@ interface SearchFilterToolbarProps {
   isFilterOpen: boolean;
   setIsFilterOpen: (isOpen: boolean) => void;
   isFilterActive: boolean;
+  onReset?: () => void;
   filterButtonRef: React.RefObject<HTMLButtonElement>;
   children?: React.ReactNode; // For the Popover component
   placeholder?: string;
+  className?: string;
 }
 
 export const SearchFilterToolbar: React.FC<SearchFilterToolbarProps> = ({
@@ -22,12 +24,14 @@ export const SearchFilterToolbar: React.FC<SearchFilterToolbarProps> = ({
   isFilterOpen,
   setIsFilterOpen,
   isFilterActive,
+  onReset,
   filterButtonRef,
   children,
-  placeholder = "Search..."
+  placeholder = "Search...",
+  className
 }) => {
   return (
-    <div className={styles.toolbar}>
+    <div className={`${styles.toolbar} ${className || ''}`}>
       <div className={styles.searchContainer}>
         <Input
           icon={<Search size={16} />}
@@ -43,8 +47,20 @@ export const SearchFilterToolbar: React.FC<SearchFilterToolbarProps> = ({
           variant={isFilterActive ? "primary" : "secondary"}
           icon={<Filter size={16} />}
           onClick={() => setIsFilterOpen(!isFilterOpen)}
+          className={styles.filterButton}
         >
-          Filter
+          Sort & Filter
+          {isFilterActive && onReset && (
+            <span 
+              className={styles.resetIcon} 
+              onClick={(e) => {
+                e.stopPropagation();
+                onReset();
+              }}
+            >
+              ×
+            </span>
+          )}
         </Button>
         {children}
       </div>

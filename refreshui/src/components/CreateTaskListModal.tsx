@@ -41,7 +41,7 @@ export const CreateTaskListModal: React.FC<CreateTaskListModalProps> = ({ onClos
     setError('');
 
     try {
-      const payload: Record<string, any> = {
+      const payload: Record<string, string | boolean | undefined> = {
         name: name.trim(),
         repeatable
       };

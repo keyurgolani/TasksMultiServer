@@ -170,14 +170,18 @@
   border: 2px solid transparent;
   cursor: pointer;
   position: relative;
-  transition: all 0.2s;
+  transition: all calc(var(--duration-normal) * 1s) cubic-bezier(0.4, 0, 0.2, 1);
   padding: 3px;
   flex-shrink: 0;
   overflow: hidden;
+  transform-style: preserve-3d;
 }
 
 .colorOption:hover {
-  transform: scale(1.1);
+  transform: scale(1.1)
+              rotateX(calc(var(--parallax-strength, 0) * 0.02deg)) 
+              rotateY(calc(var(--parallax-strength, 0) * 0.02deg));
+  box-shadow: 0 0 calc(var(--glow-strength, 50) * 0.15px) var(--glow-primary);
 }
 
 .colorOption.active {
@@ -224,23 +228,30 @@
 
 /* Font Options */
 .fontOption {
-  padding: 12px 20px;
+  padding: 14px 20px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background-color: var(--bg-surface);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all calc(var(--duration-normal) * 1s) cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 15px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   white-space: nowrap;
   flex-shrink: 0;
+  min-height: 60px;
+  transform-style: preserve-3d;
 }
 
 .fontOption:hover {
   background-color: var(--bg-surface-hover);
   border-color: var(--text-secondary);
+  transform: translateY(-2px)
+              rotateX(calc(var(--parallax-strength, 0) * 0.015deg)) 
+              rotateY(calc(var(--parallax-strength, 0) * 0.015deg));
+  box-shadow: 0 0 calc(var(--glow-strength, 50) * 0.15px) var(--glow-primary);
 }
 
 .fontOption.active {
@@ -333,10 +344,15 @@
   border: 1px solid var(--primary);
   color: white;
   box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+  transform-style: preserve-3d;
 }
 
 .buttonPrimary:hover {
   background-color: var(--primary-dark);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(var(--primary-rgb), 0.4);
+  transform: translateY(-1px)
+              rotateX(calc(var(--parallax-strength, 0) * 0.01deg)) 
+              rotateY(calc(var(--parallax-strength, 0) * 0.01deg));
+  box-shadow: 
+    0 6px 16px rgba(var(--primary-rgb), 0.4),
+    0 0 calc(var(--glow-strength, 50) * 0.15px) var(--glow-primary);
 }

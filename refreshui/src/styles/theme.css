@@ -1,0 +1,687 @@
+/**
+ * Theme CSS - Centralized Design Token System
+ * 
+ * This file defines all CSS variables used throughout the Refresh UI application.
+ * These tokens enable real-time customization through the Customization Engine
+ * without triggering React re-renders.
+ * 
+ * Requirements: 1.1, 1.3, 1.4, 1.5, 1.6
+ * 
+ * Token Categories:
+ * - Typography (1.6): Font families and size scale
+ * - Colors (1.3): Primary, background, text, and status colors
+ * - Spacing (1.5): Consistent scale using 4px base unit
+ * - Effects (1.4): Glass, glow, grain, parallax, animation
+ */
+
+:root {
+  /* ========================================
+   * Typography Tokens (Requirement 1.6)
+   * Multiple font families for customization
+   * ======================================== */
+  
+  /* Font Families */
+  --font-default: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-corporate: "Roboto", "Helvetica Neue", Arial, sans-serif;
+  --font-fun: "Quicksand", "Comic Sans MS", cursive, sans-serif;
+  --font-nerd: "Fira Code", "Consolas", "Monaco", monospace;
+  --font-quirky: "Space Grotesk", "Trebuchet MS", sans-serif;
+  
+  /* Font Size Scale */
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-base: 1rem;     /* 16px */
+  --font-size-lg: 1.125rem;   /* 18px */
+  --font-size-xl: 1.25rem;    /* 20px */
+  --font-size-2xl: 1.5rem;    /* 24px */
+  --font-size-3xl: 1.875rem;  /* 30px */
+  --font-size-4xl: 2.25rem;   /* 36px */
+  --font-size-5xl: 3rem;      /* 48px */
+  --font-size-6xl: 3.75rem;   /* 60px */
+  
+  /* Line Heights */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+  
+  /* Font Weights */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  /* Letter Spacing */
+  --letter-spacing-tight: -0.025em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.025em;
+
+  /* ========================================
+   * Color Tokens (Requirement 1.3)
+   * Primary, background, text, and status colors
+   * ======================================== */
+  
+  /* Primary Colors */
+  --primary: #6b73ff;
+  --primary-rgb: 107, 115, 255;
+  --primary-dark: #5a63e0;
+  --primary-light: #8b91ff;
+  --primary-gradient: linear-gradient(135deg, #6b73ff 0%, #000dff 100%);
+  --secondary-gradient: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%);
+  --secondary-rgb: 255, 154, 158;
+
+  /* Status Colors */
+  --success: #2ed573;
+  --success-rgb: 46, 213, 115;
+  --warning: #ffa502;
+  --warning-rgb: 255, 165, 2;
+  --error: #ff4757;
+  --error-rgb: 255, 71, 87;
+  --info: #3498db;
+  --info-rgb: 52, 152, 219;
+  
+  /* Status Background/Text Colors */
+  --status-success-bg: #e6f4ea;
+  --status-success-text: #1e8e3e;
+  --status-warning-bg: #fef7e0;
+  --status-warning-text: #f9ab00;
+  --status-error-bg: #fce8e6;
+  --status-error-text: #d93025;
+  --status-info-bg: #e8f0fe;
+  --status-info-text: #1967d2;
+  --status-neutral-bg: #f0f0f0;
+  --status-neutral-text: #666666;
+
+  /* ========================================
+   * Background Colors (Light Theme Default)
+   * ======================================== */
+  --bg-app: #f0f2f5;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f8f9fa;
+  --bg-surface-active: #f0f1f3;
+  --bg-glass: rgba(255, 255, 255, 0.7);
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+  
+  /* Text Colors */
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --text-muted: #999999;
+  --text-inverse: #ffffff;
+  
+  /* Border Colors */
+  --border: rgba(0, 0, 0, 0.1);
+  --border-light: rgba(0, 0, 0, 0.05);
+  --border-strong: rgba(0, 0, 0, 0.2);
+  --border-glass: rgba(255, 255, 255, 0.3);
+  
+  /* Shadow Colors */
+  --shadow-color: rgba(0, 0, 0, 0.05);
+  --shadow: rgba(0, 0, 0, 0.1);
+  
+  /* Progress Bar */
+  --progress-bar-bg: rgba(0, 0, 0, 0.15);
+  
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(107, 115, 255, 0.4);
+  --scrollbar-thumb-hover: rgba(107, 115, 255, 0.6);
+  --scrollbar-thumb-active: rgba(107, 115, 255, 0.8);
+
+  /* ========================================
+   * Spacing Tokens (Requirement 1.5)
+   * Consistent scale using 4px base unit
+   * space-n = n * 4px
+   * ======================================== */
+  --space-base: 4px;
+  --space-1: 4px;   /* 1 * 4px */
+  --space-2: 8px;   /* 2 * 4px */
+  --space-3: 12px;  /* 3 * 4px */
+  --space-4: 16px;  /* 4 * 4px */
+  --space-5: 20px;  /* 5 * 4px */
+  --space-6: 24px;  /* 6 * 4px */
+  --space-7: 28px;  /* 7 * 4px */
+  --space-8: 32px;  /* 8 * 4px */
+  
+  /* Extended spacing for larger layouts */
+  --space-10: 40px;  /* 10 * 4px */
+  --space-12: 48px;  /* 12 * 4px */
+  --space-16: 64px;  /* 16 * 4px */
+  --space-20: 80px;  /* 20 * 4px */
+  --space-24: 96px;  /* 24 * 4px */
+
+  /* ========================================
+   * Effect Tokens (Requirement 1.4)
+   * Glass, glow, grain, parallax, animation
+   * ======================================== */
+  
+  /* Glass Effect */
+  --glass-opacity: 0.7;
+  --glass-blur: 10px;
+  --glass-border-opacity: 0.3;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  
+  /* Glow Effect */
+  --glow-strength: 50;
+  --glow-primary: rgba(107, 115, 255, 0.15);
+  --glow-success: rgba(46, 213, 115, 0.15);
+  --glow-warning: rgba(255, 165, 2, 0.15);
+  --glow-danger: rgba(255, 71, 87, 0.15);
+  --glow-info: rgba(52, 152, 219, 0.15);
+  
+  /* Grain Effect */
+  --grain-opacity: 0.05;
+  
+  /* Parallax Effect */
+  --parallax-depth: 20;
+  --parallax-strength: 20;
+  
+  /* Animation Speed */
+  --animation-speed: 1;
+  --duration-instant: 0s;
+  --duration-fast: 0.15s;
+  --duration-normal: 0.3s;
+  --duration-slow: 0.5s;
+  --duration-slower: 0.75s;
+  
+  /* Pulsing Effect */
+  --pulsing-strength: 50;
+  
+  /* Easing Functions */
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  
+  /* Shadow Strength */
+  --shadow-strength: 40;
+
+  /* ========================================
+   * Border Radius Tokens
+   * ======================================== */
+  --radius-none: 0;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+  --border-radius: 12px;
+  --fab-radius: 14px;
+
+  /* ========================================
+   * Shadow Presets
+   * ======================================== */
+  --shadow-xs: 0 1px 2px var(--shadow);
+  --shadow-sm: 0 2px 4px var(--shadow);
+  --shadow-md: 0 4px 12px var(--shadow);
+  --shadow-lg: 0 8px 24px var(--shadow);
+  --shadow-xl: 0 12px 48px var(--shadow);
+  
+  /* Elevation shadows (Material Design inspired) */
+  --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --elevation-2: 0 3px 6px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.12);
+  --elevation-3: 0 10px 20px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.10);
+  --elevation-4: 0 15px 25px rgba(0, 0, 0, 0.15), 0 5px 10px rgba(0, 0, 0, 0.05);
+  --elevation-5: 0 20px 40px rgba(0, 0, 0, 0.2);
+
+  /* ========================================
+   * Z-Index Scale
+   * ======================================== */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+  --z-toast: 1080;
+  --z-grain: 9999;
+
+  /* ========================================
+   * Component-Specific Tokens
+   * ======================================== */
+  
+  /* Button */
+  --btn-padding-x-sm: var(--space-3);
+  --btn-padding-y-sm: var(--space-1);
+  --btn-padding-x-md: var(--space-4);
+  --btn-padding-y-md: var(--space-2);
+  --btn-padding-x-lg: var(--space-6);
+  --btn-padding-y-lg: var(--space-3);
+  
+  /* Input */
+  --input-padding-x: var(--space-3);
+  --input-padding-y: var(--space-2);
+  --input-border-width: 1px;
+  --input-focus-ring-width: 2px;
+  --input-focus-ring-color: rgba(107, 115, 255, 0.3);
+  
+  /* Card */
+  --card-padding: var(--space-4);
+  --card-gap: var(--space-3);
+  
+  /* Modal */
+  --modal-padding: var(--space-6);
+  --modal-max-width: 500px;
+  
+  /* Sidebar */
+  --sidebar-width: 280px;
+  --sidebar-collapsed-width: 64px;
+  
+  /* Header */
+  --header-height: 64px;
+}
+
+/* ========================================
+ * Dark Theme Overrides
+ * ======================================== */
+[data-theme="dark"] {
+  /* Background Colors */
+  --bg-app: #0f1115;
+  --bg-surface: #1e2128;
+  --bg-surface-hover: #2a2e38;
+  --bg-surface-active: #353a47;
+  --bg-glass: rgba(30, 33, 40, 0.7);
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+  
+  /* Text Colors */
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #666666;
+  --text-muted: #666666;
+  --text-inverse: #1a1a1a;
+  
+  /* Border Colors */
+  --border: rgba(255, 255, 255, 0.12);
+  --border-light: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.24);
+  --border-glass: rgba(255, 255, 255, 0.1);
+  
+  /* Shadow Colors */
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --shadow: rgba(0, 0, 0, 0.3);
+  
+  /* Progress Bar */
+  --progress-bar-bg: rgba(255, 255, 255, 0.1);
+  
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(107, 115, 255, 0.3);
+  --scrollbar-thumb-hover: rgba(107, 115, 255, 0.5);
+  --scrollbar-thumb-active: rgba(107, 115, 255, 0.7);
+  
+  /* Glass Effect (Dark) */
+  --glass-bg: rgba(30, 33, 40, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  
+  /* Glow Effect (Dark - slightly more visible) */
+  --glow-primary: rgba(107, 115, 255, 0.2);
+  --glow-success: rgba(46, 213, 115, 0.2);
+  --glow-warning: rgba(255, 165, 2, 0.2);
+  --glow-danger: rgba(255, 71, 87, 0.2);
+  --glow-info: rgba(52, 152, 219, 0.2);
+  
+  /* Status Background/Text Colors (Dark) */
+  --status-success-bg: rgba(46, 213, 115, 0.15);
+  --status-success-text: #4ade80;
+  --status-warning-bg: rgba(255, 165, 2, 0.15);
+  --status-warning-text: #fbbf24;
+  --status-error-bg: rgba(255, 71, 87, 0.15);
+  --status-error-text: #f87171;
+  --status-info-bg: rgba(52, 152, 219, 0.15);
+  --status-info-text: #60a5fa;
+  --status-neutral-bg: rgba(255, 255, 255, 0.1);
+  --status-neutral-text: #a0a0a0;
+  
+  /* Input focus ring (Dark) */
+  --input-focus-ring-color: rgba(107, 115, 255, 0.4);
+  
+  /* Elevation shadows (Dark) */
+  --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.24), 0 1px 2px rgba(0, 0, 0, 0.48);
+  --elevation-2: 0 3px 6px rgba(0, 0, 0, 0.30), 0 2px 4px rgba(0, 0, 0, 0.24);
+  --elevation-3: 0 10px 20px rgba(0, 0, 0, 0.30), 0 3px 6px rgba(0, 0, 0, 0.20);
+  --elevation-4: 0 15px 25px rgba(0, 0, 0, 0.30), 0 5px 10px rgba(0, 0, 0, 0.10);
+  --elevation-5: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* ========================================
+ * Theme Presets
+ * Requirement 2.4: Default theme presets
+ * (Default, Cyberpunk, Minimal, High Contrast)
+ * 
+ * These CSS presets provide fallback styling when
+ * data-theme attribute is set. The ThemeSynchronizer
+ * component handles dynamic CSS variable updates
+ * from the Zustand store.
+ * ======================================== */
+
+/* Cyberpunk Theme
+ * Neon-infused futuristic aesthetic with vibrant colors
+ * and strong glow effects for a dynamic, sci-fi feel.
+ */
+[data-theme="cyberpunk"] {
+  /* Primary Colors - Neon magenta */
+  --primary: #ff00ff;
+  --primary-rgb: 255, 0, 255;
+  --primary-dark: #cc00cc;
+  --primary-light: #ff66ff;
+  
+  /* Status Colors - Vibrant neon palette */
+  --success: #00ff88;
+  --success-rgb: 0, 255, 136;
+  --warning: #ffaa00;
+  --warning-rgb: 255, 170, 0;
+  --error: #ff3366;
+  --error-rgb: 255, 51, 102;
+  --info: #00ffff;
+  --info-rgb: 0, 255, 255;
+  
+  /* Background Colors - Deep dark with purple tint */
+  --bg-app: #0a0a0f;
+  --bg-surface: #1a1a2e;
+  --bg-surface-hover: #252545;
+  --bg-surface-active: #303060;
+  --bg-glass: rgba(26, 26, 46, 0.75);
+  
+  /* Text Colors - Cyan primary for cyberpunk feel */
+  --text-primary: #e0e0ff;
+  --text-secondary: #a0a0cc;
+  --text-tertiary: #666699;
+  
+  /* Border Colors */
+  --border: rgba(255, 0, 255, 0.2);
+  --border-light: rgba(255, 0, 255, 0.1);
+  --border-strong: rgba(255, 0, 255, 0.4);
+  --border-glass: rgba(255, 0, 255, 0.3);
+  
+  /* Effect Variables - Enhanced for cyberpunk */
+  --glow-strength: 85;
+  --glow-primary: rgba(255, 0, 255, 0.35);
+  --glow-success: rgba(0, 255, 136, 0.35);
+  --glow-warning: rgba(255, 170, 0, 0.35);
+  --glow-danger: rgba(255, 51, 102, 0.35);
+  --glow-info: rgba(0, 255, 255, 0.35);
+  
+  --glass-opacity: 0.75;
+  --glass-blur: 16px;
+  --glass-border-opacity: 0.4;
+  --glass-shadow: 0 8px 32px 0 rgba(255, 0, 255, 0.15);
+  
+  --grain-opacity: 0.08;
+  --parallax-depth: 30;
+  --shadow-strength: 60;
+  --animation-speed: 1.15;
+  --border-radius: 16px;
+}
+
+/* Minimal Theme
+ * Clean and simple design with reduced visual effects
+ * for distraction-free focus and professional appearance.
+ */
+[data-theme="minimal"] {
+  /* Primary Colors - Monochromatic grayscale */
+  --primary: #333333;
+  --primary-rgb: 51, 51, 51;
+  --primary-dark: #1a1a1a;
+  --primary-light: #666666;
+  
+  /* Status Colors - Muted but clear */
+  --success: #22c55e;
+  --success-rgb: 34, 197, 94;
+  --warning: #eab308;
+  --warning-rgb: 234, 179, 8;
+  --error: #ef4444;
+  --error-rgb: 239, 68, 68;
+  --info: #3b82f6;
+  --info-rgb: 59, 130, 246;
+  
+  /* Background Colors - Clean white/gray */
+  --bg-app: #ffffff;
+  --bg-surface: #fafafa;
+  --bg-surface-hover: #f5f5f5;
+  --bg-surface-active: #eeeeee;
+  --bg-glass: rgba(255, 255, 255, 0.98);
+  
+  /* Text Colors - Standard dark text */
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  
+  /* Border Colors - Subtle */
+  --border: rgba(0, 0, 0, 0.08);
+  --border-light: rgba(0, 0, 0, 0.04);
+  --border-strong: rgba(0, 0, 0, 0.15);
+  --border-glass: rgba(0, 0, 0, 0.1);
+  
+  /* Effect Variables - Minimal to none */
+  --glow-strength: 0;
+  --glow-primary: transparent;
+  --glow-success: transparent;
+  --glow-warning: transparent;
+  --glow-danger: transparent;
+  --glow-info: transparent;
+  
+  --glass-opacity: 0.98;
+  --glass-blur: 0;
+  --glass-border-opacity: 0.1;
+  --glass-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  
+  --grain-opacity: 0;
+  --parallax-depth: 0;
+  --shadow-strength: 20;
+  --animation-speed: 1;
+  --border-radius: 4px;
+}
+
+/* High Contrast Theme
+ * Maximum visibility theme designed for accessibility
+ * with strong color contrast and clear visual boundaries.
+ */
+[data-theme="high-contrast"] {
+  /* Primary Colors - Strong blue */
+  --primary: #0066ff;
+  --primary-rgb: 0, 102, 255;
+  --primary-dark: #0052cc;
+  --primary-light: #3385ff;
+  
+  /* Status Colors - Pure, saturated colors */
+  --success: #00cc00;
+  --success-rgb: 0, 204, 0;
+  --warning: #ffcc00;
+  --warning-rgb: 255, 204, 0;
+  --error: #ff0000;
+  --error-rgb: 255, 0, 0;
+  --info: #00ccff;
+  --info-rgb: 0, 204, 255;
+  
+  /* Background Colors - Pure black for maximum contrast */
+  --bg-app: #000000;
+  --bg-surface: #0a0a0a;
+  --bg-surface-hover: #1a1a1a;
+  --bg-surface-active: #2a2a2a;
+  --bg-glass: rgba(0, 0, 0, 0.98);
+  
+  /* Text Colors - Pure white for maximum readability */
+  --text-primary: #ffffff;
+  --text-secondary: #e0e0e0;
+  --text-tertiary: #b0b0b0;
+  
+  /* Border Colors - Strong visible borders */
+  --border: #ffffff;
+  --border-light: #cccccc;
+  --border-strong: #ffffff;
+  --border-glass: rgba(255, 255, 255, 0.8);
+  
+  /* Effect Variables - Disabled for clarity */
+  --glow-strength: 0;
+  --glow-primary: transparent;
+  --glow-success: transparent;
+  --glow-warning: transparent;
+  --glow-danger: transparent;
+  --glow-info: transparent;
+  
+  --glass-opacity: 0.98;
+  --glass-blur: 0;
+  --glass-border-opacity: 0.8;
+  --glass-shadow: 0 0 0 2px #ffffff;
+  
+  --grain-opacity: 0;
+  --parallax-depth: 0;
+  --shadow-strength: 0;
+  --animation-speed: 1;
+  --border-radius: 8px;
+  
+  /* Status Background/Text - High contrast versions */
+  --status-success-bg: #003300;
+  --status-success-text: #00ff00;
+  --status-warning-bg: #332200;
+  --status-warning-text: #ffff00;
+  --status-error-bg: #330000;
+  --status-error-text: #ff6666;
+  --status-info-bg: #002233;
+  --status-info-text: #66ffff;
+}
+
+/* ========================================
+ * Utility Classes for Theme Tokens
+ * ======================================== */
+
+/* Glass Panel */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Glass Panel with Glow */
+.glass-panel-glow {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius);
+  box-shadow: var(--glass-shadow), 0 0 calc(var(--glow-strength) * 0.4px) var(--glow-primary);
+}
+
+/* Grain Overlay */
+.grain-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  z-index: var(--z-grain);
+}
+
+/* Spotlight Effect Container */
+.spotlight-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight-container::before {
+  content: '';
+  position: absolute;
+  top: var(--mouse-y, 50%);
+  left: var(--mouse-x, 50%);
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, var(--glow-primary) 0%, transparent 70%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: calc(var(--glow-strength) / 100);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* Parallax Tilt Container */
+.parallax-tilt {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+/* Animation Speed Utilities */
+.animate-fast {
+  transition-duration: var(--duration-fast);
+}
+
+.animate-normal {
+  transition-duration: var(--duration-normal);
+}
+
+.animate-slow {
+  transition-duration: var(--duration-slow);
+}
+
+/* Pulse Animation for Status Indicators */
+/* The pulsing-strength variable (0-100) controls the scale factor of the pulse animation */
+/* At 0: no pulse effect (scale stays at 1), At 100: maximum pulse (scale goes to 2) */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(calc(1 + (var(--pulsing-strength, 50) / 100)));
+  }
+}
+
+.pulse {
+  animation: pulse calc(1s * var(--animation-speed)) ease-in-out infinite;
+}
+
+/* Glow Animation */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 calc(var(--glow-strength) * 0.2px) var(--glow-primary);
+  }
+  50% {
+    box-shadow: 0 0 calc(var(--glow-strength) * 0.6px) var(--glow-primary);
+  }
+}
+
+.glow-animate {
+  animation: glow-pulse calc(2s * var(--animation-speed)) ease-in-out infinite;
+}
+
+
+/* ========================================
+ * Hidden Scrollbars
+ * Hide ALL scrollbars globally while maintaining scroll functionality
+ * Using !important to ensure no component can override this
+ * ======================================== */
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+* {
+  -ms-overflow-style: none !important;  /* IE and Edge */
+  scrollbar-width: none !important;  /* Firefox */
+}
+
+/* Also target html and body specifically */
+html, body {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}

@@ -1,6 +1,13 @@
-@import './styles/tokens.css';
-
+/* Google Fonts - must be first */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Quicksand:wght@400;500;700&family=Fira+Code:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap');
+
+/* Tailwind CSS */
+@import 'tailwindcss';
+
+/* Design Tokens - Centralized Theme System (Requirement 1.1) */
+@import './styles/theme.css';
+@import './styles/tokens.css';
+@import './styles/hover-effects.css';
 
 html, body {
   margin: 0;
@@ -13,7 +20,7 @@ body {
   font-family: var(--font-default);
   background-color: var(--bg-app);
   color: var(--text-primary);
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color var(--duration-normal), color var(--duration-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -40,8 +47,50 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
 }
 
-button {
+/* Ensure all interactive elements inherit the selected font */
+button, input, textarea, select {
   font-family: inherit;
 }
 
-/* Custom scrollbar styles removed to restore native overlay behavior and fix alignment issues */
+/* ========================================
+ * Glass Panel Utility Classes
+ * Requirement 6.1: Glassmorphism effect
+ * 
+ * Note: Primary glass-panel classes are defined in theme.css
+ * This section provides additional utility variants.
+ * ======================================== */
+
+/* Glass panel overlay for modals and dialogs */
+.glass-overlay {
+  background: var(--bg-overlay);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Glass panel with subtle blur (lighter effect) */
+.glass-panel-subtle {
+  background: var(--glass-bg);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.5));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius);
+}
+
+/* Glass panel with strong blur (heavier effect) */
+.glass-panel-strong {
+  background: var(--glass-bg);
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.5));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.5));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Glass panel without border radius (for edge-to-edge panels) */
+.glass-panel-flat {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}

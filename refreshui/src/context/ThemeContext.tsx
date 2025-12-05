@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   type ColorTheme, 
@@ -38,6 +39,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const activeFontTheme = fontThemes[fontId] || fontThemes.inter;
 
   useEffect(() => {
+    // Set data-theme attribute for CSS selectors
+    const themeMode = activeColorTheme.id.includes('dark') ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', themeMode);
+    
     applyTheme(activeColorTheme, activeFontTheme, effectSettings);
     saveTheme(colorId, fontId, effectSettings);
   }, [activeColorTheme, activeFontTheme, effectSettings, colorId, fontId]);

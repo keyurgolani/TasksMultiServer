@@ -125,7 +125,7 @@ export const Fab: React.FC<FabProps> = ({
             rotate: isOpen ? 135 : 0,
             backgroundColor: isOpen ? 'var(--error)' : 'var(--primary)'
           }}
-          transition={{ duration: 0.1, ease: "easeIn", delay: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
           disabled={disabled}
         >
           <Plus size={24} className={styles.plusIcon} />

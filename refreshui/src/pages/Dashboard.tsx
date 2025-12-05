@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { Palette } from "lucide-react";
 import { api } from "../api/client";
 import type {
   Project,
@@ -102,6 +104,7 @@ export const Dashboard: React.FC = () => {
       setTasks([]); // Clear tasks when project changes
       // Don't clear selectedTaskList here, let loadTaskLists handle validation
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject]);
 
   useEffect(() => {
@@ -238,6 +241,14 @@ export const Dashboard: React.FC = () => {
             />
           </div>
           <div className={styles.headerControls}>
+            <Link 
+              to="/showcase" 
+              className={styles.showcaseLink}
+              title="Design System Showcase"
+            >
+              <Palette size={18} />
+              <span>Showcase</span>
+            </Link>
             <Customizations />
           </div>
         </div>
@@ -271,6 +282,14 @@ export const Dashboard: React.FC = () => {
             tasks={allTasks}
             onTaskClick={handleTaskClick}
             onTaskListClick={handleTaskListClick}
+            onTaskListEdit={(taskListId, projectId) => {
+              console.log('Edit task list:', taskListId, 'in project:', projectId);
+              // TODO: Open edit modal
+            }}
+            onTaskListDelete={(taskListId, projectId) => {
+              console.log('Delete task list:', taskListId, 'from project:', projectId);
+              // TODO: Implement delete confirmation
+            }}
           />
         </div>
       )}
@@ -284,6 +303,14 @@ export const Dashboard: React.FC = () => {
             projectStats={projectStats}
             onProjectClick={handleProjectClick}
             onTaskListClick={handleTaskListClick}
+            onProjectEdit={(projectId) => {
+              console.log('Edit project:', projectId);
+              // TODO: Open edit modal
+            }}
+            onProjectDelete={(projectId) => {
+              console.log('Delete project:', projectId);
+              // TODO: Implement delete confirmation
+            }}
           />
         </div>
       )}

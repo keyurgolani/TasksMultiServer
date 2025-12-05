@@ -41,12 +41,17 @@
   background: var(--primary);
   color: white;
   box-shadow: 0 2px 4px rgba(107, 115, 255, 0.2);
+  transform-style: preserve-3d;
 }
 
 .primary:hover {
   filter: brightness(1.1);
-  transform: translateY(-1px);
-  box-shadow: var(--glow-primary);
+  transform: translateY(-1px) 
+              rotateX(calc(var(--parallax-strength, 0) * 0.01deg)) 
+              rotateY(calc(var(--parallax-strength, 0) * 0.01deg));
+  box-shadow: 
+    0 4px 12px rgba(107, 115, 255, 0.3),
+    0 0 calc(var(--glow-strength, 50) * 0.15px) var(--glow-primary);
 }
 
 .primary:active {
@@ -58,13 +63,18 @@
   background: var(--bg-surface);
   color: var(--text-primary);
   border-color: var(--border);
+  transform-style: preserve-3d;
 }
 
 .secondary:hover {
   background: var(--bg-app);
   border-color: var(--primary);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px var(--shadow-color);
+  transform: translateY(-1px) 
+              rotateX(calc(var(--parallax-strength, 0) * 0.01deg)) 
+              rotateY(calc(var(--parallax-strength, 0) * 0.01deg));
+  box-shadow: 
+    0 2px 8px var(--shadow-color),
+    0 0 calc(var(--glow-strength, 50) * 0.1px) var(--glow-primary);
 }
 
 .secondary:active {
@@ -74,12 +84,16 @@
 .ghost {
   background: transparent;
   color: var(--text-secondary);
+  transform-style: preserve-3d;
 }
 
 .ghost:hover {
   background: rgba(107, 115, 255, 0.1);
   color: var(--primary);
-  transform: translateY(-1px);
+  transform: translateY(-1px) 
+              rotateX(calc(var(--parallax-strength, 0) * 0.01deg)) 
+              rotateY(calc(var(--parallax-strength, 0) * 0.01deg));
+  box-shadow: 0 0 calc(var(--glow-strength, 50) * 0.1px) var(--glow-primary);
 }
 
 .ghost:active {

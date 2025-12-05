@@ -1,5 +1,6 @@
 import React from 'react';
 import { StatusIndicator } from './StatusIndicator';
+import { useTilt } from '../hooks/useTilt';
 import styles from './SmallTaskCard.module.css';
 import type { Task } from '../api/client';
 
@@ -9,6 +10,8 @@ interface SmallTaskCardProps {
 }
 
 export const SmallTaskCard: React.FC<SmallTaskCardProps> = ({ task, onClick }) => {
+  const { onMouseMove, onMouseLeave, style: tiltStyle } = useTilt({ effect: 'shift' });
+  
   const getStatusBackground = (status: string) => {
     switch (status) {
       case 'IN_PROGRESS':
@@ -26,11 +29,14 @@ export const SmallTaskCard: React.FC<SmallTaskCardProps> = ({ task, onClick }) =
 
   return (
     <div 
-      className={styles.card}
+      className={`${styles.card} hover-slide`}
       onClick={onClick}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
       style={{ 
         cursor: onClick ? 'pointer' : 'default',
-        background: getStatusBackground(task.status)
+        background: getStatusBackground(task.status),
+        ...tiltStyle
       }}
     >
       <div className={styles.titleRow}>

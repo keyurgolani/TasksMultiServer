@@ -101,3 +101,58 @@
 .input::placeholder {
   color: var(--text-tertiary);
 }
+
+/* Error State Styles - Using Design System Error Tokens */
+.labelError {
+  color: var(--status-error-text);
+}
+
+.inputError {
+  border-color: var(--error);
+  background: var(--status-error-bg);
+}
+
+.inputError:focus {
+  border-color: var(--error);
+  box-shadow: 
+    0 0 0 1px var(--error),
+    0 0 calc(var(--glow-strength) * 0.2px) var(--glow-danger);
+}
+
+.errorMessage {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--status-error-text);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-1);
+  animation: errorFadeIn 0.2s ease-out;
+}
+
+.errorIcon {
+  flex-shrink: 0;
+  color: var(--error);
+}
+
+@keyframes errorFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Disabled State Styles */
+.inputDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-surface-active);
+}
+
+.inputDisabled:focus {
+  border-color: var(--border);
+  box-shadow: none;
+}

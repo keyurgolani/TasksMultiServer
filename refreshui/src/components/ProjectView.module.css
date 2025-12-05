@@ -21,13 +21,35 @@
 }
 
 .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: 16px;
-  padding: 8px; /* Prevent hover cutoff on all edges */
-  overflow-y: auto; /* Only grid scrolls */
-  flex: 1; /* Take remaining space */
-  align-content: start; /* Prevent rows from spreading vertically */
+  column-count: 5;
+  column-gap: 16px;
+  padding: 20px 8px 8px 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+@media (max-width: 1600px) {
+  .grid {
+    column-count: 4;
+  }
+}
+
+@media (max-width: 1200px) {
+  .grid {
+    column-count: 3;
+  }
+}
+
+@media (max-width: 900px) {
+  .grid {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 600px) {
+  .grid {
+    column-count: 1;
+  }
 }
 
 .projectCard {
@@ -42,15 +64,12 @@
   gap: 20px;
   box-shadow: var(--glass-shadow);
   cursor: pointer;
-  min-height: 500px;
-  max-height: 800px; /* Increased limit, but allows more content */
+  height: fit-content;
+  break-inside: avoid;
+  margin-bottom: 16px;
 }
 
-.projectCard:hover {
-  transform: translateY(-4px) scale(1.01);
-  box-shadow: var(--glow-primary), var(--glass-shadow);
-  border-color: var(--primary);
-}
+
 
 .header {
   display: flex;
@@ -74,6 +93,18 @@
 .headerInfo {
   flex: 1;
   min-width: 0;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.titleRow:hover .container {
+  opacity: 1;
 }
 
 .title {
@@ -194,6 +225,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding-right: 8px;
 }
 
 .listItem {
@@ -211,7 +243,7 @@
 .listItem:hover {
   background: var(--bg-surface-active);
   border-color: var(--border);
-  transform: translateX(4px);
+  transform: translateX(2px);
 }
 
 .listInfo {
@@ -241,11 +273,16 @@
 }
 
 .listProgressBar {
-  width: 40px;
+  width: 50px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border);
   border-radius: 2px;
   overflow: hidden;
+}
+
+:global([data-theme="light"]) .listProgressBar {
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .listProgressFill {

@@ -1,8 +1,6 @@
-:global {
-  @keyframes ready-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-  }
+@keyframes ready-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .readyCount {

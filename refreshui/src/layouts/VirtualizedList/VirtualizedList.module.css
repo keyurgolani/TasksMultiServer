@@ -1,0 +1,56 @@
+/**
+ * VirtualizedList Styles
+ *
+ * Styles for the virtualized list component.
+ * Requirements: 12.2 - Maintain smooth scrolling
+ */
+
+.container {
+  overflow-y: auto;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+.virtualized {
+  /* Enable smooth scrolling for virtualized lists */
+  scroll-behavior: smooth;
+  /* Optimize scrolling performance */
+  will-change: scroll-position;
+  /* Enable momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.item {
+  width: 100%;
+}
+
+.virtualItem {
+  width: 100%;
+  /* Prevent layout shifts during virtualization */
+  contain: layout style;
+}
+
+/* Custom scrollbar styling */
+.container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.container::-webkit-scrollbar-track {
+  background: var(--bg-muted, #1a1a2e);
+  border-radius: 4px;
+}
+
+.container::-webkit-scrollbar-thumb {
+  background: var(--border-default, #3a3a5e);
+  border-radius: 4px;
+}
+
+.container::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover, #4a4a6e);
+}

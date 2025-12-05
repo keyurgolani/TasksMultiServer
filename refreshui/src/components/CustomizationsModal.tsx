@@ -37,6 +37,7 @@ export const CustomizationsModal: React.FC<CustomizationsModalProps> = ({
   const activeFontRef = useRef<HTMLDivElement>(null);
 
   // Reset local state when modal opens
+  /* eslint-disable react-hooks/set-state-in-effect -- Syncing local state with props when modal opens */
   useEffect(() => {
     if (isOpen) {
       setLocalColorId(activeColorTheme.id);
@@ -50,6 +51,7 @@ export const CustomizationsModal: React.FC<CustomizationsModalProps> = ({
       }, 100);
     }
   }, [isOpen, activeColorTheme.id, activeFontTheme.id, activeEffectSettings]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleApply = () => {
     setColorTheme(localColorId);
@@ -221,8 +223,19 @@ export const CustomizationsModal: React.FC<CustomizationsModalProps> = ({
                     }`}
                     onClick={() => setLocalFontId(theme.id)}
                     style={{ fontFamily: theme.fontFamily }}
+                    title={`${theme.name} (${theme.category})`}
                   >
-                    <span>{theme.name}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 500 }}>{theme.name}</span>
+                      <span style={{ 
+                        fontSize: '9px', 
+                        opacity: 0.6, 
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        {theme.category}
+                      </span>
+                    </div>
                     {localFontId === theme.id && <Check size={16} />}
                   </div>
                 ))}

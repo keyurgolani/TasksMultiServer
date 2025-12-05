@@ -6,4 +6,9 @@
   display: flex;
 }
 
+/* Light theme: darker background for better visibility */
+:global([data-theme="light"]) .progressBar {
+  background-color: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Input } from '../components/ui';
-import { X } from 'lucide-react';
+import { X, AlertCircle } from 'lucide-react';
 import styles from './CreateProjectModal.module.css';
 
 interface CreateProjectModalProps {
@@ -11,17 +11,28 @@ interface CreateProjectModalProps {
 export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onSuccess }) => {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [fieldError, setFieldError] = useState('');
+  const [submitError, setSubmitError] = useState('');
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setName(e.target.value);
+    // Clear field error when user starts typing
+    if (fieldError) {
+      setFieldError('');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate project name
     if (!name.trim()) {
-      setError('Project name is required');
+      setFieldError('Project name is required');
       return;
     }
 
     setLoading(true);
-    setError('');
+    setSubmitError('');
 
     try {
       const response = await fetch('http://localhost:8000/projects', {
@@ -39,7 +50,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose,
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create project');
+      setSubmitError(err instanceof Error ? err.message : 'Failed to create project');
     } finally {
       setLoading(false);
     }
@@ -57,14 +68,22 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose,
 
         <form onSubmit={handleSubmit} className={styles.form}>
           <Input
+            id="project-name"
             label="Project Name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={handleNameChange}
             placeholder="Enter project name"
+            error={fieldError}
+            state={fieldError ? 'error' : 'default'}
             required
           />
 
-          {error && <div className={styles.error}>{error}</div>}
+          {submitError && (
+            <div className={styles.submitError} role="alert">
+              <AlertCircle size={16} className={styles.submitErrorIcon} />
+              <span>{submitError}</span>
+            </div>
+          )}
 
           <div className={styles.actions}>
             <Button type="button" variant="secondary" onClick={onClose}>

@@ -5,6 +5,7 @@ import { Badge } from './ui';
 import { ProjectFilterPopover } from './ProjectFilterPopover';
 import { StatsPanel } from './StatsPanel';
 import { SearchFilterToolbar } from './SearchFilterToolbar';
+import { ActionMenu } from './ActionMenu';
 import styles from './ProjectView.module.css';
 
 interface ProjectViewProps {
@@ -14,6 +15,8 @@ interface ProjectViewProps {
   projectStats: Record<string, ProjectStats>;
   onProjectClick: (projectId: string) => void;
   onTaskListClick: (taskListId: string, projectId: string) => void;
+  onProjectEdit?: (projectId: string) => void;
+  onProjectDelete?: (projectId: string) => void;
 }
 
 export const ProjectView: React.FC<ProjectViewProps> = ({ 
@@ -23,6 +26,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
   // projectStats removed
   onProjectClick,
   onTaskListClick,
+  onProjectEdit,
+  onProjectDelete,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -33,12 +38,22 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
     isDefault: 'all',
   });
 
+  const [sort, setSort] = useState<{
+    field: 'name' | 'created_at' | 'completion' | 'taskCount';
+    direction: 'asc' | 'desc';
+  }>({ field: 'created_at', direction: 'desc' });
+
   const handleFilterChange = (type: 'completion' | 'taskCount' | 'isDefault', value: string) => {
     setFilters(prev => ({ ...prev, [type]: value }));
   };
 
+  const handleSortChange = (field: 'name' | 'created_at' | 'completion' | 'taskCount', direction: 'asc' | 'desc') => {
+    setSort({ field, direction });
+  };
+
   const clearFilters = () => {
     setFilters({ completion: 'all', taskCount: 'all', isDefault: 'all' });
+    setSort({ field: 'created_at', direction: 'desc' });
   };
 
   // Filter projects by search query and project filters
@@ -84,6 +99,40 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
     }
 
     return true;
+  }).sort((a, b) => {
+    const direction = sort.direction === 'asc' ? 1 : -1;
+    
+    if (sort.field === 'name') {
+      return a.name.localeCompare(b.name) * direction;
+    }
+    
+    if (sort.field === 'created_at') {
+      return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * direction;
+    }
+
+    // Helper to get stats for sorting
+    const getStats = (projectId: string) => {
+      const projectTasks = tasks.filter(task => {
+        const taskList = taskLists.find(list => list.id === task.task_list_id);
+        return taskList?.project_id === projectId;
+      });
+      const total = projectTasks.length;
+      const completed = projectTasks.filter(t => t.status === 'COMPLETED').length;
+      return { total, completion: total > 0 ? (completed / total) * 100 : 0 };
+    };
+
+    const statsA = getStats(a.id);
+    const statsB = getStats(b.id);
+
+    if (sort.field === 'completion') {
+      return (statsA.completion - statsB.completion) * direction;
+    }
+    
+    if (sort.field === 'taskCount') {
+      return (statsA.total - statsB.total) * direction;
+    }
+
+    return 0;
   });
 
   return (
@@ -94,15 +143,23 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
         onClearSearch={() => setSearchQuery('')}
         isFilterOpen={isFilterOpen}
         setIsFilterOpen={setIsFilterOpen}
-        isFilterActive={filters.completion !== 'all' || filters.taskCount !== 'all' || filters.isDefault !== 'all'}
+        isFilterActive={
+          filters.completion !== 'all' || 
+          filters.taskCount !== 'all' || 
+          sort.field !== 'created_at' ||
+          sort.direction !== 'desc'
+        }
+        onReset={clearFilters}
         filterButtonRef={filterButtonRef as React.RefObject<HTMLButtonElement>}
-        placeholder="Search projects or lists..."
+        placeholder="Search projects..."
       >
         <ProjectFilterPopover
           isOpen={isFilterOpen}
           onClose={() => setIsFilterOpen(false)}
           filters={filters}
+          sort={sort}
           onFilterChange={handleFilterChange}
+          onSortChange={handleSortChange}
           onClear={clearFilters}
           buttonRef={filterButtonRef}
         />
@@ -127,7 +184,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
           return (
             <div
               key={project.id}
-              className={styles.projectCard}
+              className={`${styles.projectCard} hover-lift`}
               onClick={() => onProjectClick(project.id)}
               style={{ cursor: 'pointer' }}
             >
@@ -136,10 +193,18 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
                   <Folder size={24} />
                 </div>
                 <div className={styles.headerInfo}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h2 className={styles.title}>{project.name}</h2>
-                    {project.is_default && (
-                      <Badge variant="info">Default</Badge>
+                  <div className={styles.titleRow}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h2 className={styles.title}>{project.name}</h2>
+                      {project.is_default && (
+                        <Badge variant="info">Default</Badge>
+                      )}
+                    </div>
+                    {(onProjectEdit || onProjectDelete) && (
+                      <ActionMenu
+                        onEdit={onProjectEdit ? () => onProjectEdit(project.id) : undefined}
+                        onDelete={onProjectDelete ? () => onProjectDelete(project.id) : undefined}
+                      />
                     )}
                   </div>
                   <span className={styles.meta}>Created {new Date(project.created_at).toLocaleDateString()}</span>

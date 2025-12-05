@@ -1,0 +1,212 @@
+/**
+ * CreateTaskListModal Styles
+ * 
+ * Requirements: 17.6
+ * - Apply consistent styling with other modal components
+ * 
+ * Consistency with CreateProjectModal:
+ * - Same overlay positioning (fixed, centered, z-index: 200000)
+ * - Same backdrop blur effect (rgba(0,0,0,0.6), blur(4px))
+ * - Same glassmorphism effect on modal (glass-bg, glass-opacity, glass-blur)
+ * - Same header layout (flex, space-between, border-bottom)
+ * - Same form padding and gap (space-6, space-4)
+ * - Same action button alignment (flex-end)
+ * - Same responsive breakpoints (480px)
+ * - Same animation transitions (spring, damping: 25, stiffness: 300)
+ */
+
+/* Overlay - centers the modal on viewport */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200000;
+  padding: 0 var(--space-4, 16px);
+}
+
+/* Backdrop with blur effect */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Modal container with glassmorphism */
+.modal {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border, var(--border));
+  border-radius: var(--border-radius, 12px);
+  box-shadow: 
+    var(--glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.3)),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+/* Glassmorphism effect overlay */
+.modal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--glass-bg, rgba(255, 255, 255, 0.1));
+  opacity: var(--glass-opacity, 0.7);
+  backdrop-filter: blur(var(--glass-blur, 10px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 10px));
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure content is above the glass effect */
+.modal > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-6, 24px);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Form */
+.form {
+  padding: var(--space-6, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+/* Description textarea field */
+.textareaField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5, 6px);
+  width: 100%;
+}
+
+.textareaLabel {
+  font-size: var(--text-xs, 12px);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.textarea {
+  width: 100%;
+  padding: var(--space-2-5, 10px) var(--space-4, 16px);
+  font-size: var(--text-sm, 14px);
+  border-radius: var(--border-radius-lg, 8px);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+  transition: all 0.2s ease-out;
+  outline: none;
+}
+
+.textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.textarea:hover {
+  border-color: var(--border-hover, var(--primary));
+}
+
+.textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 
+    0 0 0 2px rgba(var(--primary-rgb, 107, 115, 255), 0.2),
+    0 0 0 1px var(--primary);
+}
+
+/* Select field */
+.selectField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5, 6px);
+  width: 100%;
+}
+
+.selectLabel {
+  font-size: var(--text-xs, 12px);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.select {
+  width: 100%;
+  padding: var(--space-2-5, 10px) var(--space-4, 16px);
+  font-size: var(--text-sm, 14px);
+  border-radius: var(--border-radius-lg, 8px);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  transition: all 0.2s ease-out;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 40px;
+}
+
+.select:hover {
+  border-color: var(--border-hover, var(--primary));
+}
+
+.select:focus {
+  border-color: var(--primary);
+  box-shadow: 
+    0 0 0 2px rgba(var(--primary-rgb, 107, 115, 255), 0.2),
+    0 0 0 1px var(--primary);
+}
+
+.select.error {
+  border-color: var(--error);
+}
+
+.select.error:focus {
+  border-color: var(--error);
+  box-shadow: 
+    0 0 0 2px rgba(var(--error-rgb, 239, 68, 68), 0.2),
+    0 0 0 1px var(--error);
+}
+
+.selectError {
+  font-size: var(--text-xs, 12px);
+  color: var(--error);
+  margin-top: var(--space-1, 4px);
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  gap: var(--space-3, 12px);
+  justify-content: flex-end;
+  padding-top: var(--space-2, 8px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .modal {
+    max-width: 100%;
+    margin: var(--space-4, 16px);
+  }
+  
+  .header,
+  .form {
+    padding: var(--space-4, 16px);
+  }
+}

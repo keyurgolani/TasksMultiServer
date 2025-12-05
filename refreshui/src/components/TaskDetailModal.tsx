@@ -42,6 +42,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [newNote, setNewNote] = useState('');
   const [noteType, setNoteType] = useState<'general' | 'research' | 'execution'>('general');
 
+  /* eslint-disable react-hooks/set-state-in-effect -- Syncing local state with task prop when modal opens */
   useEffect(() => {
     if (task) {
       setTitle(task.title);
@@ -55,6 +56,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setIsEditing(false);
     }
   }, [task, isOpen]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!task) return null;
 

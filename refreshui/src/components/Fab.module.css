@@ -21,7 +21,7 @@
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(107, 115, 255, 0.4);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Removed transition to prevent delay - Framer Motion handles animations */
 }
 
 .mainButton:hover {

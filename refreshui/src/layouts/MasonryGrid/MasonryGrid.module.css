@@ -1,0 +1,74 @@
+/**
+ * MasonryGrid Component Styles
+ * 
+ * Styles for the masonry grid layout component.
+ * Uses flexbox for column layout with CSS variables for theming.
+ * 
+ * Requirements: 7.1, 7.3, 12.2
+ */
+
+.grid {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  align-items: flex-start;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0; /* Prevent flex items from overflowing */
+}
+
+.item {
+  width: 100%;
+  /* Allow items to define their own height */
+}
+
+/* Ensure smooth transitions for layout changes */
+.grid,
+.column,
+.item {
+  will-change: transform;
+}
+
+/* Virtualized container styles - Requirements: 12.2 */
+.virtualizedContainer {
+  width: 100%;
+  /* Enable smooth scrolling */
+  scroll-behavior: smooth;
+  /* Optimize scrolling performance */
+  will-change: scroll-position;
+  /* Enable momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+}
+
+.virtualRow {
+  /* Prevent layout shifts during virtualization */
+  contain: layout style;
+}
+
+.virtualColumn {
+  /* Ensure columns don't overflow */
+  overflow: hidden;
+}
+
+/* Custom scrollbar styling for virtualized container */
+.virtualizedContainer::-webkit-scrollbar {
+  width: 8px;
+}
+
+.virtualizedContainer::-webkit-scrollbar-track {
+  background: var(--bg-muted, #1a1a2e);
+  border-radius: 4px;
+}
+
+.virtualizedContainer::-webkit-scrollbar-thumb {
+  background: var(--border-default, #3a3a5e);
+  border-radius: 4px;
+}
+
+.virtualizedContainer::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover, #4a4a6e);
+}

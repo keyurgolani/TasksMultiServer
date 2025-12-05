@@ -1,0 +1,229 @@
+/**
+ * DeleteConfirmationDialog Styles
+ * 
+ * Requirements: 20.5, 22.5
+ * - Use destructive styling to indicate the dangerous action
+ * - Apply glassmorphism effect consistent with design system
+ */
+
+/* Overlay - centers the dialog on viewport */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200000;
+  padding: 0 var(--space-4, 16px);
+}
+
+/* Backdrop with blur effect */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Dialog container with glassmorphism */
+.dialog {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border, var(--border));
+  border-radius: var(--border-radius, 12px);
+  box-shadow: 
+    var(--glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.3)),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+/* Destructive variant - prominent red accent for dangerous actions */
+/* Requirements: 20.5, 22.5 - Use destructive styling to indicate the dangerous action */
+.dialog.destructive {
+  border-color: rgba(var(--error-rgb, 239, 68, 68), 0.4);
+  box-shadow: 
+    var(--glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.3)),
+    0 0 0 1px rgba(var(--error-rgb, 239, 68, 68), 0.2),
+    0 0 20px rgba(var(--error-rgb, 239, 68, 68), 0.15);
+}
+
+/* Destructive header accent - Requirements: 20.5, 22.5 */
+.dialog.destructive .header {
+  border-bottom-color: rgba(var(--error-rgb, 239, 68, 68), 0.2);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--error-rgb, 239, 68, 68), 0.08) 0%,
+    transparent 100%
+  );
+}
+
+/* Glassmorphism effect overlay */
+.dialog::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--glass-bg, rgba(255, 255, 255, 0.1));
+  opacity: var(--glass-opacity, 0.7);
+  backdrop-filter: blur(var(--glass-blur, 10px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 10px));
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure content is above the glass effect */
+.dialog > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  padding: var(--space-5, 20px) var(--space-6, 24px);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Icon container */
+.iconContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(var(--warning-rgb, 245, 158, 11), 0.1);
+  transition: background-color 0.2s ease;
+}
+
+/* Destructive icon container - Requirements: 20.5, 22.5 */
+.destructiveIconContainer {
+  background: rgba(var(--error-rgb, 239, 68, 68), 0.15);
+  box-shadow: 0 0 12px rgba(var(--error-rgb, 239, 68, 68), 0.2);
+}
+
+/* Destructive icon styling */
+.destructiveIcon {
+  color: var(--error);
+  filter: drop-shadow(0 0 4px rgba(var(--error-rgb, 239, 68, 68), 0.4));
+}
+
+/* Warning icon styling (non-destructive) */
+.warningIcon {
+  color: var(--warning);
+}
+
+/* Close button positioning */
+.closeButton {
+  margin-left: auto;
+}
+
+/* Content area */
+.content {
+  padding: var(--space-6, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+/* Item info section */
+.itemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+/* Item name styling */
+.itemName {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Warning box */
+.warningBox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3, 12px);
+  padding: var(--space-4, 16px);
+  background: rgba(var(--warning-rgb, 245, 158, 11), 0.1);
+  border: 1px solid rgba(var(--warning-rgb, 245, 158, 11), 0.2);
+  border-radius: var(--border-radius-lg, 8px);
+}
+
+/* Destructive warning box */
+.warningBox.destructiveWarning {
+  background: rgba(var(--error-rgb, 239, 68, 68), 0.1);
+  border-color: rgba(var(--error-rgb, 239, 68, 68), 0.2);
+}
+
+/* Warning box icon */
+.warningBoxIcon {
+  flex-shrink: 0;
+  color: var(--warning);
+  margin-top: 2px;
+}
+
+.destructiveWarning .warningBoxIcon {
+  color: var(--error);
+}
+
+/* Warning content container */
+.warningContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+/* Cascading deletion warning - Requirements: 20.2, 22.2 */
+.cascadingWarning {
+  font-weight: 600;
+  color: var(--error);
+}
+
+/* Disclaimer text */
+.disclaimer {
+  text-align: center;
+}
+
+/* Destructive disclaimer - Requirements: 20.5, 22.5 */
+.destructiveDisclaimer {
+  color: var(--error);
+  font-weight: 500;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  gap: var(--space-3, 12px);
+  justify-content: flex-end;
+  padding: var(--space-4, 16px) var(--space-6, 24px);
+  border-top: 1px solid var(--border);
+  background: rgba(var(--bg-surface-rgb, 0, 0, 0), 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .dialog {
+    max-width: 100%;
+    margin: var(--space-4, 16px);
+  }
+  
+  .header,
+  .content {
+    padding: var(--space-4, 16px);
+  }
+  
+  .actions {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    flex-direction: column-reverse;
+  }
+  
+  .actions button {
+    width: 100%;
+  }
+}

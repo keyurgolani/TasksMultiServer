@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { Button, Card, Input, Skeleton } from "../components/ui";
+import { Card, Input, Skeleton } from "../components/ui";
 import { StatusIndicator } from './StatusIndicator';
 import { ReadyTasksCount } from './ReadyTasksCount';
-import { Search, Filter } from "lucide-react";
+import { Search } from "lucide-react";
+import { SearchFilterToolbar } from './SearchFilterToolbar';
 import { FilterPopover } from './FilterPopover';
 import type {
   Project,
@@ -282,35 +283,27 @@ export const TasksView: React.FC<TasksViewProps> = ({
         <div className={styles.mainHeader}>
           <h2 className={styles.sectionTitle}>All Tasks</h2>
           
-          <div className={styles.toolbar}>
-            <div className={styles.searchContainer}>
-              <Input
-                icon={<Search size={16} />}
-                placeholder="Search tasks..."
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                onClear={() => onSearchChange('')}
-              />
-            </div>
-            <div style={{ position: 'relative' }}>
-              <Button 
-                ref={filterButtonRef}
-                variant={filters.status.length > 0 || filters.priority.length > 0 ? "primary" : "secondary"} 
-                icon={<Filter size={16} />}
-                onClick={() => setIsFilterOpen(!isFilterOpen)}
-              >
-                Filter
-              </Button>
-              <FilterPopover
-                isOpen={isFilterOpen}
-                onClose={() => setIsFilterOpen(false)}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                onClear={clearFilters}
-                buttonRef={filterButtonRef}
-              />
-            </div>
-          </div>
+          <SearchFilterToolbar
+            className={styles.toolbarOverride}
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+            onClearSearch={() => onSearchChange('')}
+            isFilterOpen={isFilterOpen}
+            setIsFilterOpen={setIsFilterOpen}
+            isFilterActive={filters.status.length > 0 || filters.priority.length > 0}
+            onReset={clearFilters}
+            filterButtonRef={filterButtonRef as React.RefObject<HTMLButtonElement>}
+            placeholder="Search tasks..."
+          >
+            <FilterPopover
+              isOpen={isFilterOpen}
+              onClose={() => setIsFilterOpen(false)}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onClear={clearFilters}
+              buttonRef={filterButtonRef}
+            />
+          </SearchFilterToolbar>
         </div>
         <div className={styles.taskGrid}>
           {loading ? (
