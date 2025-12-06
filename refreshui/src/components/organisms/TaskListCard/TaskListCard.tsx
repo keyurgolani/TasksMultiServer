@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { Card } from "../../atoms/Card";
 import { Typography } from "../../atoms/Typography";
 import { Icon } from "../../atoms/Icon";
 import { ProgressBar, type StatusCounts } from "../../atoms/ProgressBar";
+import { OverallProgress } from "../OverallProgress";
+import { useElementSize } from "../../../core/hooks/useElementSize";
 import type { TaskList } from "../../../core/types/entities";
 import type { TaskListStats } from "../../../services/types";
 import { cn } from "../../../lib/utils";
@@ -13,9 +15,10 @@ import { cn } from "../../../lib/utils";
  * A complex card component for displaying task list information with task count
  * and completion percentage. Combines atoms to create a cohesive task list display.
  *
- * Requirements: 5.3, 23.2
+ * Requirements: 5.3, 23.2, 1.17
  * - Display list name, task count, completion percentage, and status breakdown
  * - Display action buttons for edit and delete on hover
+ * - Support minimal variant showing only title and progress bar with very low height
  *
  * Property 16: TaskListCard Content Completeness
  * - For any TaskList object with associated tasks, the TaskListCard SHALL render
@@ -25,11 +28,15 @@ import { cn } from "../../../lib/utils";
  * - For any TaskListCard on hover, the component SHALL display edit and delete action buttons.
  */
 
+export type TaskListCardVariant = "default" | "minimal";
+
 export interface TaskListCardProps {
   /** The task list data to display */
   taskList: TaskList;
   /** Statistics for the task list (task count, completion stats) */
   stats?: TaskListStats;
+  /** Visual variant - "default" shows full card, "minimal" shows only title and progress bar */
+  variant?: TaskListCardVariant;
   /** Click handler for the card */
   onClick?: () => void;
   /** Handler for edit action */
@@ -45,7 +52,7 @@ export interface TaskListCardProps {
 }
 
 /**
- * Converts TaskListStats to StatusCounts for the ProgressBar component
+ * Converts TaskListStats to StatusCounts for the OverallProgress organism
  */
 const convertToStatusCounts = (stats: TaskListStats): StatusCounts => {
   // Calculate not started tasks from total - (completed + in progress + blocked)
@@ -64,10 +71,16 @@ const convertToStatusCounts = (stats: TaskListStats): StatusCounts => {
 
 /**
  * TaskListCard component for displaying task list information
+ * 
+ * Requirements: 5.9 - Responsive internal layout
+ * - Detects card width and adapts internal elements
+ * - Shows compact variants of progress indicators, stats when narrow
+ * - Hides or resizes secondary information on narrow cards
  */
 export const TaskListCard: React.FC<TaskListCardProps> = ({
   taskList,
   stats,
+  variant = "default",
   onClick,
   onEdit,
   onDelete,
@@ -76,15 +89,25 @@ export const TaskListCard: React.FC<TaskListCardProps> = ({
   className,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const completionPercentage = stats?.completionPercentage ?? 0;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const { isCompact, isReduced } = useElementSize(cardRef);
   
-  // Convert stats to StatusCounts for the multi-state progress bar
+  // Convert stats to StatusCounts for the OverallProgress organism
   const statusCounts = useMemo(() => {
     if (!stats) return undefined;
     return convertToStatusCounts(stats);
   }, [stats]);
 
-  const showActionButtons = isHovered && (onEdit || onDelete);
+  // Minimal variant disables parallax effect and action buttons
+  const isMinimal = variant === "minimal";
+  const effectiveTilt = isMinimal ? false : tilt;
+  const effectiveSpotlight = isMinimal ? false : spotlight;
+  const showActionButtons = !isMinimal && isHovered && (onEdit || onDelete);
+  
+  // Responsive layout flags for default variant
+  const showDescription = !isCompact && !isReduced;
+  const showDetailedStats = !isCompact;
+  const showStatusBreakdown = !isCompact && !isReduced;
 
   /**
    * Handle edit button click
@@ -104,12 +127,66 @@ export const TaskListCard: React.FC<TaskListCardProps> = ({
     onDelete?.(taskList);
   };
 
+  // Minimal variant: render compact card with only title and progress bar
+  if (isMinimal) {
+    return (
+      <Card
+        variant="glass"
+        padding="sm"
+        spotlight={false}
+        tilt={false}
+        className={cn(
+          "cursor-pointer",
+          "hover:shadow-md",
+          "transition-shadow",
+          "duration-200",
+          "relative",
+          "h-[52px]", // Fixed low height for minimal variant (~48-56px)
+          "flex",
+          "flex-col",
+          "justify-center",
+          className
+        )}
+        onClick={onClick}
+        role="article"
+        aria-label={`Task List: ${taskList.name}`}
+        data-testid="tasklist-card"
+        data-variant="minimal"
+      >
+        {/* Task List Name - compact */}
+        <Typography
+          variant="body-sm"
+          color="primary"
+          className="truncate font-medium mb-1"
+          data-testid="tasklist-card-name"
+        >
+          {taskList.name}
+        </Typography>
+
+        {/* Progress Bar - full width */}
+        {statusCounts && (
+          <ProgressBar
+            variant="multi-state"
+            statusCounts={statusCounts}
+            data-testid="tasklist-card-progress-bar"
+          />
+        )}
+        {!statusCounts && (
+          <div className="h-1 bg-[var(--border)] rounded-full" />
+        )}
+      </Card>
+    );
+  }
+
+  // Default variant: full card with all details
+  // Requirements: 5.9 - Responsive internal layout adapts based on card width
   return (
     <Card
+      ref={cardRef}
       variant="glass"
-      padding="md"
-      spotlight={spotlight}
-      tilt={tilt}
+      padding={isCompact ? "sm" : "md"}
+      spotlight={effectiveSpotlight}
+      tilt={effectiveTilt}
       className={cn(
         "cursor-pointer",
         "hover:shadow-lg",
@@ -124,6 +201,8 @@ export const TaskListCard: React.FC<TaskListCardProps> = ({
       role="article"
       aria-label={`Task List: ${taskList.name}`}
       data-testid="tasklist-card"
+      data-variant="default"
+      data-layout-mode={isCompact ? "compact" : isReduced ? "reduced" : "full"}
     >
       {/* Action Buttons - Visible on hover */}
       {showActionButtons && (
@@ -199,18 +278,20 @@ export const TaskListCard: React.FC<TaskListCardProps> = ({
         </div>
       )}
 
-      {/* Task List Name */}
+      {/* Task List Name - adapts typography based on width */}
       <Typography
-        variant="h5"
+        variant={isCompact ? "body-sm" : "h5"}
         color="primary"
-        className="mb-2 line-clamp-2 pr-16"
+        className={cn(
+          isCompact ? "truncate font-medium" : "mb-2 line-clamp-2 pr-16"
+        )}
         data-testid="tasklist-card-name"
       >
         {taskList.name}
       </Typography>
 
-      {/* Description (if present) */}
-      {taskList.description && (
+      {/* Description - hidden on narrow cards (Requirements: 5.9) */}
+      {showDescription && taskList.description && (
         <Typography
           variant="body-sm"
           color="secondary"
@@ -221,106 +302,54 @@ export const TaskListCard: React.FC<TaskListCardProps> = ({
         </Typography>
       )}
 
-      {/* Stats Section */}
+      {/* Stats Section - adapts based on card width */}
       {stats && (
-        <div className="mt-3 space-y-3" data-testid="tasklist-card-stats">
-          {/* Task Count */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-[var(--space-2)]">
-              <Icon
-                name="ListTodo"
-                size="sm"
-                className="text-[var(--text-muted)]"
-              />
-              <Typography variant="body-sm" color="muted">
-                Tasks
-              </Typography>
-            </div>
-            <Typography
-              variant="body-sm"
-              color="primary"
-              data-testid="tasklist-card-task-count"
-            >
-              {stats.taskCount}
-            </Typography>
-          </div>
+        <div className={cn("mt-3", showDetailedStats ? "space-y-3" : "space-y-2")} data-testid="tasklist-card-stats">
+          {/* Compact stats row - shown when card is narrow */}
+          {isCompact ? (
+            <>
+              {/* Compact: Use OverallProgress mini variant */}
+              {statusCounts && (
+                <OverallProgress
+                  statusCounts={statusCounts}
+                  variant="mini"
+                  data-testid="tasklist-card-progress"
+                />
+              )}
+            </>
+          ) : (
+            <>
+              {/* Task Count - shown in reduced and full modes */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-[var(--space-2)]">
+                  <Icon
+                    name="ListTodo"
+                    size="sm"
+                    className="text-[var(--text-muted)]"
+                  />
+                  <Typography variant="body-sm" color="muted">
+                    Tasks
+                  </Typography>
+                </div>
+                <Typography
+                  variant="body-sm"
+                  color="primary"
+                  data-testid="tasklist-card-task-count"
+                >
+                  {stats.taskCount}
+                </Typography>
+              </div>
 
-          {/* Completion Stats */}
-          <div className="pt-2 border-t border-[var(--border)]">
-            <div className="flex items-center justify-between mb-2">
-              <Typography variant="caption" color="muted">
-                Completion
-              </Typography>
-              <Typography
-                variant="caption"
-                color="secondary"
-                data-testid="tasklist-card-completion-text"
-              >
-                {stats.completedTasks}/{stats.taskCount} ({completionPercentage}%)
-              </Typography>
-            </div>
-
-            {/* Multi-state Progress Bar using ProgressBar atom */}
-            {statusCounts && (
-              <ProgressBar
-                variant="multi-state-mini"
-                statusCounts={statusCounts}
-                data-testid="tasklist-card-progress-bar"
-              />
-            )}
-          </div>
-
-          {/* Status Breakdown */}
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1">
-              <span
-                className="w-2 h-2 rounded-full bg-[var(--warning)]"
-                aria-hidden="true"
-              />
-              <Typography variant="caption" color="muted">
-                In Progress
-              </Typography>
-              <Typography
-                variant="caption"
-                color="secondary"
-                data-testid="tasklist-card-in-progress"
-              >
-                {stats.inProgressTasks}
-              </Typography>
-            </div>
-            <div className="flex items-center gap-1">
-              <span
-                className="w-2 h-2 rounded-full bg-[var(--error)]"
-                aria-hidden="true"
-              />
-              <Typography variant="caption" color="muted">
-                Blocked
-              </Typography>
-              <Typography
-                variant="caption"
-                color="secondary"
-                data-testid="tasklist-card-blocked"
-              >
-                {stats.blockedTasks}
-              </Typography>
-            </div>
-            <div className="flex items-center gap-1">
-              <span
-                className="w-2 h-2 rounded-full bg-[var(--info)]"
-                aria-hidden="true"
-              />
-              <Typography variant="caption" color="muted">
-                Ready
-              </Typography>
-              <Typography
-                variant="caption"
-                color="secondary"
-                data-testid="tasklist-card-ready"
-              >
-                {stats.readyTasks}
-              </Typography>
-            </div>
-          </div>
+              {/* OverallProgress organism - Requirements: 15.2, 15.4 */}
+              {statusCounts && (
+                <OverallProgress
+                  statusCounts={statusCounts}
+                  variant={showStatusBreakdown ? "compact" : "mini"}
+                  data-testid="tasklist-card-progress"
+                />
+              )}
+            </>
+          )}
         </div>
       )}
 

@@ -1,6 +1,31 @@
-import React, { useCallback, useState, useMemo, type MouseEvent } from "react";
+import React, { useCallback, useState, useMemo, useRef, type MouseEvent } from "react";
 import { cn } from "../../../lib/utils";
 import { calculateParallaxShadow, baseShadows } from "./parallaxShadow";
+
+/**
+ * Get parallax strength from CSS variable and convert to max rotation degrees.
+ * 
+ * The CSS variable --parallax-strength is a value from 0-100.
+ * We convert this to a max rotation angle capped at 10 degrees for professional appearance.
+ * 
+ * Requirements: 1.18, 3.7, 4.9, 5.7, 6.9, 7.8
+ * - Maximum tilt capped at ~8-10 degrees (avoid excessive rotation)
+ * - Default parallax strength of 20-30 out of 100
+ * 
+ * @returns Maximum rotation angle in degrees (0-10)
+ */
+const getMaxTiltFromCSS = (): number => {
+  if (typeof document === 'undefined') return 6; // Default for SSR (30% of 10 degrees)
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--parallax-strength').trim();
+  const parallaxStrength = parseFloat(value);
+  if (isNaN(parallaxStrength)) return 6; // Default if not set
+  
+  // Convert 0-100 range to 0-10 degrees (capped for professional appearance)
+  // At strength 100, max tilt is 10 degrees
+  // At default strength 20-30, max tilt is 2-3 degrees
+  const maxTiltDegrees = 10;
+  return (parallaxStrength / 100) * maxTiltDegrees;
+};
 
 /**
  * Card Atom Component
@@ -136,8 +161,11 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
           const normalizedX = (x - centerX) / centerX;
           const normalizedY = (y - centerY) / centerY;
 
-          // Use CSS variable for parallax depth, default to 20
-          const maxTilt = 8; // Maximum tilt in degrees
+          // Read max tilt from CSS variable for theme-aware parallax
+          // Requirements: 1.18, 3.7, 4.9, 5.7, 6.9, 7.8
+          // - Maximum tilt capped at ~8-10 degrees (avoid excessive rotation)
+          // - Reads from --parallax-strength CSS variable (0-100)
+          const maxTilt = getMaxTiltFromCSS();
           setTiltStyle({
             rotateX: -normalizedY * maxTilt,
             rotateY: normalizedX * maxTilt,

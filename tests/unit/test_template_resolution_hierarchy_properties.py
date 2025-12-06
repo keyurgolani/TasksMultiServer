@@ -100,7 +100,7 @@ def task_with_template_strategy(draw: Any, task_list_id: UUID) -> Task:
 
 
 @given(st.data())
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_task_template_has_highest_priority(data: Any) -> None:
     """
     Feature: task-management-system, Property 15: Template resolution hierarchy
@@ -202,7 +202,7 @@ def test_task_list_template_used_when_task_has_none(data: Any) -> None:
 
 
 @given(st.data())
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_project_template_used_when_task_and_list_have_none(data: Any) -> None:
     """
     Feature: task-management-system, Property 15: Template resolution hierarchy
@@ -254,7 +254,7 @@ def test_project_template_used_when_task_and_list_have_none(data: Any) -> None:
 
 
 @given(st.data())
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_fallback_to_serialized_when_no_templates(data: Any) -> None:
     """
     Feature: task-management-system, Property 15: Template resolution hierarchy

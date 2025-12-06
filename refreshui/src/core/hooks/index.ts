@@ -11,3 +11,4 @@ export * from './useParallax';
 export * from './useMasonry';
 export * from './useResponsiveColumns';
 export * from './useVirtualList';
+export * from './useElementSize';

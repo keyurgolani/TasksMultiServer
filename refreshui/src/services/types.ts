@@ -14,6 +14,7 @@ import type {
   ExitCriterion,
   TaskDependency,
   Note,
+  ActionPlanItem,
 } from '../core/types';
 
 // Re-export entity types for convenience
@@ -26,6 +27,7 @@ export type {
   ExitCriterion,
   TaskDependency,
   Note,
+  ActionPlanItem,
 };
 
 // ============================================================================
@@ -100,6 +102,10 @@ export interface CreateTaskDto {
   notes?: Note[];
   /** Initial research notes */
   researchNotes?: Note[];
+  /** Initial execution notes */
+  executionNotes?: Note[];
+  /** Initial action plan */
+  actionPlan?: ActionPlanItem[];
 }
 
 /**
@@ -120,6 +126,8 @@ export interface UpdateTaskDto {
   exitCriteria?: ExitCriterion[];
   /** Updated tags */
   tags?: string[];
+  /** Updated action plan */
+  actionPlan?: ActionPlanItem[];
 }
 
 /**

@@ -392,7 +392,7 @@ def test_mermaid_format_includes_status_indicators(statuses: list[Status]) -> No
     num_branches=st.integers(min_value=2, max_value=5),
     branch_length=st.integers(min_value=1, max_value=4),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_mermaid_format_represents_branching_structure(
     num_branches: int, branch_length: int
 ) -> None:

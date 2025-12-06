@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { BrowserRouter } from "react-router-dom";
 import { ProjectsView } from "./ProjectsView";
 import { DataServiceProvider } from "../../context/DataServiceContext";
 import type { IDataService, ProjectStats } from "../../services/types";
@@ -8,8 +9,12 @@ import type { Project } from "../../core/types/entities";
 /**
  * ProjectsView Tests
  *
- * Requirements: 10.1
- * - Display all projects in a masonry grid with search and filter capabilities
+ * Requirements: 3.1, 3.2, 3.3, 3.4, 3.5
+ * - 3.1: Display SearchFilterBar with search input and SortFilterButton at top
+ * - 3.2: Display all ProjectCard components in a MasonryGrid layout
+ * - 3.3: Filter ProjectCard components based on search query
+ * - 3.4: Navigate to /projects/{projectId} on card click
+ * - 3.5: Reorder or filter ProjectCard components via SortFilterPopup
  */
 
 // Mock project data
@@ -108,13 +113,15 @@ const createMockDataService = (): IDataService => ({
   getReadyTasks: vi.fn().mockResolvedValue([]),
 });
 
-// Wrapper component with DataServiceProvider
+// Wrapper component with DataServiceProvider and Router
 const renderWithProvider = (
   ui: React.ReactElement,
   service: IDataService = createMockDataService()
 ) => {
   return render(
-    <DataServiceProvider service={service}>{ui}</DataServiceProvider>
+    <BrowserRouter>
+      <DataServiceProvider service={service}>{ui}</DataServiceProvider>
+    </BrowserRouter>
   );
 };
 
@@ -143,7 +150,7 @@ describe("ProjectsView", () => {
       });
     });
 
-    it("renders the search bar", async () => {
+    it("renders the search bar - Requirements: 3.1", async () => {
       renderWithProvider(<ProjectsView />, mockService);
 
       await waitFor(() => {
@@ -153,20 +160,17 @@ describe("ProjectsView", () => {
       });
     });
 
-    it("renders filter chips", async () => {
+    it("renders the sort/filter button - Requirements: 3.1", async () => {
       renderWithProvider(<ProjectsView />, mockService);
 
       await waitFor(() => {
-        expect(screen.getByText("All")).toBeInTheDocument();
-        expect(screen.getByText("Not Started")).toBeInTheDocument();
-        expect(screen.getByText("In Progress")).toBeInTheDocument();
-        expect(screen.getByText("Completed")).toBeInTheDocument();
+        expect(screen.getByText("Sort & Filter")).toBeInTheDocument();
       });
     });
   });
 
   describe("data loading", () => {
-    it("loads and displays projects", async () => {
+    it("loads and displays projects - Requirements: 3.2", async () => {
       renderWithProvider(<ProjectsView />, mockService);
 
       await waitFor(() => {
@@ -196,7 +200,7 @@ describe("ProjectsView", () => {
     });
   });
 
-  describe("search functionality", () => {
+  describe("search functionality - Requirements: 3.3", () => {
     it("filters projects by search query", async () => {
       renderWithProvider(<ProjectsView />, mockService);
 
@@ -242,34 +246,7 @@ describe("ProjectsView", () => {
     });
   });
 
-  describe("filter functionality", () => {
-    it("filters projects by completion status", async () => {
-      renderWithProvider(<ProjectsView />, mockService);
-
-      // Wait for projects to load
-      await waitFor(() => {
-        expect(screen.getByText("Project Alpha")).toBeInTheDocument();
-      });
-
-      // Click on "Completed" filter
-      const completedFilter = screen.getByRole("checkbox", {
-        name: /Completed/i,
-      });
-      await act(async () => {
-        fireEvent.click(completedFilter);
-      });
-
-      // Wait for filter to apply
-      await waitFor(() => {
-        // Project Gamma has 100% completion
-        expect(screen.getByText("Project Gamma")).toBeInTheDocument();
-        // Project Alpha has 0% completion
-        expect(screen.queryByText("Project Alpha")).not.toBeInTheDocument();
-      });
-    });
-  });
-
-  describe("interactions", () => {
+  describe("interactions - Requirements: 3.4", () => {
     it("calls onProjectClick when a project card is clicked", async () => {
       const onProjectClick = vi.fn();
       renderWithProvider(

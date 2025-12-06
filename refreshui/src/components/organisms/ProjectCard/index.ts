@@ -7,6 +7,6 @@
  * @module components/organisms/ProjectCard
  */
 
-export { ProjectCard, type ProjectCardProps } from "./ProjectCard";
+export { ProjectCard, type ProjectCardProps, type ProjectCardVariant } from "./ProjectCard";
 export { ProjectCardSkeleton, type ProjectCardSkeletonProps } from "./ProjectCardSkeleton";
 export { default } from "./ProjectCard";

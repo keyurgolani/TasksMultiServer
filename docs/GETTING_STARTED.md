@@ -159,6 +159,16 @@ curl -X POST http://localhost:8000/projects \
   -H "Content-Type: application/json" \
   -d '{"name": "My Project"}'
 
+# Create task list
+curl -X POST http://localhost:8000/task-lists \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Tasks", "project_name": "My Project"}'
+
+# Search tasks
+curl -X POST http://localhost:8000/search/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"query": "implement", "status": ["NOT_STARTED"]}'
+
 # API documentation
 open http://localhost:8000/docs
 ```

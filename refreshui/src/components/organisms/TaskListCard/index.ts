@@ -5,6 +5,6 @@
  * with task count and completion percentage.
  */
 
-export { TaskListCard, type TaskListCardProps } from "./TaskListCard";
+export { TaskListCard, type TaskListCardProps, type TaskListCardVariant } from "./TaskListCard";
 export { TaskListCardSkeleton, type TaskListCardSkeletonProps } from "./TaskListCardSkeleton";
 export { default } from "./TaskListCard";

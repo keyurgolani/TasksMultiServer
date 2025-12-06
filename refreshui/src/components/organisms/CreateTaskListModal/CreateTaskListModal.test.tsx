@@ -100,10 +100,11 @@ describe("CreateTaskListModal", () => {
       expect(screen.getByPlaceholderText(/enter task list description/i)).toBeInTheDocument();
     });
 
-    it("renders project dropdown", async () => {
+    it("renders project selection list", async () => {
       renderWithProvider(<CreateTaskListModal {...defaultProps} />);
       await waitFor(() => {
-        expect(screen.getByRole("combobox")).toBeInTheDocument();
+        // The component uses a searchable list pattern with radio items
+        expect(screen.getByPlaceholderText(/search or type new project name/i)).toBeInTheDocument();
       });
     });
 
@@ -113,11 +114,12 @@ describe("CreateTaskListModal", () => {
       expect(screen.getByRole("button", { name: /create task list/i })).toBeInTheDocument();
     });
 
-    it("loads and displays projects in dropdown", async () => {
+    it("loads and displays projects in list", async () => {
       renderWithProvider(<CreateTaskListModal {...defaultProps} />);
       await waitFor(() => {
-        expect(screen.getByRole("option", { name: "Project Alpha" })).toBeInTheDocument();
-        expect(screen.getByRole("option", { name: "Project Beta" })).toBeInTheDocument();
+        // Projects are displayed as radio items in a searchable list
+        expect(screen.getByRole("radio", { name: /Project Alpha/i })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Project Beta/i })).toBeInTheDocument();
       });
     });
   });
@@ -128,7 +130,7 @@ describe("CreateTaskListModal", () => {
       
       // Wait for projects to load
       await waitFor(() => {
-        expect(screen.getByRole("option", { name: "Project Alpha" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Project Alpha/i })).toBeInTheDocument();
       });
       
       const submitButton = screen.getByRole("button", { name: /create task list/i });
@@ -143,7 +145,7 @@ describe("CreateTaskListModal", () => {
       renderWithProvider(<CreateTaskListModal {...defaultProps} />);
       
       await waitFor(() => {
-        expect(screen.getByRole("option", { name: "Project Alpha" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Project Alpha/i })).toBeInTheDocument();
       });
       
       const nameInput = screen.getByPlaceholderText(/enter task list name/i);
@@ -164,12 +166,16 @@ describe("CreateTaskListModal", () => {
       renderWithProvider(<CreateTaskListModal {...defaultProps} />, mockService);
       
       await waitFor(() => {
-        expect(screen.getByRole("option", { name: "Project Alpha" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Project Alpha/i })).toBeInTheDocument();
       });
       
-      // Clear the auto-selected project
-      const projectSelect = screen.getByRole("combobox");
-      fireEvent.change(projectSelect, { target: { value: "" } });
+      // Clear the auto-selected project by clicking the remove button on the chip
+      const removeButton = screen.getByRole("button", { name: "" });
+      // Find the chip remove button (X icon in the chip)
+      const chipRemoveButtons = document.querySelectorAll('[class*="chipRemove"]');
+      if (chipRemoveButtons.length > 0) {
+        fireEvent.click(chipRemoveButtons[0]);
+      }
       
       const nameInput = screen.getByPlaceholderText(/enter task list name/i);
       fireEvent.change(nameInput, { target: { value: "My Task List" } });
@@ -186,7 +192,7 @@ describe("CreateTaskListModal", () => {
       renderWithProvider(<CreateTaskListModal {...defaultProps} />);
       
       await waitFor(() => {
-        expect(screen.getByRole("option", { name: "Project Alpha" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Project Alpha/i })).toBeInTheDocument();
       });
       
       const submitButton = screen.getByRole("button", { name: /create task list/i });
@@ -209,16 +215,18 @@ describe("CreateTaskListModal", () => {
       renderWithProvider(<CreateTaskListModal {...defaultProps} />, mockService);
       
       await waitFor(() => {
-        expect(screen.getByRole("option", { name: "Project Alpha" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Project Alpha/i })).toBeInTheDocument();
       });
       
       const nameInput = screen.getByPlaceholderText(/enter task list name/i);
       const descInput = screen.getByPlaceholderText(/enter task list description/i);
-      const projectSelect = screen.getByRole("combobox");
       
       fireEvent.change(nameInput, { target: { value: "My New Task List" } });
       fireEvent.change(descInput, { target: { value: "Task list description" } });
-      fireEvent.change(projectSelect, { target: { value: "project-2" } });
+      
+      // Select Project Beta by clicking on it
+      const projectBetaRadio = screen.getByRole("radio", { name: /Project Beta/i });
+      fireEvent.click(projectBetaRadio);
       
       const submitButton = screen.getByRole("button", { name: /create task list/i });
       fireEvent.click(submitButton);
@@ -240,7 +248,7 @@ describe("CreateTaskListModal", () => {
       );
       
       await waitFor(() => {
-        expect(screen.getByRole("option", { name: "Project Alpha" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Project Alpha/i })).toBeInTheDocument();
       });
       
       const nameInput = screen.getByPlaceholderText(/enter task list name/i);
@@ -261,7 +269,7 @@ describe("CreateTaskListModal", () => {
       renderWithProvider(<CreateTaskListModal {...defaultProps} />, mockService);
       
       await waitFor(() => {
-        expect(screen.getByRole("option", { name: "Project Alpha" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Project Alpha/i })).toBeInTheDocument();
       });
       
       const nameInput = screen.getByPlaceholderText(/enter task list name/i);
@@ -280,7 +288,7 @@ describe("CreateTaskListModal", () => {
       renderWithProvider(<CreateTaskListModal {...defaultProps} />, mockService);
       
       await waitFor(() => {
-        expect(screen.getByRole("option", { name: "Project Alpha" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Project Alpha/i })).toBeInTheDocument();
       });
       
       const nameInput = screen.getByPlaceholderText(/enter task list name/i);
@@ -349,8 +357,12 @@ describe("CreateTaskListModal", () => {
       );
       
       await waitFor(() => {
-        const projectSelect = screen.getByRole("combobox") as HTMLSelectElement;
-        expect(projectSelect.value).toBe("project-2");
+        // The radio for Project Beta should be checked
+        const projectBetaRadio = screen.getByRole("radio", { name: /Project Beta/i });
+        expect(projectBetaRadio).toHaveAttribute("aria-checked", "true");
+        // And Project Alpha should not be checked
+        const projectAlphaRadio = screen.getByRole("radio", { name: /Project Alpha/i });
+        expect(projectAlphaRadio).toHaveAttribute("aria-checked", "false");
       });
     });
 
@@ -358,8 +370,12 @@ describe("CreateTaskListModal", () => {
       renderWithProvider(<CreateTaskListModal {...defaultProps} />);
       
       await waitFor(() => {
-        const projectSelect = screen.getByRole("combobox") as HTMLSelectElement;
-        expect(projectSelect.value).toBe("project-1");
+        // The radio for Project Alpha should be checked (first project auto-selected)
+        const projectAlphaRadio = screen.getByRole("radio", { name: /Project Alpha/i });
+        expect(projectAlphaRadio).toHaveAttribute("aria-checked", "true");
+        // And Project Beta should not be checked
+        const projectBetaRadio = screen.getByRole("radio", { name: /Project Beta/i });
+        expect(projectBetaRadio).toHaveAttribute("aria-checked", "false");
       });
     });
   });

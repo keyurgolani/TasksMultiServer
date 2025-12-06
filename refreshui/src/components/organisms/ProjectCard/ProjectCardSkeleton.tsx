@@ -1,6 +1,7 @@
 import React from "react";
 import { Skeleton } from "../../atoms/Skeleton";
 import { cn } from "../../../lib/utils";
+import type { ProjectCardVariant } from "./ProjectCard";
 
 /**
  * ProjectCardSkeleton Component
@@ -8,11 +9,14 @@ import { cn } from "../../../lib/utils";
  * A skeleton loading placeholder that matches the expected layout
  * of the ProjectCard component.
  *
- * Requirements: 10.5
+ * Requirements: 10.5, 1.16
  * - Display skeleton placeholders matching the expected content layout
+ * - Support minimal variant with compact skeleton layout
  */
 
 export interface ProjectCardSkeletonProps {
+  /** Visual variant - "default" shows full skeleton, "minimal" shows compact skeleton */
+  variant?: ProjectCardVariant;
   /** Additional CSS classes */
   className?: string;
 }
@@ -21,8 +25,36 @@ export interface ProjectCardSkeletonProps {
  * ProjectCardSkeleton component for loading states
  */
 export const ProjectCardSkeleton: React.FC<ProjectCardSkeletonProps> = ({
+  variant = "default",
   className,
 }) => {
+  // Minimal variant: compact skeleton with only title and progress bar
+  if (variant === "minimal") {
+    return (
+      <div
+        className={cn(
+          "p-3 rounded-lg",
+          "bg-[var(--bg-surface)]",
+          "border border-[var(--border-default)]",
+          "backdrop-blur-[var(--glass-blur)]",
+          "h-[52px]",
+          "flex flex-col justify-center",
+          className
+        )}
+        data-testid="project-card-skeleton"
+        data-variant="minimal"
+        aria-label="Loading project"
+        role="status"
+      >
+        {/* Project Name - compact */}
+        <Skeleton variant="text" width="60%" height={16} className="mb-1" />
+        {/* Progress Bar - compact */}
+        <Skeleton variant="rectangular" height={4} className="rounded-full" />
+      </div>
+    );
+  }
+
+  // Default variant: full skeleton
   return (
     <div
       className={cn(
@@ -33,6 +65,7 @@ export const ProjectCardSkeleton: React.FC<ProjectCardSkeletonProps> = ({
         className
       )}
       data-testid="project-card-skeleton"
+      data-variant="default"
       aria-label="Loading project"
       role="status"
     >

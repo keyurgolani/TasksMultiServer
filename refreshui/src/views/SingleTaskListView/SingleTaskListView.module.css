@@ -1,0 +1,120 @@
+/**
+ * SingleTaskListView Styles
+ *
+ * Implements the single task list view layout with:
+ * - Back navigation button
+ * - SearchFilterBar and OverallProgress
+ * - TaskCards in MasonryGrid layout
+ * - Edit and delete buttons
+ *
+ * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5
+ */
+
+.singleTaskListView {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  height: 100%;
+}
+
+/* Header section with back button and task list info */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Top row with back button and action buttons */
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+/* Back button and title container */
+.titleContainer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Action buttons container */
+.actionButtons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Task list description */
+.description {
+  margin-top: var(--space-1);
+}
+
+/* Search filter bar container */
+.searchFilterContainer {
+  position: relative;
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16);
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 64px;
+  height: 64px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+/* Error state */
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16);
+  text-align: center;
+}
+
+.errorIcon {
+  width: 64px;
+  height: 64px;
+  color: var(--error);
+  margin-bottom: var(--space-4);
+}
+
+/* Loading skeleton grid */
+.loadingGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+/* Results count */
+.resultsCount {
+  text-align: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .topRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .actionButtons {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .loadingGrid {
+    grid-template-columns: 1fr;
+  }
+}

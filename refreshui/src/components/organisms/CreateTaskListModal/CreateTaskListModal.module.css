@@ -190,6 +190,210 @@
   margin-top: var(--space-1, 4px);
 }
 
+/* Section Styling - Requirements: 9.13 */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 14px);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sectionTitle svg { color: var(--text-tertiary); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-1, 4px);
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--primary);
+  color: white;
+  border-radius: 9px;
+}
+
+/* Chip styles for selected items */
+.chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1, 4px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  padding: 2px var(--space-2, 8px);
+  font-size: var(--text-xs, 12px);
+  background: var(--primary);
+  border-radius: var(--border-radius-sm, 4px);
+  color: white;
+}
+
+.chipText {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chipRemove {
+  display: flex;
+  padding: 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+
+.chipRemove:hover { color: white; }
+
+/* Search input */
+.searchInput {
+  width: 100%;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-size: var(--text-sm, 14px);
+  border-radius: var(--border-radius, 8px);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.searchInput:focus { border-color: var(--primary); }
+
+/* List container for selectable items */
+.listContainer {
+  display: flex;
+  flex-direction: column;
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius, 8px);
+  background: var(--bg-app);
+}
+
+.listContainerError {
+  border-color: var(--error);
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.listItem:last-child { border-bottom: none; }
+.listItem:hover { background: var(--bg-surface); }
+
+.listItemSelected { background: rgba(var(--primary-rgb, 107, 115, 255), 0.1); }
+.listItemSelected:hover { background: rgba(var(--primary-rgb, 107, 115, 255), 0.15); }
+
+.listItemCheckbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-surface);
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.listItemSelected .listItemCheckbox {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+/* Create new project option */
+.listItemCreate {
+  background: rgba(var(--success-rgb, 34, 197, 94), 0.05);
+  border-bottom: 1px solid rgba(var(--success-rgb, 34, 197, 94), 0.2);
+}
+
+.listItemCreate:hover {
+  background: rgba(var(--success-rgb, 34, 197, 94), 0.1);
+}
+
+.listItemCreateIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--success, #22c55e);
+  color: white;
+  flex-shrink: 0;
+}
+
+/* New project chip styling */
+.chipNew {
+  background: var(--success, #22c55e);
+  gap: var(--space-1, 4px);
+}
+
+.chipNewLabel {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.listItemContent {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.listItemTitle {
+  font-size: var(--text-sm, 14px);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listItemMeta {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyState {
+  padding: var(--space-3, 12px);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm, 14px);
+  font-style: italic;
+}
+
 /* Actions */
 .actions {
   display: flex;

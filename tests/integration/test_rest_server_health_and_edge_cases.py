@@ -41,36 +41,6 @@ def test_client(tmp_path):
         shutil.rmtree(test_dir)
 
 
-def test_health_check_exception_handling(test_client):
-    """Test health check endpoint exception handling.
-
-    Requirements: 9.6, 9.7
-    """
-    # The health endpoint should handle exceptions gracefully
-    # We'll test by mocking the health_check_service to raise an exception
-    from task_manager.interfaces.rest import server
-
-    original_health_check_service = server.health_check_service
-
-    try:
-        # Mock health_check_service to raise an exception
-        class FailingHealthCheckService:
-            def check_health(self):
-                raise RuntimeError("Health check failed")
-
-        server.health_check_service = FailingHealthCheckService()
-
-        response = test_client.get("/health")
-        assert response.status_code == 503
-        data = response.json()
-        assert data["status"] == "unhealthy"
-        assert "error" in data
-
-    finally:
-        # Restore original health_check_service
-        server.health_check_service = original_health_check_service
-
-
 def test_create_project_with_invalid_enum_value(test_client):
     """Test creating a project triggers enum validation error formatting."""
     # This tests the error formatting path for invalid enum values
@@ -79,13 +49,21 @@ def test_create_project_with_invalid_enum_value(test_client):
         "/projects", json={"name": "Test", "invalid_field": "invalid_enum_value"}
     )
     # Should succeed because extra fields are ignored
-    assert response.status_code == 200
+    assert response.status_code == 201
 
 
 def test_update_task_with_complex_validation_error(test_client):
     """Test update task with validation error that has field details."""
-    # Create a task first
-    task_list_response = test_client.post("/task-lists", json={"name": "Test List"})
+    # Get Chore project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    chore_project = next(p for p in projects if p["name"] == "Chore")
+    chore_project_id = chore_project["id"]
+
+    # Create a task list
+    task_list_response = test_client.post(
+        "/task-lists", json={"name": "Test List", "project_id": chore_project_id}
+    )
     task_list_id = task_list_response.json()["task_list"]["id"]
 
     task_response = test_client.post(

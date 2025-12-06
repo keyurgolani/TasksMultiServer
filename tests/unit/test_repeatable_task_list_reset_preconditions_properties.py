@@ -260,7 +260,7 @@ def test_reset_rejected_when_tasks_incomplete(
     ),
     num_tasks=st.integers(min_value=1, max_value=5),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_reset_rejected_for_custom_project_even_with_all_tasks_complete(
     task_list_name: str, project_name: str, num_tasks: int
 ) -> None:

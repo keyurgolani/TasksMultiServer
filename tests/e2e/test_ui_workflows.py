@@ -82,7 +82,7 @@ class TestProjectWorkflow:
             "agent_instructions_template": "Test template for {title}",
         }
         response = api_client.post(f"{API_BASE_URL}/projects", json=new_project)
-        assert response.status_code == 200
+        assert response.status_code == 201
         response_data = response.json()
         created_project = response_data["project"]
         assert created_project["name"] == f"E2E Test Project {unique_id}"

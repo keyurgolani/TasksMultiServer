@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Target, Tag, AlertCircle, Link2, Check, MessageSquare, ChevronDown, ChevronUp, FileText, BookOpen } from "lucide-react";
+import { X, Plus, Target, Tag, AlertCircle, Link2, Check, MessageSquare, ChevronDown, ChevronUp, FileText, BookOpen, Play, ListOrdered, ArrowUp, ArrowDown, FolderOpen } from "lucide-react";
 import { Button } from "../../atoms/Button";
 import { Input } from "../../atoms/Input";
 import { Typography } from "../../atoms/Typography";
 import { useDataService } from "../../../context/DataServiceContext";
 import { cn } from "../../../lib/utils";
-import type { TaskList, Task, TaskStatus, TaskPriority, ExitCriterion, TaskDependency, Note } from "../../../services/types";
+import type { TaskList, Task, TaskStatus, TaskPriority, ExitCriterion, TaskDependency, Note, ActionPlanItem, Project } from "../../../services/types";
 import styles from "./CreateTaskModal.module.css";
 
 /**
@@ -62,6 +62,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const [newNote, setNewNote] = useState("");
   const [researchNotes, setResearchNotes] = useState<Note[]>([]);
   const [newResearchNote, setNewResearchNote] = useState("");
+  const [executionNotes, setExecutionNotes] = useState<Note[]>([]);
+  const [newExecutionNote, setNewExecutionNote] = useState("");
+  const [actionPlan, setActionPlan] = useState<ActionPlanItem[]>([]);
+  const [newActionPlanItem, setNewActionPlanItem] = useState("");
   
   // UI state
   const [loading, setLoading] = useState(false);
@@ -75,8 +79,27 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const [loadingTaskLists, setLoadingTaskLists] = useState(false);
   const [availableTasks, setAvailableTasks] = useState<Task[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  
+  // Project filter state for task list selection - Requirements: 9.12
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>("");
+  const [taskListSearchQuery, setTaskListSearchQuery] = useState("");
 
   const { dataService } = useDataService();
+
+  // Load projects when modal opens - Requirements: 9.12
+  useEffect(() => {
+    if (isOpen) {
+      setLoadingProjects(true);
+      dataService.getProjects()
+        .then((fetchedProjects) => {
+          setProjects(fetchedProjects);
+        })
+        .catch((err) => console.error("Failed to load projects:", err))
+        .finally(() => setLoadingProjects(false));
+    }
+  }, [isOpen, dataService]);
 
   // Load task lists when modal opens
   useEffect(() => {
@@ -87,6 +110,11 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           setTaskLists(fetchedTaskLists);
           if (taskListId && fetchedTaskLists.some(tl => tl.id === taskListId)) {
             setSelectedTaskListId(taskListId);
+            // Auto-select the project filter based on the task list's project
+            const taskList = fetchedTaskLists.find(tl => tl.id === taskListId);
+            if (taskList) {
+              setSelectedProjectFilter(taskList.projectId);
+            }
           } else if (fetchedTaskLists.length > 0 && !selectedTaskListId) {
             setSelectedTaskListId(fetchedTaskLists[0].id);
           }
@@ -120,6 +148,31 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     return taskLists.find(tl => tl.id === id)?.name || "Unknown List";
   }, [taskLists]);
 
+  // Filter task lists based on selected project and search query - Requirements: 9.12
+  const filteredTaskLists = useMemo(() => {
+    let filtered = taskLists;
+    
+    // Filter by project if selected
+    if (selectedProjectFilter) {
+      filtered = filtered.filter(tl => tl.projectId === selectedProjectFilter);
+    }
+    
+    // Filter by search query
+    const query = taskListSearchQuery.toLowerCase().trim();
+    if (query) {
+      filtered = filtered.filter(tl => 
+        tl.name.toLowerCase().includes(query) ||
+        (tl.description && tl.description.toLowerCase().includes(query))
+      );
+    }
+    
+    return filtered;
+  }, [taskLists, selectedProjectFilter, taskListSearchQuery]);
+
+  const getProjectName = useCallback((projectId: string): string => {
+    return projects.find(p => p.id === projectId)?.name || "Unknown Project";
+  }, [projects]);
+
   // Reset form when modal opens/closes
   useEffect(() => {
     if (isOpen) {
@@ -138,10 +191,16 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       setNewNote("");
       setResearchNotes([]);
       setNewResearchNote("");
+      setExecutionNotes([]);
+      setNewExecutionNote("");
+      setActionPlan([]);
+      setNewActionPlanItem("");
       setError("");
       setTitleError("");
       setTaskListError("");
       setLoading(false);
+      setSelectedProjectFilter("");
+      setTaskListSearchQuery("");
     }
   }, [isOpen, taskListId]);
 
@@ -188,6 +247,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
       const validNotes = notes.filter(n => n.content.trim());
       const validResearchNotes = researchNotes.filter(n => n.content.trim());
+      const validExecutionNotes = executionNotes.filter(n => n.content.trim());
+      const validActionPlan = actionPlan.filter(item => item.content.trim());
 
       await dataService.createTask({
         taskListId: selectedTaskListId,
@@ -200,6 +261,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
         tags: tags.length > 0 ? tags : undefined,
         notes: validNotes.length > 0 ? validNotes : undefined,
         researchNotes: validResearchNotes.length > 0 ? validResearchNotes : undefined,
+        executionNotes: validExecutionNotes.length > 0 ? validExecutionNotes : undefined,
+        actionPlan: validActionPlan.length > 0 ? validActionPlan : undefined,
       });
 
       onSuccess();
@@ -210,7 +273,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       setLoading(false);
     }
   }, [title, description, selectedTaskListId, status, priority, selectedDependencies, 
-      exitCriteria, tags, notes, researchNotes, validateForm, dataService, onSuccess, onClose]);
+      exitCriteria, tags, notes, researchNotes, executionNotes, actionPlan, validateForm, dataService, onSuccess, onClose]);
 
   const handleOverlayClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) onClose();
@@ -249,6 +312,53 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
   const removeResearchNote = useCallback((index: number) => 
     setResearchNotes(researchNotes.filter((_, i) => i !== index)), [researchNotes]);
+
+  // Execution notes handlers
+  const addExecutionNote = useCallback(() => {
+    const trimmed = newExecutionNote.trim();
+    if (trimmed) {
+      setExecutionNotes([...executionNotes, { content: trimmed, timestamp: new Date().toISOString() }]);
+      setNewExecutionNote("");
+    }
+  }, [newExecutionNote, executionNotes]);
+
+  const removeExecutionNote = useCallback((index: number) => 
+    setExecutionNotes(executionNotes.filter((_, i) => i !== index)), [executionNotes]);
+
+  // Action plan handlers
+  const addActionPlanItem = useCallback(() => {
+    const trimmed = newActionPlanItem.trim();
+    if (trimmed) {
+      const maxSequence = actionPlan.length > 0 
+        ? Math.max(...actionPlan.map(item => item.sequence)) 
+        : 0;
+      setActionPlan([...actionPlan, { sequence: maxSequence + 1, content: trimmed }]);
+      setNewActionPlanItem("");
+    }
+  }, [newActionPlanItem, actionPlan]);
+
+  const removeActionPlanItem = useCallback((sequence: number) => {
+    const updatedPlan = actionPlan
+      .filter(item => item.sequence !== sequence)
+      .map((item, idx) => ({ ...item, sequence: idx + 1 })); // Re-sequence
+    setActionPlan(updatedPlan);
+  }, [actionPlan]);
+
+  const moveActionPlanItemUp = useCallback((index: number) => {
+    if (index === 0) return;
+    const items = [...actionPlan];
+    [items[index - 1], items[index]] = [items[index], items[index - 1]];
+    const resequenced = items.map((item, idx) => ({ ...item, sequence: idx + 1 }));
+    setActionPlan(resequenced);
+  }, [actionPlan]);
+
+  const moveActionPlanItemDown = useCallback((index: number) => {
+    if (index >= actionPlan.length - 1) return;
+    const items = [...actionPlan];
+    [items[index], items[index + 1]] = [items[index + 1], items[index]];
+    const resequenced = items.map((item, idx) => ({ ...item, sequence: idx + 1 }));
+    setActionPlan(resequenced);
+  }, [actionPlan]);
 
   // Exit criteria handlers
   const addExitCriterion = useCallback(() => {
@@ -372,19 +482,87 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                       autoFocus
                     />
 
-                    <div className={styles.selectField}>
-                      <label className={styles.selectLabel}>Task List</label>
-                      <select
-                        value={selectedTaskListId}
-                        onChange={(e) => { setSelectedTaskListId(e.target.value); if (taskListError) setTaskListError(""); }}
-                        className={cn(styles.select, taskListError && styles.error)}
-                        disabled={loadingTaskLists}
-                      >
-                        <option value="">{loadingTaskLists ? "Loading..." : "Select a task list"}</option>
-                        {taskLists.map((tl) => (
-                          <option key={tl.id} value={tl.id}>{tl.name}</option>
-                        ))}
-                      </select>
+                    {/* Task List Selection with Project Filter - Requirements: 9.12 */}
+                    <div className={styles.section}>
+                      <div className={styles.sectionHeader}>
+                        <div className={styles.sectionTitle}>
+                          <FolderOpen size={16} />
+                          <span>Task List</span>
+                          {selectedTaskListId && (
+                            <span className={styles.badge}>1</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Selected task list chip */}
+                      {selectedTaskListId && (
+                        <div className={styles.chipList}>
+                          <div className={styles.chip}>
+                            <span className={styles.chipText}>{getTaskListName(selectedTaskListId)}</span>
+                            <button type="button" onClick={() => setSelectedTaskListId("")} className={styles.chipRemove}>
+                              <X size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Project filter dropdown */}
+                      <div className={styles.selectField}>
+                        <label className={styles.selectLabel}>Filter by Project</label>
+                        <select
+                          value={selectedProjectFilter}
+                          onChange={(e) => setSelectedProjectFilter(e.target.value)}
+                          className={styles.select}
+                          disabled={loadingProjects}
+                        >
+                          <option value="">{loadingProjects ? "Loading..." : "All Projects"}</option>
+                          {projects.map((project) => (
+                            <option key={project.id} value={project.id}>{project.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {/* Search input for task lists */}
+                      <input
+                        type="text"
+                        value={taskListSearchQuery}
+                        onChange={(e) => setTaskListSearchQuery(e.target.value)}
+                        placeholder="Search task lists..."
+                        className={styles.searchInput}
+                      />
+                      
+                      {/* Task list selection list */}
+                      <div className={cn(styles.listContainer, taskListError && styles.listContainerError)}>
+                        {loadingTaskLists ? (
+                          <div className={styles.emptyState}>Loading task lists...</div>
+                        ) : filteredTaskLists.length > 0 ? (
+                          filteredTaskLists.map((tl) => (
+                            <div
+                              key={tl.id}
+                              className={cn(styles.listItem, selectedTaskListId === tl.id && styles.listItemSelected)}
+                              onClick={() => { setSelectedTaskListId(tl.id); if (taskListError) setTaskListError(""); }}
+                              role="radio"
+                              aria-checked={selectedTaskListId === tl.id}
+                              tabIndex={0}
+                              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedTaskListId(tl.id); if (taskListError) setTaskListError(""); } }}
+                            >
+                              <div className={styles.listItemCheckbox}>
+                                {selectedTaskListId === tl.id && <Check size={12} />}
+                              </div>
+                              <div className={styles.listItemContent}>
+                                <span className={styles.listItemTitle}>{tl.name}</span>
+                                <span className={styles.listItemMeta}>{getProjectName(tl.projectId)}</span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className={styles.emptyState}>
+                            {taskListSearchQuery || selectedProjectFilter 
+                              ? "No task lists match your filters" 
+                              : "No task lists available"}
+                          </div>
+                        )}
+                      </div>
                       {taskListError && <span className={styles.selectError}>{taskListError}</span>}
                     </div>
 
@@ -596,6 +774,44 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Execution Notes - Requirements: 9.8 */}
+                  <div className={styles.section}>
+                    <div className={styles.sectionHeader}>
+                      <div className={styles.sectionTitle}>
+                        <Play size={16} />
+                        <span>Execution Notes</span>
+                        {executionNotes.length > 0 && <span className={styles.badge}>{executionNotes.length}</span>}
+                      </div>
+                    </div>
+                    <div className={styles.notesContainer}>
+                      {executionNotes.length > 0 && (
+                        <div className={styles.notesList}>
+                          {executionNotes.map((note, index) => (
+                            <div key={index} className={styles.noteItem}>
+                              <span className={styles.noteContent}>{note.content}</span>
+                              <button type="button" onClick={() => removeExecutionNote(index)} className={styles.noteRemove}>
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className={styles.noteInputRow}>
+                        <textarea
+                          value={newExecutionNote}
+                          onChange={(e) => setNewExecutionNote(e.target.value)}
+                          onKeyPress={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addExecutionNote(); } }}
+                          placeholder="Add execution note..."
+                          className={styles.noteInput}
+                          rows={2}
+                        />
+                        <Button type="button" variant="secondary" size="sm" onClick={addExecutionNote} disabled={!newExecutionNote.trim()}>
+                          <Plus size={14} />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Exit Criteria */}
                   <div className={styles.section}>
                     <div className={styles.sectionHeader}>
@@ -667,6 +883,73 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                         ))
                       ) : (
                         <div className={styles.emptyState}>No exit criteria defined</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Plan - Requirements: 9.11 */}
+                  <div className={styles.section}>
+                    <div className={styles.sectionHeader}>
+                      <div className={styles.sectionTitle}>
+                        <ListOrdered size={16} />
+                        <span>Action Plan</span>
+                        {actionPlan.length > 0 && <span className={styles.badge}>{actionPlan.length}</span>}
+                      </div>
+                    </div>
+                    <div className={styles.actionPlanContainer}>
+                      {actionPlan.length > 0 && (
+                        <div className={styles.actionPlanList}>
+                          {actionPlan.map((item, index) => (
+                            <div key={item.sequence} className={styles.actionPlanItem}>
+                              <span className={styles.actionPlanSequence}>{item.sequence}</span>
+                              <span className={styles.actionPlanContent}>{item.content}</span>
+                              <div className={styles.actionPlanControls}>
+                                <button
+                                  type="button"
+                                  onClick={() => moveActionPlanItemUp(index)}
+                                  className={styles.actionPlanMoveButton}
+                                  disabled={index === 0}
+                                  aria-label="Move up"
+                                >
+                                  <ArrowUp size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveActionPlanItemDown(index)}
+                                  className={styles.actionPlanMoveButton}
+                                  disabled={index === actionPlan.length - 1}
+                                  aria-label="Move down"
+                                >
+                                  <ArrowDown size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeActionPlanItem(item.sequence)}
+                                  className={styles.actionPlanRemoveButton}
+                                  aria-label="Remove"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className={styles.actionPlanInputRow}>
+                        <input
+                          type="text"
+                          value={newActionPlanItem}
+                          onChange={(e) => setNewActionPlanItem(e.target.value)}
+                          onKeyPress={(e) => { if (e.key === "Enter") { e.preventDefault(); addActionPlanItem(); } }}
+                          placeholder="Add action plan item..."
+                          className={styles.smallInput}
+                        />
+                        <Button type="button" variant="secondary" size="sm" onClick={addActionPlanItem} disabled={!newActionPlanItem.trim()}>
+                          <Plus size={14} />
+                        </Button>
+                      </div>
+                      {actionPlan.length === 0 && (
+                        <div className={styles.emptyState}>No action plan items defined</div>
                       )}
                     </div>
                   </div>

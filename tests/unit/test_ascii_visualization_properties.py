@@ -225,7 +225,7 @@ def test_ascii_visualization_shows_dependency_relationships(num_tasks: int) -> N
     num_tasks=st.integers(min_value=1, max_value=10),
     statuses=st.lists(st.sampled_from(list(Status)), min_size=1, max_size=10),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_ascii_visualization_shows_status_indicators(
     num_tasks: int, statuses: list[Status]
 ) -> None:

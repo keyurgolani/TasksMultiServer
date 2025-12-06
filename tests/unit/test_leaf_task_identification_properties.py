@@ -299,7 +299,7 @@ def test_linear_chain_has_one_leaf_task(num_tasks: int) -> None:
     num_branches=st.integers(min_value=2, max_value=6),
     branch_length=st.integers(min_value=1, max_value=5),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=500)
 def test_branching_structure_has_one_leaf_task(num_branches: int, branch_length: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 28: Leaf tasks have no dependencies

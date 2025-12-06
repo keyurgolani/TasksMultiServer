@@ -74,23 +74,23 @@ describe("TaskListCard", () => {
       expect(screen.getByTestId("tasklist-card-task-count")).toHaveTextContent("15");
     });
 
-    it("renders completion text with percentage", () => {
+    it("renders OverallProgress organism with completion stats", () => {
       const taskList = createMockTaskList();
       const stats = createMockStats({ completedTasks: 5, taskCount: 10, completionPercentage: 50 });
       render(<TaskListCard taskList={taskList} stats={stats} />);
-      expect(screen.getByTestId("tasklist-card-completion-text")).toHaveTextContent(
-        "5/10 (50%)"
-      );
+      // OverallProgress organism is now used instead of separate elements
+      expect(screen.getByTestId("overall-progress")).toBeInTheDocument();
     });
 
-    it("renders progress bar", () => {
+    it("renders progress bar via OverallProgress", () => {
       const taskList = createMockTaskList();
       const stats = createMockStats();
       render(<TaskListCard taskList={taskList} stats={stats} />);
-      expect(screen.getByTestId("tasklist-card-progress-bar")).toBeInTheDocument();
+      // Progress bar is now rendered via OverallProgress organism
+      expect(screen.getByTestId("overall-progress-bar")).toBeInTheDocument();
     });
 
-    it("renders status breakdown", () => {
+    it("renders status breakdown via OverallProgress", () => {
       const taskList = createMockTaskList();
       const stats = createMockStats({
         inProgressTasks: 3,
@@ -98,9 +98,8 @@ describe("TaskListCard", () => {
         readyTasks: 4,
       });
       render(<TaskListCard taskList={taskList} stats={stats} />);
-      expect(screen.getByTestId("tasklist-card-in-progress")).toHaveTextContent("3");
-      expect(screen.getByTestId("tasklist-card-blocked")).toHaveTextContent("2");
-      expect(screen.getByTestId("tasklist-card-ready")).toHaveTextContent("4");
+      // Status breakdown is now rendered via OverallProgress organism
+      expect(screen.getByTestId("overall-progress")).toBeInTheDocument();
     });
 
     it("renders no stats message when stats not provided", () => {

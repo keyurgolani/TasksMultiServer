@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { X, Check, FolderOpen } from "lucide-react";
 import { Button } from "../../atoms/Button";
 import { Input } from "../../atoms/Input";
 import { Typography } from "../../atoms/Typography";
@@ -63,12 +63,28 @@ export const EditTaskListModal: React.FC<EditTaskListModalProps> = ({
   const [error, setError] = useState("");
   const [projectError, setProjectError] = useState("");
 
-  // Projects state for dropdown
+  // Projects state for searchable selector - Requirements: 9.14
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
 
   // Get data service from context
   const { dataService } = useDataService();
+
+  // Filter projects based on search query - Requirements: 9.14
+  const filteredProjects = useMemo(() => {
+    const query = projectSearchQuery.toLowerCase().trim();
+    if (!query) return projects;
+    return projects.filter(
+      (project) => project.name.toLowerCase().includes(query) ||
+        (project.description && project.description.toLowerCase().includes(query))
+    );
+  }, [projects, projectSearchQuery]);
+
+  // Get project name by ID
+  const getProjectName = useCallback((id: string): string => {
+    return projects.find(p => p.id === id)?.name || "Unknown Project";
+  }, [projects]);
 
   // Load projects when modal opens
   useEffect(() => {
@@ -98,6 +114,7 @@ export const EditTaskListModal: React.FC<EditTaskListModalProps> = ({
       setError("");
       setProjectError("");
       setLoading(false);
+      setProjectSearchQuery("");
     }
   }, [isOpen, taskList]);
 
@@ -256,30 +273,70 @@ export const EditTaskListModal: React.FC<EditTaskListModalProps> = ({
                 autoFocus
               />
 
-              {/* Project Selection - Requirements: 21.3 */}
-              <div className={styles.selectField}>
-                <label className={styles.selectLabel}>Project</label>
-                <select
-                  value={projectId}
-                  onChange={(e) => {
-                    setProjectId(e.target.value);
-                    if (projectError) setProjectError("");
-                  }}
-                  className={cn(styles.select, projectError && styles.error)}
-                  disabled={loadingProjects}
-                >
-                  <option value="">
-                    {loadingProjects ? "Loading projects..." : "Select a project"}
-                  </option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-                {projectError && (
-                  <span className={styles.selectError}>{projectError}</span>
+              {/* Project Selection with Searchable Selector - Requirements: 9.14, 21.3 */}
+              <div className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div className={styles.sectionTitle}>
+                    <FolderOpen size={16} />
+                    <span>Project</span>
+                    {projectId && <span className={styles.badge}>1</span>}
+                  </div>
+                </div>
+                
+                {/* Selected project chip */}
+                {projectId && (
+                  <div className={styles.chipList}>
+                    <div className={styles.chip}>
+                      <span className={styles.chipText}>{getProjectName(projectId)}</span>
+                      <button type="button" onClick={() => setProjectId("")} className={styles.chipRemove}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
                 )}
+                
+                {/* Search input for projects */}
+                <input
+                  type="text"
+                  value={projectSearchQuery}
+                  onChange={(e) => setProjectSearchQuery(e.target.value)}
+                  placeholder="Search projects..."
+                  className={styles.searchInput}
+                />
+                
+                {/* Project selection list */}
+                <div className={cn(styles.listContainer, projectError && styles.listContainerError)}>
+                  {loadingProjects ? (
+                    <div className={styles.emptyState}>Loading projects...</div>
+                  ) : filteredProjects.length > 0 ? (
+                    filteredProjects.map((project) => (
+                      <div
+                        key={project.id}
+                        className={cn(styles.listItem, projectId === project.id && styles.listItemSelected)}
+                        onClick={() => { setProjectId(project.id); if (projectError) setProjectError(""); }}
+                        role="radio"
+                        aria-checked={projectId === project.id}
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setProjectId(project.id); if (projectError) setProjectError(""); } }}
+                      >
+                        <div className={styles.listItemCheckbox}>
+                          {projectId === project.id && <Check size={12} />}
+                        </div>
+                        <div className={styles.listItemContent}>
+                          <span className={styles.listItemTitle}>{project.name}</span>
+                          {project.description && (
+                            <span className={styles.listItemMeta}>{project.description}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className={styles.emptyState}>
+                      {projectSearchQuery ? "No projects match your search" : "No projects available"}
+                    </div>
+                  )}
+                </div>
+                {projectError && <span className={styles.selectError}>{projectError}</span>}
               </div>
 
               {/* Description Input (optional) */}

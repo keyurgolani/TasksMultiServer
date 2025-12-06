@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDataService } from "../../context/DataServiceContext";
 import { MasonryGrid } from "../../layouts/MasonryGrid";
 import { ProjectCard, ProjectCardSkeleton } from "../../components/organisms/ProjectCard";
 import { EditProjectModal } from "../../components/organisms/EditProjectModal";
 import { DeleteConfirmationDialog } from "../../components/organisms/DeleteConfirmationDialog";
-import { SearchBar } from "../../components/molecules/SearchBar";
-import { FilterChips } from "../../components/molecules/FilterChips";
+import { SearchFilterBar } from "../../components/molecules/SearchFilterBar";
+import { SortFilterPopup, type SortOption, type FilterOption } from "../../components/organisms/SortFilterPopup";
 import { Typography } from "../../components/atoms/Typography";
+import { filterProjects } from "../../utils/filtering";
+import { sortProjects, type ProjectSortField, type SortDirection } from "../../utils/sorting";
 import { cn } from "../../lib/utils";
 import type { Project } from "../../core/types/entities";
 import type { ProjectStats } from "../../services/types";
@@ -15,27 +18,44 @@ import type { ProjectStats } from "../../services/types";
  * ProjectsView Component
  *
  * A view component that displays all projects in a masonry grid layout
- * with search and filter capabilities.
+ * with search and filter capabilities using SearchFilterBar.
  *
- * Requirements: 10.1
- * - Display all projects in a masonry grid
- * - Search capability for filtering projects by name/description
- * - Filter capabilities for project status
+ * Requirements: 3.1, 3.2, 3.3, 3.4, 3.5
+ * - 3.1: Display SearchFilterBar with search input and SortFilterButton at top
+ * - 3.2: Display all ProjectCard components in a MasonryGrid layout
+ * - 3.3: Filter ProjectCard components based on search query
+ * - 3.4: Navigate to /projects/{projectId} on card click
+ * - 3.5: Reorder or filter ProjectCard components via SortFilterPopup
  */
 
 export interface ProjectsViewProps {
-  /** Callback when a project is clicked */
+  /** Callback when a project is clicked (optional, navigation is default) */
   onProjectClick?: (project: Project) => void;
   /** Additional CSS classes */
   className?: string;
 }
 
-/** Filter options for project completion status */
-const COMPLETION_FILTER_OPTIONS = [
-  { id: "all", label: "All" },
-  { id: "not-started", label: "Not Started" },
-  { id: "in-progress", label: "In Progress" },
-  { id: "completed", label: "Completed" },
+/**
+ * Sort options for projects
+ */
+const PROJECT_SORT_OPTIONS: SortOption[] = [
+  { id: "taskListCount-desc", label: "Most lists" },
+  { id: "taskListCount-asc", label: "Fewest lists" },
+  { id: "name-asc", label: "Name (A-Z)" },
+  { id: "name-desc", label: "Name (Z-A)" },
+  { id: "createdAt-desc", label: "Newest first" },
+  { id: "createdAt-asc", label: "Oldest first" },
+  { id: "updatedAt-desc", label: "Recently updated" },
+  { id: "updatedAt-asc", label: "Least recently updated" },
+];
+
+/**
+ * Filter options for project completion status
+ */
+const PROJECT_FILTER_OPTIONS: FilterOption[] = [
+  { id: "status-not-started", label: "Not Started", type: "checkbox", group: "Status" },
+  { id: "status-in-progress", label: "In Progress", type: "checkbox", group: "Status" },
+  { id: "status-completed", label: "Completed", type: "checkbox", group: "Status" },
 ];
 
 /** Extended project type with stats for masonry grid */
@@ -66,12 +86,21 @@ const getCompletionStatus = (stats?: ProjectStats): string => {
 };
 
 /**
+ * Parse sort option ID into field and direction
+ */
+function parseSortOption(sortId: string): { field: ProjectSortField; direction: SortDirection } {
+  const [field, direction] = sortId.split("-") as [ProjectSortField, SortDirection];
+  return { field, direction };
+}
+
+/**
  * ProjectsView component
  */
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
   onProjectClick,
   className,
 }) => {
+  const navigate = useNavigate();
   const { dataService } = useDataService();
 
   // State
@@ -81,8 +110,15 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Search/filter state
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFilters, setSelectedFilters] = useState<string[]>(["all"]);
+  const [sortFilterPopupOpen, setSortFilterPopupOpen] = useState(false);
+  const [activeSortId, setActiveSortId] = useState("taskListCount-desc");
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  
+  // Ref for SortFilterPopup anchor
+  const sortFilterButtonRef = useRef<HTMLDivElement>(null);
 
   // Edit/Delete modal state
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -130,30 +166,73 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   /**
    * Handle search query change
+   * Requirements: 3.3 - Filter ProjectCard components based on search query
    */
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value);
   }, []);
 
   /**
-   * Handle filter selection change
+   * Handle sort/filter popup open
+   * Requirements: 3.5 - Wire up to SortFilterPopup
    */
-  const handleFilterChange = useCallback((selected: string[]) => {
-    // If "all" is selected, clear other filters
-    if (selected.includes("all") && !selectedFilters.includes("all")) {
-      setSelectedFilters(["all"]);
-    } else if (selected.length === 0) {
-      // If nothing selected, default to "all"
-      setSelectedFilters(["all"]);
+  const handleSortFilterOpen = useCallback(() => {
+    setSortFilterPopupOpen((prev) => !prev);
+  }, []);
+
+  /**
+   * Handle sort/filter popup close
+   */
+  const handleSortFilterClose = useCallback(() => {
+    setSortFilterPopupOpen(false);
+  }, []);
+
+  /**
+   * Handle sort/filter reset
+   */
+  const handleSortFilterReset = useCallback(() => {
+    setActiveSortId("taskListCount-desc");
+    setActiveFilters([]);
+    setSearchQuery("");
+  }, []);
+
+  /**
+   * Handle sort option change
+   * Requirements: 3.5 - Reorder ProjectCard components via SortFilterPopup
+   */
+  const handleSortChange = useCallback((sortId: string) => {
+    setActiveSortId(sortId);
+  }, []);
+
+  /**
+   * Handle filter option change
+   * Requirements: 3.5 - Filter ProjectCard components via SortFilterPopup
+   */
+  const handleFilterChange = useCallback((filterIds: string[]) => {
+    setActiveFilters(filterIds);
+  }, []);
+
+  /**
+   * Check if any sort/filter is active (non-default)
+   */
+  const sortFilterActive = useMemo(() => {
+    return activeSortId !== "taskListCount-desc" || activeFilters.length > 0;
+  }, [activeSortId, activeFilters]);
+
+  /**
+   * Handle project card click
+   * Requirements: 3.4 - Navigate to /projects/{projectId} on card click
+   */
+  const handleProjectCardClick = useCallback((project: Project) => {
+    if (onProjectClick) {
+      onProjectClick(project);
     } else {
-      // Remove "all" if other filters are selected
-      setSelectedFilters(selected.filter((id) => id !== "all"));
+      navigate(`/projects/${project.id}`);
     }
-  }, [selectedFilters]);
+  }, [navigate, onProjectClick]);
 
   /**
    * Handle edit action on a project
-   * Requirements: 23.3 - Open the corresponding edit modal when edit button is clicked
    */
   const handleEditProject = useCallback((project: Project) => {
     setEditingProject(project);
@@ -161,7 +240,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   /**
    * Handle delete action on a project
-   * Requirements: 23.4 - Open the corresponding confirmation dialog when delete button is clicked
    */
   const handleDeleteProject = useCallback((project: Project) => {
     setDeletingProject(project);
@@ -209,34 +287,50 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   }, [deletingProject, dataService, loadProjects]);
 
   /**
-   * Filter projects based on search query and filters
+   * Filter and sort projects based on search query, filters, and sort option
+   * Requirements: 3.3, 3.5
    */
   const filteredProjects = useMemo(() => {
-    return projects.filter((project) => {
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesName = project.name.toLowerCase().includes(query);
-        const matchesDescription = project.description
-          ?.toLowerCase()
-          .includes(query);
-        if (!matchesName && !matchesDescription) {
-          return false;
-        }
-      }
+    let result = projects;
 
-      // Completion status filter
-      if (!selectedFilters.includes("all")) {
-        const stats = projectStats.get(project.id);
-        const status = getCompletionStatus(stats);
-        if (!selectedFilters.includes(status)) {
-          return false;
-        }
-      }
+    // Apply search filter
+    // Requirements: 3.3 - Filter ProjectCard components based on search query
+    if (searchQuery) {
+      result = filterProjects(result, searchQuery);
+    }
 
-      return true;
-    });
-  }, [projects, searchQuery, selectedFilters, projectStats]);
+    // Apply status filters
+    if (activeFilters.length > 0) {
+      const statusFilters = activeFilters
+        .filter((f) => f.startsWith("status-"))
+        .map((f) => f.replace("status-", ""));
+
+      if (statusFilters.length > 0) {
+        result = result.filter((project) => {
+          const stats = projectStats.get(project.id);
+          const status = getCompletionStatus(stats);
+          return statusFilters.includes(status);
+        });
+      }
+    }
+
+    // Apply sorting
+    // Requirements: 3.5 - Reorder ProjectCard components via SortFilterPopup
+    const { field, direction } = parseSortOption(activeSortId);
+    
+    // Handle custom taskListCount sorting
+    if (field === "taskListCount") {
+      result = [...result].sort((a, b) => {
+        const countA = projectStats.get(a.id)?.taskListCount ?? 0;
+        const countB = projectStats.get(b.id)?.taskListCount ?? 0;
+        return direction === "desc" ? countB - countA : countA - countB;
+      });
+    } else {
+      result = sortProjects(result, field as ProjectSortField, direction);
+    }
+
+    return result;
+  }, [projects, searchQuery, activeFilters, activeSortId, projectStats]);
 
   /**
    * Prepare projects for masonry grid with stats and height
@@ -254,26 +348,33 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   /**
    * Render a project card
-   * Requirements: 23.3, 23.4 - Wire up edit and delete handlers to card actions
+   * Requirements: 3.2, 3.4, 3.7, 18.1, 18.2
+   * - Use showcase-style ProjectCards with tilt effect for parallax
+   * - Cards have min-height (180px) and max-height (350px) constraints
+   * - Narrower column width (~280px) achieved via columnBreakpoints
    */
   const renderProjectCard = useCallback(
     (project: ProjectWithStats) => (
-      <ProjectCard
-        project={project}
-        stats={project.stats}
-        onClick={() => onProjectClick?.(project)}
-        onEdit={handleEditProject}
-        onDelete={handleDeleteProject}
-        spotlight
-        tilt
-      />
+      <div 
+        className="min-h-[180px] max-h-[350px]"
+        style={{ minHeight: '180px', maxHeight: '350px' }}
+      >
+        <ProjectCard
+          project={project}
+          stats={project.stats}
+          onClick={() => handleProjectCardClick(project)}
+          onEdit={handleEditProject}
+          onDelete={handleDeleteProject}
+          spotlight
+          tilt
+        />
+      </div>
     ),
-    [onProjectClick, handleEditProject, handleDeleteProject]
+    [handleProjectCardClick, handleEditProject, handleDeleteProject]
   );
 
   /**
    * Render loading skeleton
-   * Requirements: 10.5 - Display skeleton placeholders matching expected content layout
    */
   const renderLoadingSkeleton = () => (
     <div 
@@ -311,12 +412,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         />
       </svg>
       <Typography variant="h5" color="secondary" className="mb-2">
-        {searchQuery || !selectedFilters.includes("all")
+        {searchQuery || activeFilters.length > 0
           ? "No projects match your filters"
           : "No projects yet"}
       </Typography>
       <Typography variant="body-sm" color="muted">
-        {searchQuery || !selectedFilters.includes("all")
+        {searchQuery || activeFilters.length > 0
           ? "Try adjusting your search or filters"
           : "Create your first project to get started"}
       </Typography>
@@ -366,27 +467,33 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       data-testid="projects-view"
     >
       {/* Header */}
+      {/* Requirements: 3.6 - Display a prominent page title that is clearly visible */}
       <div className="flex flex-col gap-4">
-        <Typography variant="h3" color="primary">
+        <Typography variant="h1" color="primary" className="text-3xl md:text-4xl font-bold">
           Projects
         </Typography>
 
-        {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 max-w-md">
-            <SearchBar
-              placeholder="Search projects..."
-              value={searchQuery}
-              onChange={handleSearchChange}
-              debounceMs={300}
-            />
-          </div>
-          <FilterChips
-            options={COMPLETION_FILTER_OPTIONS}
-            selected={selectedFilters}
-            onChange={handleFilterChange}
-            multiSelect
-            aria-label="Filter by completion status"
+        {/* SearchFilterBar - Requirements: 3.1 */}
+        <div ref={sortFilterButtonRef} className="relative">
+          <SearchFilterBar
+            searchValue={searchQuery}
+            onSearchChange={handleSearchChange}
+            sortFilterActive={sortFilterActive}
+            onSortFilterOpen={handleSortFilterOpen}
+            onSortFilterReset={handleSortFilterReset}
+            searchPlaceholder="Search projects..."
+            sortFilterLabel="Sort & Filter"
+          />
+          <SortFilterPopup
+            isOpen={sortFilterPopupOpen}
+            onClose={handleSortFilterClose}
+            sortOptions={PROJECT_SORT_OPTIONS}
+            filterOptions={PROJECT_FILTER_OPTIONS}
+            activeSortId={activeSortId}
+            activeFilters={activeFilters}
+            onSortChange={handleSortChange}
+            onFilterChange={handleFilterChange}
+            anchorElement={sortFilterButtonRef.current}
           />
         </div>
       </div>
@@ -398,6 +505,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
       {!isLoading && !error && projectsWithStats.length === 0 && renderEmptyState()}
 
+      {/* MasonryGrid - Requirements: 3.2, 3.7, 18.1, 18.2 */}
+      {/* Use narrower columns (~280px) for showcase-style cards with parallax effect */}
       {!isLoading && !error && projectsWithStats.length > 0 && (
         <MasonryGrid
           items={projectsWithStats}
@@ -405,6 +514,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           gap={16}
           animateLayout
           layoutId="projects-masonry"
+          columnBreakpoints={{ 0: 1, 560: 2, 840: 3, 1120: 4, 1400: 5, 1680: 6 }}
         />
       )}
 
@@ -417,7 +527,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         </div>
       )}
 
-      {/* Edit Project Modal - Requirements: 23.3 */}
+      {/* Edit Project Modal */}
       {editingProject && (
         <EditProjectModal
           isOpen={!!editingProject}
@@ -427,7 +537,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         />
       )}
 
-      {/* Delete Confirmation Dialog - Requirements: 23.4 */}
+      {/* Delete Confirmation Dialog */}
       {deletingProject && (
         <DeleteConfirmationDialog
           isOpen={!!deletingProject}

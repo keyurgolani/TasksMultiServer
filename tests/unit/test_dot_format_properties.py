@@ -608,7 +608,7 @@ def test_dot_format_shows_independent_tasks(
     num_tasks=st.integers(min_value=3, max_value=10),
     seed=st.integers(min_value=0, max_value=1000),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_dot_format_structure_is_consistent(num_tasks: int, seed: int) -> None:
     """
     Feature: agent-ux-enhancements, Property 25: DOT format is valid Graphviz

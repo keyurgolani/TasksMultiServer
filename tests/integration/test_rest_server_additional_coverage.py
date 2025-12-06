@@ -25,9 +25,13 @@ class TestProjectEndpointsAdditionalCoverage:
 
     def test_create_project_storage_error(self, client):
         """Test create project with storage error."""
-        with patch("task_manager.interfaces.rest.server.project_orchestrator") as mock_orch:
-            mock_orch.create_project.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["project"],
+            "create_project",
+            side_effect=Exception("Database error"),
+        ):
             response = client.post("/projects", json={"name": "Test Project"})
 
             assert response.status_code == 500
@@ -35,9 +39,11 @@ class TestProjectEndpointsAdditionalCoverage:
 
     def test_get_project_storage_error(self, client):
         """Test get project with storage error."""
-        with patch("task_manager.interfaces.rest.server.project_orchestrator") as mock_orch:
-            mock_orch.get_project.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["project"], "get_project", side_effect=Exception("Database error")
+        ):
             project_id = str(uuid4())
             response = client.get(f"/projects/{project_id}")
 
@@ -46,9 +52,13 @@ class TestProjectEndpointsAdditionalCoverage:
 
     def test_update_project_storage_error(self, client):
         """Test update project with storage error."""
-        with patch("task_manager.interfaces.rest.server.project_orchestrator") as mock_orch:
-            mock_orch.update_project.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["project"],
+            "update_project",
+            side_effect=Exception("Database error"),
+        ):
             project_id = str(uuid4())
             response = client.put(f"/projects/{project_id}", json={"name": "Updated"})
 
@@ -57,9 +67,13 @@ class TestProjectEndpointsAdditionalCoverage:
 
     def test_delete_project_storage_error(self, client):
         """Test delete project with storage error."""
-        with patch("task_manager.interfaces.rest.server.project_orchestrator") as mock_orch:
-            mock_orch.delete_project.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["project"],
+            "delete_project",
+            side_effect=Exception("Database error"),
+        ):
             project_id = str(uuid4())
             response = client.delete(f"/projects/{project_id}")
 
@@ -72,19 +86,47 @@ class TestTaskListEndpointsAdditionalCoverage:
 
     def test_create_task_list_storage_error(self, client):
         """Test create task list with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_list_orchestrator") as mock_orch:
-            mock_orch.create_task_list.side_effect = Exception("Database error")
+        from datetime import datetime
 
-            response = client.post("/task-lists", json={"name": "Test List"})
+        from task_manager.interfaces.rest import server
+        from task_manager.models.entities import Project
 
-            assert response.status_code == 500
-            assert response.json()["error"]["code"] == "STORAGE_ERROR"
+        project_id = uuid4()
+        mock_project = Project(
+            id=project_id,
+            name="Test Project",
+            is_default=False,
+            agent_instructions_template=None,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        # Mock get_project to return a valid project so validation passes
+        with patch.object(
+            server.orchestrators["project"], "get_project", return_value=mock_project
+        ):
+            # Mock create_task_list to raise storage error
+            with patch.object(
+                server.orchestrators["task_list"],
+                "create_task_list",
+                side_effect=Exception("Database error"),
+            ):
+                response = client.post(
+                    "/task-lists", json={"name": "Test List", "project_id": str(project_id)}
+                )
+
+                assert response.status_code == 500
+                assert response.json()["error"]["code"] == "STORAGE_ERROR"
 
     def test_get_task_list_storage_error(self, client):
         """Test get task list with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_list_orchestrator") as mock_orch:
-            mock_orch.get_task_list.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task_list"],
+            "get_task_list",
+            side_effect=Exception("Database error"),
+        ):
             task_list_id = str(uuid4())
             response = client.get(f"/task-lists/{task_list_id}")
 
@@ -93,9 +135,13 @@ class TestTaskListEndpointsAdditionalCoverage:
 
     def test_update_task_list_storage_error(self, client):
         """Test update task list with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_list_orchestrator") as mock_orch:
-            mock_orch.update_task_list.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task_list"],
+            "update_task_list",
+            side_effect=Exception("Database error"),
+        ):
             task_list_id = str(uuid4())
             response = client.put(f"/task-lists/{task_list_id}", json={"name": "Updated"})
 
@@ -104,9 +150,13 @@ class TestTaskListEndpointsAdditionalCoverage:
 
     def test_delete_task_list_storage_error(self, client):
         """Test delete task list with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_list_orchestrator") as mock_orch:
-            mock_orch.delete_task_list.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task_list"],
+            "delete_task_list",
+            side_effect=Exception("Database error"),
+        ):
             task_list_id = str(uuid4())
             response = client.delete(f"/task-lists/{task_list_id}")
 
@@ -115,9 +165,13 @@ class TestTaskListEndpointsAdditionalCoverage:
 
     def test_reset_task_list_storage_error(self, client):
         """Test reset task list with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_list_orchestrator") as mock_orch:
-            mock_orch.reset_task_list.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task_list"],
+            "reset_task_list",
+            side_effect=Exception("Database error"),
+        ):
             task_list_id = str(uuid4())
             response = client.post(f"/task-lists/{task_list_id}/reset")
 
@@ -126,11 +180,13 @@ class TestTaskListEndpointsAdditionalCoverage:
 
     def test_delete_task_list_business_logic_error(self, client):
         """Test delete task list with business logic error."""
-        with patch("task_manager.interfaces.rest.server.task_list_orchestrator") as mock_orch:
-            mock_orch.delete_task_list.side_effect = ValueError(
-                "Cannot delete task list with active tasks"
-            )
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task_list"],
+            "delete_task_list",
+            side_effect=ValueError("Cannot delete task list with active tasks"),
+        ):
             task_list_id = str(uuid4())
             response = client.delete(f"/task-lists/{task_list_id}")
 
@@ -159,7 +215,9 @@ class TestTaskEndpointsAdditionalCoverage:
 
         assert response.status_code == 400
         assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-        assert "dependency" in response.json()["error"]["message"].lower()
+        # Check that error details contain field path with "dependencies"
+        error_details = response.json()["error"]["details"]
+        assert any("dependencies" in field for field in error_details.keys())
 
     def test_create_task_invalid_exit_criteria_format(self, client):
         """Test create task with invalid exit criteria format."""
@@ -179,7 +237,9 @@ class TestTaskEndpointsAdditionalCoverage:
 
         assert response.status_code == 400
         assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-        assert "exit criteria" in response.json()["error"]["message"].lower()
+        # Check that error details contain field path with "exit_criteria"
+        error_details = response.json()["error"]["details"]
+        assert any("exit_criteria" in field for field in error_details.keys())
 
     def test_create_task_invalid_note_format(self, client):
         """Test create task with invalid note format."""
@@ -220,7 +280,9 @@ class TestTaskEndpointsAdditionalCoverage:
 
         assert response.status_code == 400
         assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-        assert "research note" in response.json()["error"]["message"].lower()
+        # Check that error details contain field path with "research_notes"
+        error_details = response.json()["error"]["details"]
+        assert any("research_notes" in field for field in error_details.keys())
 
     def test_create_task_invalid_action_plan_format(self, client):
         """Test create task with invalid action plan format."""
@@ -241,7 +303,9 @@ class TestTaskEndpointsAdditionalCoverage:
 
         assert response.status_code == 400
         assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-        assert "action plan" in response.json()["error"]["message"].lower()
+        # Check that error details contain field path with "action_plan"
+        error_details = response.json()["error"]["details"]
+        assert any("action_plan" in field for field in error_details.keys())
 
     def test_create_task_invalid_execution_note_format(self, client):
         """Test create task with invalid execution note format."""
@@ -262,13 +326,17 @@ class TestTaskEndpointsAdditionalCoverage:
 
         assert response.status_code == 400
         assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-        assert "execution note" in response.json()["error"]["message"].lower()
+        # Check that error details contain field path with "execution_notes"
+        error_details = response.json()["error"]["details"]
+        assert any("execution_notes" in field for field in error_details.keys())
 
     def test_create_task_storage_error(self, client):
         """Test create task with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_orchestrator") as mock_orch:
-            mock_orch.create_task.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task"], "create_task", side_effect=Exception("Database error")
+        ):
             response = client.post(
                 "/tasks",
                 json={
@@ -288,9 +356,11 @@ class TestTaskEndpointsAdditionalCoverage:
 
     def test_get_task_storage_error(self, client):
         """Test get task with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_orchestrator") as mock_orch:
-            mock_orch.get_task.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task"], "get_task", side_effect=Exception("Database error")
+        ):
             task_id = str(uuid4())
             response = client.get(f"/tasks/{task_id}")
 
@@ -317,9 +387,11 @@ class TestTaskEndpointsAdditionalCoverage:
 
     def test_update_task_storage_error(self, client):
         """Test update task with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_orchestrator") as mock_orch:
-            mock_orch.update_task.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task"], "update_task", side_effect=Exception("Database error")
+        ):
             task_id = str(uuid4())
             response = client.put(f"/tasks/{task_id}", json={"title": "Updated"})
 
@@ -328,9 +400,11 @@ class TestTaskEndpointsAdditionalCoverage:
 
     def test_delete_task_storage_error(self, client):
         """Test delete task with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_orchestrator") as mock_orch:
-            mock_orch.delete_task.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task"], "delete_task", side_effect=Exception("Database error")
+        ):
             task_id = str(uuid4())
             response = client.delete(f"/tasks/{task_id}")
 
@@ -339,9 +413,13 @@ class TestTaskEndpointsAdditionalCoverage:
 
     def test_delete_task_business_logic_error(self, client):
         """Test delete task with business logic error."""
-        with patch("task_manager.interfaces.rest.server.task_orchestrator") as mock_orch:
-            mock_orch.delete_task.side_effect = ValueError("Cannot delete task with dependencies")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task"],
+            "delete_task",
+            side_effect=ValueError("Cannot delete task with dependencies"),
+        ):
             task_id = str(uuid4())
             response = client.delete(f"/tasks/{task_id}")
 
@@ -354,9 +432,13 @@ class TestReadyTasksEndpointAdditionalCoverage:
 
     def test_get_ready_tasks_storage_error(self, client):
         """Test get ready tasks with storage error."""
-        with patch("task_manager.interfaces.rest.server.dependency_orchestrator") as mock_orch:
-            mock_orch.get_ready_tasks.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["blocking"],
+            "get_ready_tasks",
+            side_effect=Exception("Database error"),
+        ):
             response = client.get(f"/ready-tasks?scope_type=project&scope_id={uuid4()}")
 
             assert response.status_code == 500
@@ -368,9 +450,13 @@ class TestListEndpointsAdditionalCoverage:
 
     def test_list_projects_storage_error(self, client):
         """Test list projects with storage error."""
-        with patch("task_manager.interfaces.rest.server.project_orchestrator") as mock_orch:
-            mock_orch.list_projects.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["project"],
+            "list_projects",
+            side_effect=Exception("Database error"),
+        ):
             response = client.get("/projects")
 
             assert response.status_code == 500
@@ -385,9 +471,13 @@ class TestListEndpointsAdditionalCoverage:
 
     def test_list_task_lists_storage_error(self, client):
         """Test list task lists with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_list_orchestrator") as mock_orch:
-            mock_orch.list_task_lists.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task_list"],
+            "list_task_lists",
+            side_effect=Exception("Database error"),
+        ):
             response = client.get("/task-lists")
 
             assert response.status_code == 500
@@ -402,9 +492,11 @@ class TestListEndpointsAdditionalCoverage:
 
     def test_list_tasks_storage_error(self, client):
         """Test list tasks with storage error."""
-        with patch("task_manager.interfaces.rest.server.task_orchestrator") as mock_orch:
-            mock_orch.list_tasks.side_effect = Exception("Database error")
+        from task_manager.interfaces.rest import server
 
+        with patch.object(
+            server.orchestrators["task"], "list_tasks", side_effect=Exception("Database error")
+        ):
             response = client.get("/tasks")
 
             assert response.status_code == 500

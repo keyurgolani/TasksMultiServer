@@ -5,6 +5,10 @@
  * composing organisms, molecules, and atoms into complete pages.
  */
 
+export * from "./DashboardView";
 export * from "./ProjectsView";
-export * from "./TaskListView";
+export * from "./SingleProjectView";
+export * from "./SingleTaskListView";
+export * from "./SingleTaskView";
+export * from "./TaskListsView";
 export * from "./TasksView";

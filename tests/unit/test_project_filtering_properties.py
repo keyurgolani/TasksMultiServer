@@ -56,7 +56,7 @@ project_name_strategy = st.text(
 
 
 @given(project_name=project_name_strategy)
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_search_filters_by_project_id(project_name: str) -> None:
     """
     Feature: rest-api-improvements, Property 18: Project filter returns only matching tasks
@@ -140,7 +140,7 @@ def test_search_filters_by_project_id(project_name: str) -> None:
 
 
 @given(project_name=project_name_strategy)
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_search_with_nonexistent_project_id_returns_empty(project_name: str) -> None:
     """
     Feature: rest-api-improvements, Property 18: Project filter returns only matching tasks

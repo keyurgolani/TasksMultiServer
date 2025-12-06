@@ -1,0 +1,283 @@
+/**
+ * DashboardView Styles
+ *
+ * Implements the dashboard layout with:
+ * - Horizontal scrollable rows for projects and task lists
+ * - Left sidebar for ready tasks
+ * - Main content area for task cards
+ *
+ * Requirements: 1.1, 1.4, 1.5
+ */
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Horizontal scrollable row container */
+.scrollRow {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--space-2) var(--space-1);
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  flex-shrink: 0;
+}
+
+.scrollRow::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scrollRow::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollRow::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: var(--radius-full);
+}
+
+.scrollRow::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+/* Card wrapper for consistent sizing in scroll rows */
+.cardWrapper {
+  flex-shrink: 0;
+  width: 280px;
+  min-width: 280px;
+}
+
+/* Minimal card wrapper for compact dashboard rows - Requirements: 1.16, 1.17 */
+.minimalCardWrapper {
+  width: 200px;
+  min-width: 200px;
+}
+
+/* Selected card styling */
+.cardWrapper.selected {
+  position: relative;
+}
+
+.cardWrapper.selected::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+}
+
+/* Section header */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-1);
+}
+
+/* Main content area with sidebar */
+.mainContent {
+  display: flex;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Ready tasks sidebar - Requirements: 1.12, 1.13 */
+.sidebar {
+  width: 300px;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow: hidden;
+  flex-shrink: 0;
+  /* Visual separation from main content - Requirements: 1.13 */
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Scrollable ready tasks container - Requirements: 1.12 */
+.sidebarContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  /* Allow the content to scroll within the sidebar */
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebarContent::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebarContent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebarContent::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: var(--radius-full);
+}
+
+.sidebarContent::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+/* Tasks content area */
+.tasksContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tasksHeader {
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* Tasks grid container for MasonryGrid - Requirements: 1.15 */
+.tasksGridContainer {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.tasksGridContainer::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tasksGridContainer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tasksGridContainer::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: var(--radius-full);
+}
+
+/* TaskCard wrapper with fixed min/max height - Requirements: 1.15 */
+.taskCardWrapper {
+  min-height: 200px;
+  max-height: 280px;
+  /* Ensure card content fits within bounds */
+  overflow: hidden;
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 64px;
+  height: 64px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+/**
+ * Constrained placeholder for empty states in scroll rows
+ * Requirements: 22.1, 22.2, 22.3
+ * - Fixed height matching TaskListCard/ProjectCard minimal variant (52px)
+ * - Prevents layout shift when content loads
+ * - Centered text with muted color
+ */
+.constrainedPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  min-height: 52px;
+  max-height: 52px;
+  padding: var(--space-2) var(--space-4);
+  text-align: center;
+  background-color: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  /* Match the width of minimal cards in scroll rows */
+  width: 200px;
+  min-width: 200px;
+  flex-shrink: 0;
+}
+
+/* Loading state */
+.loadingRow {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 260px;
+    min-width: 260px;
+  }
+  
+  .cardWrapper {
+    width: 240px;
+    min-width: 240px;
+  }
+}
+
+@media (max-width: 768px) {
+  .mainContent {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    max-height: 250px;
+    /* Maintain visual separation on mobile */
+    border-radius: var(--radius-md);
+  }
+  
+  .sidebarContent {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: var(--space-2);
+  }
+  
+  .sidebarContent > * {
+    flex-shrink: 0;
+    width: 240px;
+  }
+}

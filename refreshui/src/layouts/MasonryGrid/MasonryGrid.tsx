@@ -35,6 +35,11 @@ export interface MasonryGridProps<T extends MasonryGridItem> {
    * Number of columns (overrides breakpoints if provided)
    */
   columnCount?: number;
+  /**
+   * Fixed width for each column in pixels
+   * When set, columns will have this fixed width instead of flex: 1
+   */
+  columnWidth?: number;
   /** Additional CSS class name */
   className?: string;
   /** 
@@ -142,14 +147,44 @@ export const MasonryGrid = <T extends MasonryGridItem>({
   virtualize = false,
   virtualizedHeight = '100vh',
   virtualizationThreshold = VIRTUALIZATION_THRESHOLD,
+  columnWidth,
 }: MasonryGridProps<T>): React.ReactElement => {
   const parentRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = React.useState(0);
+
+  // Measure container width for auto-fit columns
+  React.useEffect(() => {
+    if (!columnWidth || !containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+    // Initial measurement
+    setContainerWidth(containerRef.current.clientWidth);
+
+    return () => resizeObserver.disconnect();
+  }, [columnWidth]);
 
   // Get responsive column count using the dedicated hook
-  const { columnCount } = useResponsiveColumns({
+  const { columnCount: breakpointColumnCount } = useResponsiveColumns({
     breakpoints: columnBreakpoints,
     overrideCount: columnCountOverride,
   });
+
+  // Calculate column count: auto-fit based on container width if columnWidth is set
+  const columnCount = useMemo(() => {
+    if (columnWidth && containerWidth > 0) {
+      // Calculate how many columns fit: (containerWidth + gap) / (columnWidth + gap)
+      const fittingColumns = Math.floor((containerWidth + gap) / (columnWidth + gap));
+      return Math.max(1, fittingColumns);
+    }
+    return breakpointColumnCount;
+  }, [columnWidth, containerWidth, gap, breakpointColumnCount]);
 
   // Use the masonry hook to distribute items
   const { columns } = useMasonry(items, { columnCount, gap });
@@ -288,6 +323,7 @@ export const MasonryGrid = <T extends MasonryGridItem>({
   return (
     <LayoutGroup id={layoutId}>
       <div 
+        ref={containerRef}
         className={clsx(styles.grid, className)}
         style={{ gap: `${gap}px` }}
         data-testid="masonry-grid"
@@ -299,7 +335,10 @@ export const MasonryGrid = <T extends MasonryGridItem>({
               key={`column-${columnIndex}`}
               layout
               className={styles.column}
-              style={{ gap: `${gap}px` }}
+              style={{ 
+                gap: `${gap}px`,
+                ...(columnWidth ? { width: `${columnWidth}px`, flex: 'none' } : {})
+              }}
             >
               <AnimatePresence mode="popLayout">
                 {column.items.map((item, itemIndex) => 

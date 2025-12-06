@@ -376,6 +376,108 @@ POST /tasks/bulk/tags/remove
 }
 ```
 
+## Test Data Generator
+
+TasksMultiServer includes a test data generator that creates realistic, comprehensive test data for development, testing, and demonstration purposes.
+
+### Features
+
+- **Database reset**: Automatically resets Docker database to clean state
+- **Realistic data**: Creates 15 projects, 35 task lists, and hundreds of tasks with varied metadata
+- **Dependency graphs**: Generates task dependencies ensuring no circular references
+- **Status distribution**: Creates tasks in different states (NOT_STARTED, IN_PROGRESS, COMPLETED)
+- **Rich metadata**: Adds tags, priorities, notes, action plans, and exit criteria
+- **Reproducible**: Uses configurable random seed for consistent results
+- **Validated**: Automatically validates generated data against 22 correctness properties
+
+### Usage
+
+**Prerequisites:**
+
+- Docker and Docker Compose installed and running
+- REST API accessible (default: http://localhost:8000)
+
+**Basic usage:**
+
+```bash
+# Generate with default settings (seed=42)
+python scripts/generate_test_data.py
+
+# Generate with custom seed for different data
+python scripts/generate_test_data.py --seed 123
+
+# Generate with custom API URL
+python scripts/generate_test_data.py --api-url http://localhost:9000
+```
+
+**What it generates:**
+
+- 15 projects with varying numbers of task lists (0-10 per project)
+- 35 task lists with 0-25 tasks each
+- Tasks with realistic titles, descriptions, and exit criteria
+- Task dependencies forming valid DAGs (no circular dependencies)
+- Mixed task statuses respecting dependency constraints
+- Tags (1-5 per task) from a realistic pool
+- All 5 priority levels (CRITICAL, HIGH, MEDIUM, LOW, TRIVIAL)
+- Notes (research, execution, general) based on task status
+- Action plans (70% of tasks) with 3-8 sequential items
+
+**Example output:**
+
+```
+Test Data Generator for TasksMultiServer
+==================================================
+Random seed: 42
+API URL: http://localhost:8000
+
+Phase 1: Resetting database...
+✓ Database reset complete
+
+Phase 2: Creating entities...
+✓ Created 15 projects, 35 task lists, 247 tasks
+
+Phase 3: Assigning dependencies...
+✓ Dependencies assigned
+
+Phase 4: Assigning statuses...
+✓ Statuses assigned
+
+Phase 5: Enriching metadata...
+✓ Metadata enriched
+
+Phase 6: Validating data...
+======================================================================
+Data Validation Report
+======================================================================
+Status: PASSED
+Properties Passed: 22/22
+Properties Failed: 0/22
+
+Summary:
+  Total Projects: 15
+  Total Task Lists: 35
+  Total Tasks: 247
+
+No violations found!
+======================================================================
+
+✓ Data generation completed successfully!
+```
+
+### When to use
+
+- **Development**: Populate your local database with realistic test data
+- **Testing**: Create consistent test scenarios with reproducible seeds
+- **Demos**: Generate impressive sample data for demonstrations
+- **CI/CD**: Validate system behavior with comprehensive test data
+
+### Notes
+
+- The generator requires Docker Compose to be running
+- It will **completely reset** the database, deleting all existing data
+- Use different seeds to generate varied data sets
+- All generated data is validated against the specification
+
 ## Configuration
 
 TasksMultiServer supports two backing stores and multi-agent coordination settings.

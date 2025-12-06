@@ -106,6 +106,67 @@ class BlockingDetector:
         """
         return task
 
+    def get_ready_tasks(
+        self, scope_type: str, scope_id: UUID, multi_agent_mode: bool = False
+    ) -> list[Task]:
+        """Get tasks that are ready for execution within a scope.
+
+        A task is ready if:
+        1. It has no pending dependencies (all dependencies are COMPLETED)
+        2. Its status matches the multi-agent mode setting:
+           - If multi_agent_mode is True: only NOT_STARTED tasks
+           - If multi_agent_mode is False: NOT_STARTED or IN_PROGRESS tasks
+
+        Args:
+            scope_type: Either "project" or "task_list"
+            scope_id: UUID of the project or task list
+            multi_agent_mode: Whether to use multi-agent environment behavior
+
+        Returns:
+            List of tasks that are ready for execution
+
+        Requirements: 12.1, 12.2, 12.3, 12.4, 12.5
+        """
+        # Get all tasks in the scope
+        if scope_type == "project":
+            # Get all task lists in the project
+            task_lists = self.data_store.list_task_lists()
+            task_lists_in_project = [tl for tl in task_lists if tl.project_id == scope_id]
+
+            # Get all tasks from these task lists
+            all_tasks = []
+            for task_list in task_lists_in_project:
+                tasks = self.data_store.list_tasks()
+                tasks_in_list = [t for t in tasks if t.task_list_id == task_list.id]
+                all_tasks.extend(tasks_in_list)
+        elif scope_type == "task_list":
+            # Get all tasks in the task list
+            all_tasks = self.data_store.list_tasks()
+            all_tasks = [t for t in all_tasks if t.task_list_id == scope_id]
+        else:
+            raise ValueError(f"Invalid scope_type: {scope_type}. Must be 'project' or 'task_list'")
+
+        # Filter tasks based on status and dependencies
+        ready_tasks = []
+        for task in all_tasks:
+            # Check status based on multi-agent mode
+            if multi_agent_mode:
+                # In multi-agent mode, only NOT_STARTED tasks are ready
+                if task.status != Status.NOT_STARTED:
+                    continue
+            else:
+                # In single-agent mode, both NOT_STARTED and IN_PROGRESS are ready
+                if task.status not in (Status.NOT_STARTED, Status.IN_PROGRESS):
+                    continue
+
+            # Check if task has pending dependencies
+            is_blocked = self.detect_blocking(task)
+            if is_blocked is None:
+                # Task is not blocked, so it's ready
+                ready_tasks.append(task)
+
+        return ready_tasks
+
     def _generate_blocking_message(self, count: int, blocking_titles: list[str]) -> str:
         """Generate a human-readable blocking message.
 

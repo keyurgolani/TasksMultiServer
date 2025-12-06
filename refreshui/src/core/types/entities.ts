@@ -77,6 +77,17 @@ export interface Note {
 }
 
 /**
+ * Represents an action plan item for a task.
+ * Action plan items define the steps to complete a task.
+ */
+export interface ActionPlanItem {
+  /** Sequence number for ordering */
+  sequence: number;
+  /** Content/description of the action item */
+  content: string;
+}
+
+/**
  * Task status values.
  */
 export type TaskStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED';
@@ -115,6 +126,8 @@ export interface Task {
   executionNotes: Note[];
   /** Tags for categorization and filtering */
   tags: string[];
+  /** Action plan items for completing the task */
+  actionPlan?: ActionPlanItem[];
   /** ISO 8601 timestamp when the task was created */
   createdAt: string;
   /** ISO 8601 timestamp when the task was last updated */

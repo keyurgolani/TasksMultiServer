@@ -1,0 +1,278 @@
+/**
+ * SingleTaskView Styles
+ *
+ * Implements the single task view layout with:
+ * - Back navigation button
+ * - Task information display in view mode
+ * - Edit and delete buttons
+ *
+ * Requirements: 8.1, 8.2, 8.6
+ */
+
+.singleTaskView {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  height: 100%;
+}
+
+/* Header section with back button and task info */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Top row with back button and action buttons */
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+/* Back button and title container */
+.titleContainer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Action buttons container */
+.actionButtons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Task metadata badges */
+.metadataBadges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Task description */
+.description {
+  margin-top: var(--space-1);
+}
+
+/* Content sections */
+.contentGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sectionIcon {
+  color: var(--primary);
+}
+
+/* Exit criteria list */
+.criteriaList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.criterionItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  transition: opacity 0.2s ease;
+}
+
+.criterionItem.completed {
+  opacity: 0.7;
+}
+
+.criterionCheckbox {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  background: transparent;
+}
+
+.criterionCheckbox:hover {
+  border-color: var(--primary);
+}
+
+.criterionCheckbox.checked {
+  background: var(--success);
+  border-color: var(--success);
+  color: white;
+}
+
+.criterionContent {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Notes list */
+.notesList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.noteItem {
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
+
+.noteHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.noteTypeBadge {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.noteTypeBadge.general {
+  background: rgba(var(--info-rgb), 0.1);
+  color: var(--info);
+}
+
+.noteTypeBadge.research {
+  background: rgba(var(--warning-rgb), 0.1);
+  color: var(--warning);
+}
+
+.noteTypeBadge.execution {
+  background: rgba(var(--success-rgb), 0.1);
+  color: var(--success);
+}
+
+/* Dependencies list */
+.dependenciesList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dependencyItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
+
+/* Tags */
+.tagsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16);
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 64px;
+  height: 64px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+/* Error state */
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16);
+  text-align: center;
+}
+
+.errorIcon {
+  width: 64px;
+  height: 64px;
+  color: var(--error);
+  margin-bottom: var(--space-4);
+}
+
+/* Loading skeleton */
+.loadingSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .topRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .actionButtons {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+}

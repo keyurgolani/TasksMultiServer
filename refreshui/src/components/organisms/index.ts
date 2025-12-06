@@ -15,9 +15,6 @@ export {
 
 export * from "./ProjectCard";
 export * from "./TaskListCard";
-// @deprecated - Use CustomizationPopup instead (Requirement 53.2)
-// CustomizationDrawer is kept for backwards compatibility but should not be used
-export * from "./CustomizationDrawer";
 
 // Export TaskDetailModal
 export { TaskDetailModal, type TaskDetailModalProps } from "./TaskDetailModal";
@@ -94,3 +91,6 @@ export {
   type OverallProgressProps,
   type StatusCounts as OverallProgressStatusCounts,
 } from "./OverallProgress";
+
+// Export TaskListGroup
+export { TaskListGroup, type TaskListGroupProps, type TaskLayoutType } from "./TaskListGroup";

@@ -46,13 +46,13 @@ const widthStyles: Record<ProgressBarVariant, string> = {
   "multi-state-mini": "w-24", // 96px - compact width for tight spaces
 };
 
-/** Base container styles */
+/** Base container styles - Enhanced contrast for light themes */
 const containerBaseStyles = [
   "rounded-full",
   "overflow-hidden",
-  "bg-[var(--bg-surface)]",
+  "bg-[var(--progress-bar-empty-bg)]",
   "border",
-  "border-[rgba(var(--glass-border-rgb,255,255,255),calc(var(--glass-border-opacity,0.1)))]",
+  "border-[var(--progress-bar-empty-border)]",
 ].join(" ");
 
 /**

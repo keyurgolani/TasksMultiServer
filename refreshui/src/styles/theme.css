@@ -90,6 +90,10 @@
   --status-info-text: #1967d2;
   --status-neutral-bg: #f0f0f0;
   --status-neutral-text: #666666;
+  
+  /* Status Indicator - Enhanced contrast for light themes */
+  --status-not-started-bg: #9ca3af;
+  --status-indicator-border: rgba(0, 0, 0, 0.15);
 
   /* ========================================
    * Background Colors (Light Theme Default)
@@ -101,25 +105,31 @@
   --bg-glass: rgba(255, 255, 255, 0.7);
   --bg-overlay: rgba(0, 0, 0, 0.5);
   
-  /* Text Colors */
+  /* Text Colors - Enhanced contrast for light themes */
   --text-primary: #1a1a1a;
-  --text-secondary: #666666;
-  --text-tertiary: #999999;
-  --text-muted: #999999;
+  --text-secondary: #4a4a4a;
+  --text-tertiary: #6b6b6b;
+  --text-muted: #757575;
   --text-inverse: #ffffff;
   
-  /* Border Colors */
-  --border: rgba(0, 0, 0, 0.1);
-  --border-light: rgba(0, 0, 0, 0.05);
-  --border-strong: rgba(0, 0, 0, 0.2);
-  --border-glass: rgba(255, 255, 255, 0.3);
+  /* Border Colors - Enhanced contrast for light themes */
+  --border: rgba(0, 0, 0, 0.12);
+  --border-light: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.25);
+  --border-glass: rgba(0, 0, 0, 0.1);
+  
+  /* Separator Colors - For dividers and section breaks */
+  --separator: rgba(0, 0, 0, 0.1);
+  --separator-strong: rgba(0, 0, 0, 0.15);
   
   /* Shadow Colors */
   --shadow-color: rgba(0, 0, 0, 0.05);
   --shadow: rgba(0, 0, 0, 0.1);
   
-  /* Progress Bar */
+  /* Progress Bar - Enhanced contrast for light themes */
   --progress-bar-bg: rgba(0, 0, 0, 0.15);
+  --progress-bar-empty-bg: rgba(0, 0, 0, 0.08);
+  --progress-bar-empty-border: rgba(0, 0, 0, 0.15);
   
   /* Scrollbar */
   --scrollbar-thumb: rgba(107, 115, 255, 0.4);
@@ -173,8 +183,8 @@
   --grain-opacity: 0.05;
   
   /* Parallax Effect */
-  --parallax-depth: 20;
-  --parallax-strength: 20;
+  --parallax-depth: 25;
+  --parallax-strength: 25;
   
   /* Animation Speed */
   --animation-speed: 1;
@@ -256,7 +266,8 @@
   --input-padding-y: var(--space-2);
   --input-border-width: 1px;
   --input-focus-ring-width: 2px;
-  --input-focus-ring-color: rgba(107, 115, 255, 0.3);
+  --input-focus-ring-color: rgba(107, 115, 255, 0.4);
+  --focus-ring-offset-color: var(--bg-surface);
   
   /* Card */
   --card-padding: var(--space-4);
@@ -303,8 +314,10 @@
   --shadow-color: rgba(0, 0, 0, 0.3);
   --shadow: rgba(0, 0, 0, 0.3);
   
-  /* Progress Bar */
+  /* Progress Bar - Dark theme values */
   --progress-bar-bg: rgba(255, 255, 255, 0.1);
+  --progress-bar-empty-bg: rgba(255, 255, 255, 0.05);
+  --progress-bar-empty-border: rgba(255, 255, 255, 0.12);
   
   /* Scrollbar */
   --scrollbar-thumb: rgba(107, 115, 255, 0.3);
@@ -334,6 +347,10 @@
   --status-info-text: #60a5fa;
   --status-neutral-bg: rgba(255, 255, 255, 0.1);
   --status-neutral-text: #a0a0a0;
+  
+  /* Status Indicator - Dark theme values */
+  --status-not-started-bg: #6b7280;
+  --status-indicator-border: transparent;
   
   /* Input focus ring (Dark) */
   --input-focus-ring-color: rgba(107, 115, 255, 0.4);
@@ -444,16 +461,20 @@
   --bg-surface-active: #eeeeee;
   --bg-glass: rgba(255, 255, 255, 0.98);
   
-  /* Text Colors - Standard dark text */
+  /* Text Colors - Enhanced contrast for minimal light theme */
   --text-primary: #1a1a1a;
-  --text-secondary: #666666;
-  --text-tertiary: #999999;
+  --text-secondary: #4a4a4a;
+  --text-tertiary: #6b6b6b;
   
   /* Border Colors - Subtle */
   --border: rgba(0, 0, 0, 0.08);
   --border-light: rgba(0, 0, 0, 0.04);
   --border-strong: rgba(0, 0, 0, 0.15);
   --border-glass: rgba(0, 0, 0, 0.1);
+  
+  /* Progress Bar - Enhanced contrast for minimal light theme */
+  --progress-bar-empty-bg: rgba(0, 0, 0, 0.06);
+  --progress-bar-empty-border: rgba(0, 0, 0, 0.12);
   
   /* Effect Variables - Minimal to none */
   --glow-strength: 0;

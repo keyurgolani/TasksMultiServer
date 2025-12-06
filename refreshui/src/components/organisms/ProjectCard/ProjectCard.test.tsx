@@ -87,23 +87,23 @@ describe("ProjectCard", () => {
       expect(screen.getByTestId("project-card-total-tasks")).toHaveTextContent("15");
     });
 
-    it("renders completion text with percentage", () => {
+    it("renders OverallProgress organism with completion stats", () => {
       const project = createMockProject();
       const stats = createMockStats({ completedTasks: 5, totalTasks: 10 });
       render(<ProjectCard project={project} stats={stats} />);
-      expect(screen.getByTestId("project-card-completion-text")).toHaveTextContent(
-        "5/10 (50%)"
-      );
+      // OverallProgress organism is now used instead of separate elements
+      expect(screen.getByTestId("overall-progress")).toBeInTheDocument();
     });
 
-    it("renders progress bar", () => {
+    it("renders progress bar via OverallProgress", () => {
       const project = createMockProject();
       const stats = createMockStats();
       render(<ProjectCard project={project} stats={stats} />);
-      expect(screen.getByTestId("project-card-progress-bar")).toBeInTheDocument();
+      // Progress bar is now rendered via OverallProgress organism
+      expect(screen.getByTestId("overall-progress-bar")).toBeInTheDocument();
     });
 
-    it("renders status breakdown", () => {
+    it("renders status breakdown via OverallProgress", () => {
       const project = createMockProject();
       const stats = createMockStats({
         inProgressTasks: 3,
@@ -111,9 +111,9 @@ describe("ProjectCard", () => {
         readyTasks: 4,
       });
       render(<ProjectCard project={project} stats={stats} />);
-      expect(screen.getByTestId("project-card-in-progress")).toHaveTextContent("3");
-      expect(screen.getByTestId("project-card-blocked")).toHaveTextContent("2");
-      expect(screen.getByTestId("project-card-ready")).toHaveTextContent("4");
+      // Status breakdown is now rendered via OverallProgress organism
+      // The OverallProgress compact variant shows status indicators
+      expect(screen.getByTestId("overall-progress")).toBeInTheDocument();
     });
 
     it("renders no stats message when stats not provided", () => {

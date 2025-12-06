@@ -26,6 +26,8 @@ export interface MainLayoutProps {
   sidebarClassName?: string;
   /** Additional CSS class name for the header */
   headerClassName?: string;
+  /** Optional FAB (Floating Action Button) to render in the layout */
+  fab?: React.ReactNode;
 }
 
 /**
@@ -70,6 +72,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   contentClassName,
   sidebarClassName,
   headerClassName,
+  fab,
 }) => {
   const hasSidebar = Boolean(sidebar);
 
@@ -115,6 +118,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           {children}
         </main>
       </div>
+
+      {/* FAB Region - Floating Action Button */}
+      {fab}
     </div>
   );
 };

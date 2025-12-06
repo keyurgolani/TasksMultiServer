@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { X, Check, FolderOpen, Plus } from "lucide-react";
 import { Button } from "../../atoms/Button";
 import { Input } from "../../atoms/Input";
 import { Typography } from "../../atoms/Typography";
@@ -58,12 +58,48 @@ export const CreateTaskListModal: React.FC<CreateTaskListModalProps> = ({
   const [error, setError] = useState("");
   const [projectError, setProjectError] = useState("");
   
-  // Projects state for dropdown
+  // Projects state for searchable selector - Requirements: 9.13
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  
+  // State for creating a new project inline
+  const [newProjectName, setNewProjectName] = useState("");
+  const [isCreatingNewProject, setIsCreatingNewProject] = useState(false);
 
   // Get data service from context
   const { dataService } = useDataService();
+
+  // Filter projects based on search query - Requirements: 9.13
+  const filteredProjects = useMemo(() => {
+    const query = projectSearchQuery.toLowerCase().trim();
+    if (!query) return projects;
+    return projects.filter(
+      (project) => project.name.toLowerCase().includes(query) ||
+        (project.description && project.description.toLowerCase().includes(query))
+    );
+  }, [projects, projectSearchQuery]);
+
+  // Check if the search query matches an existing project name exactly
+  const exactProjectMatch = useMemo(() => {
+    const query = projectSearchQuery.toLowerCase().trim();
+    if (!query) return null;
+    return projects.find(p => p.name.toLowerCase() === query);
+  }, [projects, projectSearchQuery]);
+
+  // Show "Create new project" option when search query doesn't match any existing project
+  const showCreateNewOption = useMemo(() => {
+    const query = projectSearchQuery.trim();
+    return query.length > 0 && !exactProjectMatch;
+  }, [projectSearchQuery, exactProjectMatch]);
+
+  // Get project name by ID or return the new project name if creating
+  const getProjectName = useCallback((id: string): string => {
+    if (isCreatingNewProject && id === "__new__") {
+      return newProjectName;
+    }
+    return projects.find(p => p.id === id)?.name || "Unknown Project";
+  }, [projects, isCreatingNewProject, newProjectName]);
 
   // Load projects when modal opens
   useEffect(() => {
@@ -101,6 +137,9 @@ export const CreateTaskListModal: React.FC<CreateTaskListModalProps> = ({
       setError("");
       setProjectError("");
       setLoading(false);
+      setProjectSearchQuery("");
+      setNewProjectName("");
+      setIsCreatingNewProject(false);
     }
   }, [isOpen, defaultProjectId]);
 
@@ -132,15 +171,41 @@ export const CreateTaskListModal: React.FC<CreateTaskListModalProps> = ({
     }
 
     // Validate project selection - Requirements: 17.3
-    if (!projectId) {
-      setProjectError("Please select a project");
+    // Either an existing project must be selected, or a new project name must be provided
+    if (!projectId && !isCreatingNewProject) {
+      setProjectError("Please select a project or create a new one");
+      isValid = false;
+    } else if (isCreatingNewProject && !newProjectName.trim()) {
+      setProjectError("New project name is required");
       isValid = false;
     } else {
       setProjectError("");
     }
 
     return isValid;
-  }, [name, projectId]);
+  }, [name, projectId, isCreatingNewProject, newProjectName]);
+
+  /**
+   * Handles selecting the "Create new project" option
+   */
+  const handleSelectCreateNew = useCallback(() => {
+    const trimmedQuery = projectSearchQuery.trim();
+    setNewProjectName(trimmedQuery);
+    setIsCreatingNewProject(true);
+    setProjectId("__new__");
+    setProjectSearchQuery("");
+    if (projectError) setProjectError("");
+  }, [projectSearchQuery, projectError]);
+
+  /**
+   * Handles selecting an existing project
+   */
+  const handleSelectProject = useCallback((id: string) => {
+    setProjectId(id);
+    setIsCreatingNewProject(false);
+    setNewProjectName("");
+    if (projectError) setProjectError("");
+  }, [projectError]);
 
   /**
    * Handles form submission
@@ -158,9 +223,19 @@ export const CreateTaskListModal: React.FC<CreateTaskListModalProps> = ({
       setProjectError("");
 
       try {
+        let finalProjectId = projectId;
+
+        // If creating a new project, create it first
+        if (isCreatingNewProject && newProjectName.trim()) {
+          const newProject = await dataService.createProject({
+            name: newProjectName.trim(),
+          });
+          finalProjectId = newProject.id;
+        }
+
         await dataService.createTaskList({
           name: name.trim(),
-          projectId: projectId,
+          projectId: finalProjectId,
           description: description.trim() || undefined,
         });
 
@@ -174,7 +249,7 @@ export const CreateTaskListModal: React.FC<CreateTaskListModalProps> = ({
         setLoading(false);
       }
     },
-    [name, description, projectId, validateForm, dataService, onSuccess, onClose]
+    [name, description, projectId, isCreatingNewProject, newProjectName, validateForm, dataService, onSuccess, onClose]
   );
 
   /**
@@ -246,30 +321,108 @@ export const CreateTaskListModal: React.FC<CreateTaskListModalProps> = ({
                 autoFocus
               />
 
-              {/* Project Selection - Requirements: 17.3 */}
-              <div className={styles.selectField}>
-                <label className={styles.selectLabel}>Project</label>
-                <select
-                  value={projectId}
-                  onChange={(e) => {
-                    setProjectId(e.target.value);
-                    if (projectError) setProjectError("");
-                  }}
-                  className={cn(styles.select, projectError && styles.error)}
-                  disabled={loadingProjects}
-                >
-                  <option value="">
-                    {loadingProjects ? "Loading projects..." : "Select a project"}
-                  </option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-                {projectError && (
-                  <span className={styles.selectError}>{projectError}</span>
+              {/* Project Selection with Searchable Selector - Requirements: 9.13 */}
+              <div className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div className={styles.sectionTitle}>
+                    <FolderOpen size={16} />
+                    <span>Project</span>
+                    {(projectId || isCreatingNewProject) && <span className={styles.badge}>1</span>}
+                  </div>
+                </div>
+                
+                {/* Selected project chip - show existing project or new project being created */}
+                {(projectId && !isCreatingNewProject) && (
+                  <div className={styles.chipList}>
+                    <div className={styles.chip}>
+                      <span className={styles.chipText}>{getProjectName(projectId)}</span>
+                      <button type="button" onClick={() => { setProjectId(""); setIsCreatingNewProject(false); }} className={styles.chipRemove}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
                 )}
+                
+                {/* New project chip - when creating a new project */}
+                {isCreatingNewProject && newProjectName && (
+                  <div className={styles.chipList}>
+                    <div className={cn(styles.chip, styles.chipNew)}>
+                      <Plus size={10} />
+                      <span className={styles.chipText}>{newProjectName}</span>
+                      <span className={styles.chipNewLabel}>(new)</span>
+                      <button type="button" onClick={() => { setProjectId(""); setIsCreatingNewProject(false); setNewProjectName(""); }} className={styles.chipRemove}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Search input for projects */}
+                <input
+                  type="text"
+                  value={projectSearchQuery}
+                  onChange={(e) => setProjectSearchQuery(e.target.value)}
+                  placeholder="Search or type new project name..."
+                  className={styles.searchInput}
+                />
+                
+                {/* Project selection list */}
+                <div className={cn(styles.listContainer, projectError && styles.listContainerError)}>
+                  {loadingProjects ? (
+                    <div className={styles.emptyState}>Loading projects...</div>
+                  ) : (
+                    <>
+                      {/* Create new project option - shown when search query doesn't match existing */}
+                      {showCreateNewOption && (
+                        <div
+                          className={cn(styles.listItem, styles.listItemCreate)}
+                          onClick={handleSelectCreateNew}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSelectCreateNew(); } }}
+                        >
+                          <div className={styles.listItemCreateIcon}>
+                            <Plus size={14} />
+                          </div>
+                          <div className={styles.listItemContent}>
+                            <span className={styles.listItemTitle}>Create "{projectSearchQuery.trim()}"</span>
+                            <span className={styles.listItemMeta}>New project</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Existing projects */}
+                      {filteredProjects.length > 0 ? (
+                        filteredProjects.map((project) => (
+                          <div
+                            key={project.id}
+                            className={cn(styles.listItem, projectId === project.id && !isCreatingNewProject && styles.listItemSelected)}
+                            onClick={() => handleSelectProject(project.id)}
+                            role="radio"
+                            aria-checked={projectId === project.id && !isCreatingNewProject}
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSelectProject(project.id); } }}
+                          >
+                            <div className={styles.listItemCheckbox}>
+                              {projectId === project.id && !isCreatingNewProject && <Check size={12} />}
+                            </div>
+                            <div className={styles.listItemContent}>
+                              <span className={styles.listItemTitle}>{project.name}</span>
+                              {project.description && (
+                                <span className={styles.listItemMeta}>{project.description}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : !showCreateNewOption && (
+                        <div className={styles.emptyState}>
+                          {projectSearchQuery ? "No projects match your search" : "No projects available"}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                {projectError && <span className={styles.selectError}>{projectError}</span>}
               </div>
 
               {/* Description Input (optional) */}

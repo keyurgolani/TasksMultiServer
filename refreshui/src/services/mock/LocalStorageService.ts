@@ -159,6 +159,7 @@ export class LocalStorageService implements IDataService {
 
   /**
    * Initialize localStorage with seed data if not already initialized.
+   * Also migrates existing data to add action plans if missing.
    */
   private initializeIfNeeded(): void {
     const initializedKey = this.getStorageKey(STORAGE_KEYS.INITIALIZED);
@@ -170,7 +171,72 @@ export class LocalStorageService implements IDataService {
       this.writeToStorage(STORAGE_KEYS.TASK_LISTS, mockData.taskLists);
       this.writeToStorage(STORAGE_KEYS.TASKS, mockData.tasks);
       localStorage.setItem(initializedKey, 'true');
+    } else {
+      // Migrate existing tasks to add action plans if missing
+      this.migrateTasksWithActionPlans();
     }
+  }
+
+  /**
+   * Migrate existing tasks to add action plans if they don't have any.
+   * This ensures older localStorage data gets updated with action plans.
+   */
+  private migrateTasksWithActionPlans(): void {
+    const migrationKey = this.getStorageKey('actionPlanMigration');
+    const isMigrated = localStorage.getItem(migrationKey);
+    
+    if (isMigrated) {
+      return;
+    }
+
+    const tasks = this.readFromStorage<Task>(STORAGE_KEYS.TASKS);
+    let updated = false;
+
+    // Action plan templates for generating steps from task titles
+    const actionPlanTemplates = [
+      'Review requirements and acceptance criteria',
+      'Set up local development environment',
+      'Create initial implementation',
+      'Write unit tests',
+      'Run integration tests',
+      'Update documentation',
+      'Submit for code review',
+      'Address review feedback',
+      'Deploy to staging environment',
+      'Verify in staging',
+      'Deploy to production',
+      'Monitor for issues',
+    ];
+
+    const getRandomItems = <T>(array: T[], count: number): T[] => {
+      const shuffled = [...array].sort(() => Math.random() - 0.5);
+      return shuffled.slice(0, Math.min(count, array.length));
+    };
+
+    const randomInt = (min: number, max: number): number => {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    };
+
+    for (const task of tasks) {
+      // Add action plan to ~60% of tasks that don't have one
+      if (!task.actionPlan || task.actionPlan.length === 0) {
+        if (Math.random() < 0.6) {
+          const count = randomInt(2, 6);
+          const items = getRandomItems(actionPlanTemplates, count);
+          task.actionPlan = items.map((content, index) => ({
+            sequence: index + 1,
+            content,
+          }));
+          updated = true;
+        }
+      }
+    }
+
+    if (updated) {
+      this.writeToStorage(STORAGE_KEYS.TASKS, tasks);
+    }
+
+    localStorage.setItem(migrationKey, 'true');
   }
 
   // ==========================================================================
@@ -445,8 +511,9 @@ export class LocalStorageService implements IDataService {
       exitCriteria: data.exitCriteria ?? [],
       notes: data.notes ?? [],
       researchNotes: data.researchNotes ?? [],
-      executionNotes: [],
+      executionNotes: data.executionNotes ?? [],
       tags: data.tags ?? [],
+      actionPlan: data.actionPlan ?? [],
       createdAt: now,
       updatedAt: now,
     };
@@ -694,6 +761,16 @@ export class LocalStorageService implements IDataService {
     localStorage.removeItem(this.getStorageKey(STORAGE_KEYS.TASK_LISTS));
     localStorage.removeItem(this.getStorageKey(STORAGE_KEYS.TASKS));
     localStorage.removeItem(this.getStorageKey(STORAGE_KEYS.INITIALIZED));
+    localStorage.removeItem(this.getStorageKey('actionPlanMigration'));
+  }
+
+  /**
+   * Force migration of action plans to existing tasks.
+   * Clears the migration flag and re-runs the migration.
+   */
+  forceMigrateActionPlans(): void {
+    localStorage.removeItem(this.getStorageKey('actionPlanMigration'));
+    this.migrateTasksWithActionPlans();
   }
 
   /**

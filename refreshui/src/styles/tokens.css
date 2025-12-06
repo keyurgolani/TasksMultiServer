@@ -69,10 +69,10 @@
   --bg-surface-hover: #f8f9fa;
   --bg-glass: rgba(255, 255, 255, 0.7);
   
-  /* Text Colors */
+  /* Text Colors - Enhanced contrast for light themes */
   --text-primary: #1a1a1a;
-  --text-secondary: #666666;
-  --text-tertiary: #999999;
+  --text-secondary: #4a4a4a;
+  --text-tertiary: #6b6b6b;
   
   /* Border Colors */
   --border: rgba(0, 0, 0, 0.1);
@@ -83,8 +83,10 @@
   --shadow-color: rgba(0, 0, 0, 0.05);
   --shadow: rgba(0, 0, 0, 0.1);
   
-  /* Progress Bar */
+  /* Progress Bar - Enhanced contrast for light themes */
   --progress-bar-bg: rgba(0, 0, 0, 0.15);
+  --progress-bar-empty-bg: rgba(0, 0, 0, 0.08);
+  --progress-bar-empty-border: rgba(0, 0, 0, 0.15);
   
   /* Scrollbar */
   --scrollbar-thumb: rgba(107, 115, 255, 0.4);
@@ -115,8 +117,8 @@
   --grain-opacity: 0.05;
   
   /* Parallax Effect */
-  --parallax-depth: 20;
-  --parallax-strength: 20;
+  --parallax-depth: 25;
+  --parallax-strength: 25;
   
   /* Animation Speed */
   --animation-speed: 1;
@@ -163,8 +165,10 @@
   --shadow-color: rgba(0, 0, 0, 0.3);
   --shadow: rgba(0, 0, 0, 0.3);
   
-  /* Progress Bar */
+  /* Progress Bar - Dark theme values */
   --progress-bar-bg: rgba(255, 255, 255, 0.1);
+  --progress-bar-empty-bg: rgba(255, 255, 255, 0.05);
+  --progress-bar-empty-border: rgba(255, 255, 255, 0.12);
   
   /* Scrollbar */
   --scrollbar-thumb: rgba(107, 115, 255, 0.3);

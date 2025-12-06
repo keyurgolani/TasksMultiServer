@@ -1,99 +1,55 @@
-"""REST API server.
+"""REST API server - Refactored with consistent patterns.
 
-This module implements the REST API interface for the Task Management System.
-It provides HTTP endpoints for CRUD operations on projects, task lists, and tasks.
+This module implements the refactored REST API interface for the Task Management System.
+It provides HTTP endpoints with consistent CRUD patterns, ID-based entity references,
+and comprehensive error handling.
 
-The server initializes the backing store from environment variables and exposes
-REST endpoints that wrap the orchestration layer operations.
-
-Requirements: 12.1, 12.5, 15.1, 15.2
+Requirements: 2.1, 2.2, 2.3, 6.1, 6.2
 """
 
 import logging
 import sys
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, AsyncIterator, Dict, List
 
-from fastapi import FastAPI, Query, Request
+from fastapi import Body, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
 
 from task_manager.data.config import ConfigurationError, create_data_store
 from task_manager.data.delegation.data_store import DataStore
-from task_manager.formatting.error_formatter import ErrorFormatter
 from task_manager.health.health_check_service import HealthCheckService
+from task_manager.interfaces.rest.models import (
+    ActionPlanItemModel,
+    BulkOperationResultResponse,
+    DependencyModel,
+    ExitCriteriaModel,
+    NoteModel,
+    NoteRequest,
+    ProjectCreateRequest,
+    ProjectResponse,
+    ProjectUpdateRequest,
+    SearchCriteriaRequest,
+    TagsRequest,
+    TaskCreateRequest,
+    TaskListCreateRequest,
+    TaskListResponse,
+    TaskListUpdateRequest,
+    TaskResponse,
+    TaskUpdateRequest,
+)
+from task_manager.orchestration.blocking_detector import BlockingDetector
+from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
+from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
 from task_manager.orchestration.dependency_orchestrator import DependencyOrchestrator
 from task_manager.orchestration.project_orchestrator import ProjectOrchestrator
+from task_manager.orchestration.search_orchestrator import SearchOrchestrator
 from task_manager.orchestration.tag_orchestrator import TagOrchestrator
 from task_manager.orchestration.task_list_orchestrator import TaskListOrchestrator
 from task_manager.orchestration.task_orchestrator import TaskOrchestrator
 from task_manager.orchestration.template_engine import TemplateEngine
-from task_manager.preprocessing.parameter_preprocessor import ParameterPreprocessor
-
-# ============================================================================
-# Custom Exception Classes
-# ============================================================================
-
-
-class ValidationError(Exception):
-    """Raised when input validation fails.
-
-    This exception is transformed to HTTP 400 with error details.
-
-    Requirements: 12.5
-    """
-
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
-        super().__init__(message)
-        self.message = message
-        self.details = details or {}
-
-
-class BusinessLogicError(Exception):
-    """Raised when business logic constraints are violated.
-
-    This exception is transformed to HTTP 409 with error details.
-
-    Requirements: 12.5
-    """
-
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
-        super().__init__(message)
-        self.message = message
-        self.details = details or {}
-
-
-class NotFoundError(Exception):
-    """Raised when a requested resource is not found.
-
-    This exception is transformed to HTTP 404 with error details.
-
-    Requirements: 12.5
-    """
-
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
-        super().__init__(message)
-        self.message = message
-        self.details = details or {}
-
-
-class StorageError(Exception):
-    """Raised when storage operations fail.
-
-    This exception is transformed to HTTP 500 with error details.
-
-    Requirements: 12.5
-    """
-
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
-        super().__init__(message)
-        self.message = message
-        self.details = details or {}
-
 
 # Configure logging
 logging.basicConfig(
@@ -106,16 +62,7 @@ logger = logging.getLogger(__name__)
 
 # Global state for orchestrators (initialized in lifespan)
 data_store: DataStore = None  # type: ignore
-project_orchestrator: ProjectOrchestrator = None  # type: ignore
-task_list_orchestrator: TaskListOrchestrator = None  # type: ignore
-task_orchestrator: TaskOrchestrator = None  # type: ignore
-dependency_orchestrator: DependencyOrchestrator = None  # type: ignore
-template_engine: TemplateEngine = None  # type: ignore
-preprocessor: ParameterPreprocessor = None  # type: ignore
-error_formatter: ErrorFormatter = None  # type: ignore
-tag_orchestrator: TagOrchestrator = None  # type: ignore
-blocking_detector: Any = None  # type: ignore
-health_check_service: HealthCheckService = None  # type: ignore
+orchestrators: Dict[str, Any] = {}
 
 
 @asynccontextmanager
@@ -124,6 +71,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     This function handles:
     - Backing store initialization from environment variables on startup
+    - Orchestrator initialization
     - Resource cleanup on shutdown
 
     Environment Variables:
@@ -134,10 +82,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Raises:
         ConfigurationError: If the configuration is invalid
 
-    Requirements: 15.1, 15.2
+    Requirements: 2.1, 2.2, 2.3
     """
-    global data_store, project_orchestrator, task_list_orchestrator
-    global task_orchestrator, dependency_orchestrator, template_engine, preprocessor, error_formatter, tag_orchestrator, blocking_detector, health_check_service
+    global data_store, orchestrators
 
     # Startup: Initialize backing store from environment variables
     logger.info("Initializing Task Management System REST API...")
@@ -151,32 +98,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Data store initialized successfully")
 
         # Initialize orchestrators
-        project_orchestrator = ProjectOrchestrator(data_store)
-        task_list_orchestrator = TaskListOrchestrator(data_store)
-        task_orchestrator = TaskOrchestrator(data_store)
-        dependency_orchestrator = DependencyOrchestrator(data_store)
-        template_engine = TemplateEngine(data_store)
-        tag_orchestrator = TagOrchestrator(data_store)
-
-        # Import BlockingDetector here to avoid circular imports
-        from task_manager.orchestration.blocking_detector import BlockingDetector
-
-        blocking_detector = BlockingDetector(data_store)
+        orchestrators = {
+            "project": ProjectOrchestrator(data_store),
+            "task_list": TaskListOrchestrator(data_store),
+            "task": TaskOrchestrator(data_store),
+            "dependency": DependencyOrchestrator(data_store),
+            "tag": TagOrchestrator(data_store),
+            "search": SearchOrchestrator(data_store),
+            "bulk": BulkOperationsHandler(data_store),
+            "template": TemplateEngine(data_store),
+            "blocking": BlockingDetector(data_store),
+            "dependency_analyzer": DependencyAnalyzer(data_store),
+        }
 
         logger.info("Orchestrators initialized successfully")
-
-        # Initialize preprocessing layer
-        preprocessor = ParameterPreprocessor()
-        logger.info("Preprocessing layer initialized successfully")
-
-        # Initialize error formatter
-        error_formatter = ErrorFormatter()
-        logger.info("Error formatter initialized successfully")
-
-        # Initialize health check service
-        health_check_service = HealthCheckService()
-        logger.info("Health check service initialized successfully")
-
         logger.info("REST API startup complete")
 
     except ConfigurationError as e:
@@ -190,8 +125,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Shutdown: Clean up resources
     logger.info("Shutting down Task Management System REST API...")
-    # Add any cleanup logic here if needed
     logger.info("REST API shutdown complete")
+
+
+# Helper function to convert Note entity to NoteModel
+def note_to_model(note):
+    """Convert a Note entity to a NoteModel for API responses.
+
+    Args:
+        note: Note entity with content and timestamp
+
+    Returns:
+        NoteModel with timestamp converted to ISO 8601 string
+    """
+    return NoteModel(
+        content=note.content,
+        timestamp=note.timestamp.isoformat() if note.timestamp else None,
+    )
 
 
 # Create FastAPI application with lifespan and enhanced OpenAPI documentation
@@ -200,7 +150,15 @@ app = FastAPI(
     description="""
 # Task Management System REST API
 
-A comprehensive REST API for managing projects, task lists, and tasks with dependency tracking.
+A REST API for managing projects, task lists, and tasks with consistent patterns.
+
+## Key Improvements
+
+- **ID-Based References**: All entity references use UUIDs instead of names
+- **Consistent CRUD**: Standardized patterns across all entities
+- **Comprehensive Error Handling**: Detailed error messages with guidance
+- **Bulk Operations**: Efficient multi-entity operations
+- **Enhanced Documentation**: Complete OpenAPI/Swagger documentation
 
 ## Features
 
@@ -297,373 +255,6 @@ All responses follow consistent patterns:
 )
 
 
-# ============================================================================
-# Error Formatting Helper
-# ============================================================================
-
-
-def format_error_response(
-    error: Exception, status_code: int, context: Optional[Dict[str, Any]] = None
-) -> JSONResponse:
-    """Format error response with visual indicators and guidance.
-
-    This function creates a standardized error response using the ErrorFormatter
-    to enhance error messages with emoji visual indicators, guidance text, and
-    examples. It returns a JSONResponse with the structure {"error": formatted_message}.
-
-    Args:
-        error: The exception that occurred
-        status_code: HTTP status code (400, 404, 409, 500, etc.)
-        context: Additional context for error formatting (optional)
-
-    Returns:
-        JSONResponse with formatted error message and appropriate status code
-
-    Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 4.1
-    """
-    context = context or {}
-    error_message = str(error)
-
-    # Extract details from custom exception classes
-    details = {}
-    if hasattr(error, "details"):
-        details = error.details
-
-    # Merge context into details
-    details.update(context)
-
-    # Format the error message with visual indicators
-    formatted_message = error_message
-
-    if error_formatter is not None:
-        # Pattern 1: "Missing required field: field_name"
-        if "Missing required field:" in error_message:
-            field = error_message.rsplit("Missing required field:", maxsplit=1)[-1].strip()
-            formatted_message = error_formatter.format_validation_error(
-                field=field,
-                error_type="missing",
-                received_value=None,
-            )
-        # Pattern 2: "Invalid X value: value"
-        elif "Invalid" in error_message and "value:" in error_message:
-            parts = error_message.split(":")
-            if len(parts) >= 2:
-                field_part = parts[0].replace("Invalid", "").replace("value", "").strip()
-                received_value = parts[1].strip() if len(parts) > 1 else "unknown"
-                valid_values = details.get("valid_values")
-
-                formatted_message = error_formatter.format_validation_error(
-                    field=field_part,
-                    error_type="invalid_enum" if valid_values else "invalid_value",
-                    received_value=received_value,
-                    valid_values=valid_values,
-                )
-        # Pattern 3: "Invalid X format" (e.g., "Invalid task ID format")
-        elif "Invalid" in error_message and "format" in error_message:
-            field = details.get("field", "value")
-            received_value = details.get("received_value", "provided value")
-            formatted_message = error_formatter.format_validation_error(
-                field=field,
-                error_type="invalid_format",
-                received_value=received_value,
-            )
-        # Pattern 4: "X not found" or "X does not exist"
-        elif "not found" in error_message.lower() or "does not exist" in error_message.lower():
-            formatted_message = f"❌ {error_message}\n💡 Verify the ID exists and try again\n\n🔧 Common fixes:\n1. Check that the ID is correct\n2. Ensure the resource hasn't been deleted\n3. Verify you have permission to access this resource"
-        # Pattern 5: "field: error description"
-        elif ": " in error_message and not error_message.startswith("Error"):
-            parts = error_message.split(": ", 1)
-            field = parts[0].strip()
-            description = parts[1].strip()
-
-            # Determine error type based on description
-            error_type = "invalid_value"
-            if "required" in description.lower() or "missing" in description.lower():
-                error_type = "missing"
-            elif "invalid type" in description.lower() or "must be" in description.lower():
-                error_type = "invalid_type"
-            elif "invalid format" in description.lower():
-                error_type = "invalid_format"
-            elif "invalid enum" in description.lower() or "must be one of" in description.lower():
-                error_type = "invalid_enum"
-
-            formatted_message = error_formatter.format_validation_error(
-                field=field,
-                error_type=error_type,
-                received_value=description,
-                valid_values=details.get("valid_values"),
-            )
-        # Pattern 6: "X already exists" (business logic error)
-        elif "already exists" in error_message.lower():
-            formatted_message = f"❌ {error_message}\n💡 Use a different name or update the existing resource\n\n🔧 Common fixes:\n1. Choose a unique name\n2. Update the existing resource instead\n3. Delete the existing resource first (if appropriate)"
-        # Pattern 7: "Cannot X" (business logic constraint)
-        elif error_message.startswith("Cannot "):
-            formatted_message = f"❌ {error_message}\n💡 Review the business rules and adjust your request\n\n🔧 Common fixes:\n1. Check the current state of the resource\n2. Ensure all prerequisites are met\n3. Review the operation requirements"
-        # Generic error - add visual indicators
-        else:
-            formatted_message = f"❌ {error_message}\n💡 Check the input parameters and try again\n\n🔧 Common fixes:\n1. Verify all required fields are provided\n2. Check that values match expected types\n3. Review the API documentation for correct usage"
-
-    # Determine error code based on exception type
-    error_code = "INTERNAL_ERROR"
-    if isinstance(error, ValidationError):
-        error_code = "VALIDATION_ERROR"
-    elif isinstance(error, BusinessLogicError):
-        error_code = "BUSINESS_LOGIC_ERROR"
-    elif isinstance(error, NotFoundError):
-        error_code = "NOT_FOUND"
-    elif isinstance(error, StorageError):
-        error_code = "STORAGE_ERROR"
-
-    return JSONResponse(
-        status_code=status_code,
-        content={"error": {"code": error_code, "message": formatted_message, "details": details}},
-    )
-
-
-def format_error_with_formatter(
-    error_code: str,
-    error_message: str,
-    details: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Format an error using the ErrorFormatter for enhanced error messages.
-
-    This function attempts to parse error messages and apply enhanced formatting
-    with visual indicators, guidance, and examples using the ErrorFormatter.
-
-    Args:
-        error_code: The error code (e.g., "VALIDATION_ERROR")
-        error_message: The error message to format
-        details: Optional error details
-
-    Returns:
-        Dictionary with formatted error information
-
-    Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6
-    """
-    details = details or {}
-
-    # Try to extract field name and error type from the message
-    # Common patterns: "field_name: error description" or "Missing required field: field_name"
-    formatted_message = error_message
-
-    # Check if we can apply enhanced formatting
-    if error_formatter is not None:
-        # Pattern 1: "Missing required field: field_name"
-        if "Missing required field:" in error_message:
-            field = error_message.split("Missing required field:")[-1].strip()
-            formatted_message = error_formatter.format_validation_error(
-                field=field,
-                error_type="missing",
-                received_value=None,
-            )
-        # Pattern 2: "Invalid X value: value"
-        elif "Invalid" in error_message and "value:" in error_message:
-            parts = error_message.split(":")
-            if len(parts) >= 2:
-                field_part = parts[0].replace("Invalid", "").replace("value", "").strip()
-                received_value = parts[1].strip() if len(parts) > 1 else "unknown"
-                valid_values = details.get("valid_values")
-
-                formatted_message = error_formatter.format_validation_error(
-                    field=field_part,
-                    error_type="invalid_enum" if valid_values else "invalid_value",
-                    received_value=received_value,
-                    valid_values=valid_values,
-                )
-        # Pattern 3: "Invalid X format" (e.g., "Invalid task ID format")
-        elif "Invalid" in error_message and "format" in error_message:
-            # Extract field name from message
-            field = details.get("field", "value")
-            # Get the actual received value from details if available
-            received_value = details.get("received_value", "provided value")
-            formatted_message = error_formatter.format_validation_error(
-                field=field,
-                error_type="invalid_format",
-                received_value=received_value,
-            )
-        # Pattern 4: "X not found" or "X does not exist"
-        elif "not found" in error_message.lower() or "does not exist" in error_message.lower():
-            # This is a not found error - add visual indicators
-            formatted_message = f"❌ {error_message}\n💡 Verify the ID exists and try again\n\n🔧 Common fixes:\n1. Check that the ID is correct\n2. Ensure the resource hasn't been deleted\n3. Verify you have permission to access this resource"
-        # Pattern 5: "field: error description"
-        elif ": " in error_message and not error_message.startswith("Error"):
-            parts = error_message.split(": ", 1)
-            field = parts[0].strip()
-            description = parts[1].strip()
-
-            # Determine error type based on description
-            error_type = "invalid_value"
-            if "required" in description.lower() or "missing" in description.lower():
-                error_type = "missing"
-            elif "invalid type" in description.lower() or "must be" in description.lower():
-                error_type = "invalid_type"
-            elif "invalid format" in description.lower():
-                error_type = "invalid_format"
-            elif "invalid enum" in description.lower() or "must be one of" in description.lower():
-                error_type = "invalid_enum"
-
-            formatted_message = error_formatter.format_validation_error(
-                field=field,
-                error_type=error_type,
-                received_value=description,
-                valid_values=details.get("valid_values"),
-            )
-        # Pattern 6: "X already exists" (business logic error)
-        elif "already exists" in error_message.lower():
-            formatted_message = f"❌ {error_message}\n💡 Use a different name or update the existing resource\n\n🔧 Common fixes:\n1. Choose a unique name\n2. Update the existing resource instead\n3. Delete the existing resource first (if appropriate)"
-        # Pattern 7: "Cannot X" (business logic constraint)
-        elif error_message.startswith("Cannot "):
-            formatted_message = f"❌ {error_message}\n💡 Review the business rules and adjust your request\n\n🔧 Common fixes:\n1. Check the current state of the resource\n2. Ensure all prerequisites are met\n3. Review the operation requirements"
-        # Generic error - add visual indicators
-        else:
-            formatted_message = f"❌ {error_message}\n💡 Check the input parameters and try again\n\n🔧 Common fixes:\n1. Verify all required fields are provided\n2. Check that values match expected types\n3. Review the API documentation for correct usage"
-
-    return {
-        "error": {
-            "code": error_code,
-            "message": formatted_message,
-            "details": details,
-        }
-    }
-
-
-# ============================================================================
-# Global Exception Handlers
-# ============================================================================
-
-
-@app.exception_handler(RequestValidationError)
-async def request_validation_error_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
-    """Handle FastAPI/Pydantic request validation errors.
-
-    Transforms Pydantic validation errors to HTTP 400 with error details using ErrorFormatter.
-
-    Args:
-        request: The HTTP request that caused the error
-        exc: The request validation error exception
-
-    Returns:
-        JSON response with HTTP 400 status code
-
-    Requirements: 3.1, 3.4, 3.5, 4.1, 4.2, 12.5
-    """
-    logger.warning(f"Request validation error: {exc.errors()}")
-    # Format the first error for display
-    errors = exc.errors()
-    if errors:
-        first_error = errors[0]
-        field = ".".join(str(loc) for loc in first_error["loc"] if loc != "body")
-        message = first_error["msg"]
-        error_message = f"{field}: {message}" if field else message
-    else:
-        error_message = "Invalid request body"
-
-    # Create a ValidationError and use format_error_response
-    validation_error = ValidationError(error_message, {"field": field if errors else None})
-    return format_error_response(validation_error, 400)
-
-
-@app.exception_handler(ValidationError)
-async def validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
-    """Handle validation errors.
-
-    Transforms validation errors to HTTP 400 with error details using ErrorFormatter.
-
-    Args:
-        request: The HTTP request that caused the error
-        exc: The validation error exception
-
-    Returns:
-        JSON response with HTTP 400 status code
-
-    Requirements: 3.1, 3.4, 3.5, 4.1, 4.2, 12.5
-    """
-    logger.warning(f"Validation error: {exc.message}")
-    return format_error_response(exc, 400, exc.details)
-
-
-@app.exception_handler(BusinessLogicError)
-async def business_logic_error_handler(request: Request, exc: BusinessLogicError) -> JSONResponse:
-    """Handle business logic errors.
-
-    Transforms business logic errors to HTTP 409 with error details using ErrorFormatter.
-
-    Args:
-        request: The HTTP request that caused the error
-        exc: The business logic error exception
-
-    Returns:
-        JSON response with HTTP 409 status code
-
-    Requirements: 3.2, 3.4, 3.5, 4.1, 4.3, 12.5
-    """
-    logger.warning(f"Business logic error: {exc.message}")
-    return format_error_response(exc, 409, exc.details)
-
-
-@app.exception_handler(NotFoundError)
-async def not_found_error_handler(request: Request, exc: NotFoundError) -> JSONResponse:
-    """Handle not found errors.
-
-    Transforms not found errors to HTTP 404 with error details using ErrorFormatter.
-
-    Args:
-        request: The HTTP request that caused the error
-        exc: The not found error exception
-
-    Returns:
-        JSON response with HTTP 404 status code
-
-    Requirements: 3.3, 3.4, 3.5, 4.1, 12.5
-    """
-    logger.info(f"Not found: {exc.message}")
-    return format_error_response(exc, 404, exc.details)
-
-
-@app.exception_handler(StorageError)
-async def storage_error_handler(request: Request, exc: StorageError) -> JSONResponse:
-    """Handle storage errors.
-
-    Transforms storage errors to HTTP 500 with error details using ErrorFormatter.
-
-    Args:
-        request: The HTTP request that caused the error
-        exc: The storage error exception
-
-    Returns:
-        JSON response with HTTP 500 status code
-
-    Requirements: 3.4, 3.5, 4.1, 12.5
-    """
-    logger.error(f"Storage error: {exc.message}")
-    return format_error_response(exc, 500, exc.details)
-
-
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Handle unexpected exceptions.
-
-    Catches any unhandled exceptions and returns HTTP 500 with enhanced formatting.
-
-    Args:
-        request: The HTTP request that caused the error
-        exc: The exception
-
-    Returns:
-        JSON response with HTTP 500 status code
-
-    Requirements: 3.4, 3.5, 4.1, 12.5
-    """
-    logger.error(f"Unexpected error (type: {type(exc).__name__}): {exc}", exc_info=True)
-    # Wrap in StorageError for consistent formatting
-    storage_error = StorageError(
-        f"An unexpected error occurred: {str(exc)}", {"error_type": type(exc).__name__}
-    )
-    return format_error_response(storage_error, 500)
-
-
 # Configure CORS for React UI
 # Allow requests from React development server and production builds
 app.add_middleware(
@@ -682,199 +273,286 @@ app.add_middleware(
 )
 
 
-# ============================================================================
-# Error Classification Helper
-# ============================================================================
-
-
-def classify_value_error(error: ValueError, context: Optional[Dict[str, Any]] = None) -> Exception:
-    """Classify a ValueError into the appropriate custom exception.
-
-    This function examines the error message to determine whether it represents:
-    - A not found error (404)
-    - A business logic error (409)
-    - A validation error (400)
-
-    Args:
-        error: The ValueError to classify
-        context: Optional context information to include in error details
-
-    Returns:
-        The appropriate custom exception (NotFoundError, BusinessLogicError, or ValidationError)
-
-    Requirements: 12.5
-    """
-    error_message = str(error)
-    details = context or {}
-
-    # Check for "does not exist" pattern (not found errors)
-    if "does not exist" in error_message:
-        return NotFoundError(error_message, details)
-
-    # Check for business logic error patterns
-    business_logic_patterns = [
-        "Cannot delete default project",
-        "Cannot mark task as COMPLETED",
-        "Cannot create task: would create circular dependency",
-        "Cannot update dependencies: would create circular dependency",
-        "Cannot reset task list",
-        "is not under the 'Repeatable' project",
-        "already exists",
-    ]
-
-    for pattern in business_logic_patterns:
-        if pattern in error_message:
-            return BusinessLogicError(error_message, details)
-
-    # Default to validation error
-    return ValidationError(error_message, details)
-
-
-def preprocess_request_body(body: Dict[str, Any], endpoint: str) -> Dict[str, Any]:
-    """Preprocess request body for agent-friendly type conversion.
-
-    This function applies automatic type conversion to common agent input patterns:
-    - String numbers → Numbers
-    - JSON strings → Arrays/Objects
-    - Boolean strings → Booleans
-
-    Args:
-        body: The raw request body from the agent
-        endpoint: The endpoint being called (for determining preprocessing rules)
-
-    Returns:
-        Preprocessed body with converted types
-
-    Requirements: 1.1, 1.2, 1.3, 1.4
-    """
-    # Define preprocessing rules for each endpoint
-    # Map field names to expected types for preprocessing
-    preprocessing_rules = {
-        "create_task_list": {
-            "repeatable": bool,
-        },
-        "create_task": {
-            "dependencies": list,
-            "exit_criteria": list,
-            "notes": list,
-            "research_notes": list,
-            "action_plan": list,
-            "execution_notes": list,
-            "tags": list,
-        },
-        "add_tags": {
-            "tags": list,
-        },
-        "search_tasks": {
-            "status": list,
-            "priority": list,
-            "tags": list,
-        },
-    }
-
-    # Get rules for this endpoint
-    rules = preprocessing_rules.get(endpoint, {})
-
-    # Apply preprocessing
-    preprocessed = {}
-    for key, value in body.items():
-        if key in rules:
-            preprocessed[key] = preprocessor.preprocess(value, rules[key])
-        else:
-            preprocessed[key] = value
-
-    return preprocessed
-
-
-# Request/Response logging middleware
+# Add middleware to track request processing time
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Log all HTTP requests and responses.
+async def add_process_time_header(request: Request, call_next):
+    """Add request processing time to response headers.
 
-    This middleware logs:
-    - Request method, path, and client IP
-    - Response status code and processing time
+    Tracks the time taken to process each request and adds it to the
+    response headers as 'x-process-time' in seconds (as a float).
 
     Args:
-        request: The incoming HTTP request
-        call_next: The next middleware or route handler
+        request: The incoming request
+        call_next: The next middleware or endpoint handler
 
     Returns:
-        The HTTP response
+        Response with x-process-time header added
 
-    Requirements: 12.1, 15.1
+    Requirements: 15.1
     """
-    # Log request
     start_time = time.time()
-    client_ip = request.client.host if request.client else "unknown"
-    print(f"DEBUG MIDDLEWARE: {request.method} {request.url.path}")
-    logger.info(f"Request: {request.method} {request.url.path} from {client_ip}")
-
-    # Process request
-    try:
-        response = await call_next(request)
-
-        # Log response
-        process_time = time.time() - start_time
-        logger.info(
-            f"Response: {request.method} {request.url.path} "
-            f"status={response.status_code} time={process_time:.3f}s"
-        )
-
-        # Add processing time header
-        response.headers["X-Process-Time"] = str(process_time)
-
-        return response
-
-    except Exception as e:
-        # Log error
-        process_time = time.time() - start_time
-        logger.error(
-            f"Error: {request.method} {request.url.path} "
-            f"error={str(e)} time={process_time:.3f}s"
-        )
-        raise
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["x-process-time"] = str(process_time)
+    return response
 
 
-@app.get(
-    "/",
-    tags=["System"],
-    summary="API Information",
-    response_description="Basic API information and documentation links",
-)
-async def root() -> Dict[str, str]:
-    """Get basic API information.
+# ============================================================================
+# Error Handling
+# ============================================================================
 
-    Returns welcome message, version, and links to documentation.
 
-    ## Example Response
-    ```json
-    {
-        "message": "Task Management System API",
-        "version": "0.1.0-alpha",
-        "docs": "/docs"
-    }
-    ```
+def format_error_response(
+    code: str, message: str, details: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    """Format an error response with consistent structure.
+
+    Args:
+        code: Error code (e.g., VALIDATION_ERROR, NOT_FOUND)
+        message: Human-readable error message
+        details: Optional dictionary with additional error details
+
+    Returns:
+        Dictionary with error structure
+
+    Requirements: 8.5, 9.5
     """
-    return {"message": "Task Management System API", "version": "0.1.0-alpha", "docs": "/docs"}
+    return {
+        "error": {
+            "code": code,
+            "message": message,
+            "details": details or {},
+        }
+    }
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Handle Pydantic validation errors.
+
+    Converts Pydantic validation errors into consistent error responses with
+    HTTP 400 status code.
+
+    Args:
+        request: The incoming request
+        exc: The validation error exception
+
+    Returns:
+        JSONResponse with error details
+
+    Requirements: 8.1, 8.5, 9.5
+    """
+    # Extract validation error details
+    errors = exc.errors()
+
+    # Format error details for the response
+    error_details = {}
+    for error in errors:
+        field = ".".join(str(loc) for loc in error["loc"])
+        error_details[field] = {
+            "message": error["msg"],
+            "type": error["type"],
+        }
+        # Include input value if available
+        if "input" in error:
+            error_details[field]["received_value"] = error["input"]
+
+    # Create a helpful error message
+    field_names = ", ".join(error_details.keys())
+    message = (
+        f"Validation error in fields: {field_names}. Please check the field values and try again."
+    )
+
+    return JSONResponse(
+        status_code=400,
+        content=format_error_response(
+            code="VALIDATION_ERROR",
+            message=message,
+            details=error_details,
+        ),
+    )
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    """Handle ValueError from orchestrators.
+
+    Classifies ValueError messages to determine the appropriate HTTP status code
+    and error code:
+    - "does not exist" -> 404 NOT_FOUND
+    - "already exists" or "Cannot" -> 409 BUSINESS_LOGIC_ERROR
+    - Other -> 400 VALIDATION_ERROR
+
+    Args:
+        request: The incoming request
+        exc: The ValueError exception
+
+    Returns:
+        JSONResponse with error details
+
+    Requirements: 8.1, 8.2, 8.3, 8.5, 9.5
+    """
+    error_message = str(exc)
+
+    # Classify error type based on message content
+    if "does not exist" in error_message:
+        # Resource not found
+        return JSONResponse(
+            status_code=404,
+            content=format_error_response(
+                code="NOT_FOUND",
+                message=error_message,
+                details={},
+            ),
+        )
+    elif (
+        ("already exists" in error_message and "Invalid" not in error_message)
+        or "Cannot" in error_message
+        or "is not under" in error_message
+    ):
+        # Business logic constraint violation
+        return JSONResponse(
+            status_code=409,
+            content=format_error_response(
+                code="BUSINESS_LOGIC_ERROR",
+                message=error_message,
+                details={},
+            ),
+        )
+    else:
+        # Generic validation error
+        return JSONResponse(
+            status_code=400,
+            content=format_error_response(
+                code="VALIDATION_ERROR",
+                message=error_message,
+                details={},
+            ),
+        )
+
+
+@app.exception_handler(Exception)
+async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Handle unexpected exceptions.
+
+    Catches all unhandled exceptions and returns a generic error response with
+    HTTP 500 status code.
+
+    Args:
+        request: The incoming request
+        exc: The exception
+
+    Returns:
+        JSONResponse with error details
+
+    Requirements: 8.4, 8.5, 9.5
+    """
+    logger.error(f"Unexpected error: {exc}", exc_info=True)
+
+    return JSONResponse(
+        status_code=500,
+        content=format_error_response(
+            code="STORAGE_ERROR",
+            message="An unexpected error occurred. Please try again later.",
+            details={"error_type": type(exc).__name__},
+        ),
+    )
+
+
+# ============================================================================
+# System Endpoints
+# ============================================================================
+
+
+@app.get("/", tags=["System"])
+async def get_api_info() -> Dict[str, Any]:
+    """Get API information.
+
+    Returns basic information about the API including version and available endpoints.
+
+    Returns:
+        Dictionary with API information
+
+    Requirements: 15.1
+    """
+    return {
+        "name": "Task Management System API",
+        "version": "0.1.0-alpha",
+        "description": "Refactored REST API with consistent patterns and ID-based references",
+        "message": "Welcome to Task Management System API",
+        "docs_url": "/docs",
+        "redoc_url": "/redoc",
+    }
 
 
 @app.get(
     "/health",
     tags=["System"],
-    summary="Health Check",
-    response_description="System health status",
+    status_code=200,
     responses={
         200: {
             "description": "System is healthy",
             "content": {
                 "application/json": {
-                    "example": {
-                        "status": "healthy",
-                        "timestamp": "2024-01-15T10:30:00Z",
-                        "checks": {"database": "healthy", "storage": "healthy"},
-                        "response_time_ms": 15.5,
-                    }
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "status": {"type": "string", "example": "healthy"},
+                            "checks": {
+                                "type": "object",
+                                "description": "Health check results for backing store (filesystem or database)",
+                                "additionalProperties": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string", "example": "healthy"},
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Filesystem accessible and writable",
+                                        },
+                                        "response_time_ms": {"type": "number", "example": 5.2},
+                                    },
+                                },
+                            },
+                            "response_time_ms": {"type": "integer", "example": 15},
+                            "timestamp": {
+                                "type": "string",
+                                "format": "date-time",
+                                "example": "2024-01-01T12:00:00Z",
+                            },
+                        },
+                    },
+                    "examples": {
+                        "filesystem": {
+                            "summary": "Filesystem backing store",
+                            "value": {
+                                "status": "healthy",
+                                "checks": {
+                                    "filesystem": {
+                                        "status": "healthy",
+                                        "message": "Filesystem accessible and writable",
+                                        "response_time_ms": 5.2,
+                                    }
+                                },
+                                "response_time_ms": 15,
+                                "timestamp": "2024-01-01T12:00:00Z",
+                            },
+                        },
+                        "postgresql": {
+                            "summary": "PostgreSQL backing store",
+                            "value": {
+                                "status": "healthy",
+                                "checks": {
+                                    "database": {
+                                        "status": "healthy",
+                                        "message": "Database connection successful",
+                                        "response_time_ms": 12.5,
+                                    }
+                                },
+                                "response_time_ms": 15,
+                                "timestamp": "2024-01-01T12:00:00Z",
+                            },
+                        },
+                    },
                 }
             },
         },
@@ -882,98 +560,102 @@ async def root() -> Dict[str, str]:
             "description": "System is unhealthy",
             "content": {
                 "application/json": {
-                    "example": {
-                        "status": "unhealthy",
-                        "timestamp": "2024-01-15T10:30:00Z",
-                        "checks": {"database": "unhealthy", "storage": "healthy"},
-                        "response_time_ms": 25.3,
-                        "error": "Database connection failed",
-                    }
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "status": {"type": "string", "example": "unhealthy"},
+                            "checks": {
+                                "type": "object",
+                                "description": "Health check results for backing store (filesystem or database)",
+                                "additionalProperties": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string", "example": "unhealthy"},
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Filesystem check failed",
+                                        },
+                                        "response_time_ms": {"type": "number", "example": 5.2},
+                                        "error": {
+                                            "type": "string",
+                                            "example": "No write permission for filesystem path",
+                                        },
+                                    },
+                                },
+                            },
+                            "response_time_ms": {"type": "integer", "example": 5000},
+                            "timestamp": {
+                                "type": "string",
+                                "format": "date-time",
+                                "example": "2024-01-01T12:00:00Z",
+                            },
+                        },
+                    },
+                    "examples": {
+                        "filesystem": {
+                            "summary": "Filesystem backing store unhealthy",
+                            "value": {
+                                "status": "unhealthy",
+                                "checks": {
+                                    "filesystem": {
+                                        "status": "unhealthy",
+                                        "message": "Filesystem check failed",
+                                        "response_time_ms": 5.2,
+                                        "error": "No write permission for filesystem path: /tmp/tasks",
+                                    }
+                                },
+                                "response_time_ms": 5000,
+                                "timestamp": "2024-01-01T12:00:00Z",
+                            },
+                        },
+                        "postgresql": {
+                            "summary": "PostgreSQL backing store unhealthy",
+                            "value": {
+                                "status": "unhealthy",
+                                "checks": {
+                                    "database": {
+                                        "status": "unhealthy",
+                                        "message": "Database check failed",
+                                        "response_time_ms": 12.5,
+                                        "error": "Connection refused",
+                                    }
+                                },
+                                "response_time_ms": 5000,
+                                "timestamp": "2024-01-01T12:00:00Z",
+                            },
+                        },
+                    },
                 }
             },
         },
     },
 )
-async def health() -> Dict[str, Any]:
-    """Check system health status.
+async def health_check() -> JSONResponse:
+    """Health check endpoint.
 
-    Performs health checks on the backing store (database or filesystem) and returns
-    detailed status information. Returns HTTP 200 for healthy systems and HTTP 503
-    for unhealthy systems.
+    Verifies that the API and data store are operational.
 
-    ## Health Checks
-    - **Database/Filesystem**: Verifies backing store connectivity and accessibility
-    - **Response Time**: Measures health check execution time
+    Returns:
+        JSONResponse with health status, timestamp, and appropriate status code
 
-    ## Example Healthy Response
-    ```json
-    {
-        "status": "healthy",
-        "timestamp": "2024-01-15T10:30:00Z",
-        "checks": {
-            "database": "healthy"
-        },
-        "response_time_ms": 15.5
-    }
-    ```
-
-    ## Example Unhealthy Response
-    ```json
-    {
-        "status": "unhealthy",
-        "timestamp": "2024-01-15T10:30:00Z",
-        "checks": {
-            "database": "unhealthy"
-        },
-        "response_time_ms": 25.3,
-        "error": "Database connection failed"
-    }
-    ```
-
-    Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7
+    Requirements: 15.1, 15.2, 15.3, 15.4, 15.5
     """
-    try:
-        # Check if health_check_service is initialized
-        if health_check_service is None:
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "status": "unhealthy",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "checks": {},
-                    "response_time_ms": 0.0,
-                    "error": "Health check service not initialized",
-                },
-            )
+    # Use HealthCheckService to perform comprehensive health checks
+    health_service = HealthCheckService()
+    health_status = health_service.check_health()
 
-        # Perform health checks
-        health_status = health_check_service.check_health()
+    # Determine HTTP status code based on health status
+    status_code = 200 if health_status.status == "healthy" else 503
 
-        # Prepare response
-        response_data = {
+    return JSONResponse(
+        status_code=status_code,
+        content={
             "status": health_status.status,
-            "timestamp": health_status.timestamp.isoformat(),
             "checks": health_status.checks,
-            "response_time_ms": health_status.response_time_ms,
-        }
-
-        # Return 200 for healthy, 503 for unhealthy
-        status_code = 200 if health_status.status == "healthy" else 503
-
-        return JSONResponse(status_code=status_code, content=response_data)
-
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "unhealthy",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "checks": {},
-                "response_time_ms": 0.0,
-                "error": str(e),
-            },
-        )
+            "response_time_ms": int(health_status.response_time_ms),
+            "timestamp": health_status.timestamp.isoformat(),
+        },
+    )
 
 
 # ============================================================================
@@ -981,137 +663,24 @@ async def health() -> Dict[str, Any]:
 # ============================================================================
 
 
-@app.get(
-    "/projects",
-    tags=["Projects"],
-    summary="List All Projects",
-    response_description="List of all projects",
-    responses={
-        200: {
-            "description": "Successfully retrieved projects",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "projects": [
-                            {
-                                "id": "550e8400-e29b-41d4-a716-446655440000",
-                                "name": "Chore",
-                                "is_default": True,
-                                "agent_instructions_template": None,
-                                "created_at": "2024-01-01T00:00:00Z",
-                                "updated_at": "2024-01-01T00:00:00Z",
-                            },
-                            {
-                                "id": "660e8400-e29b-41d4-a716-446655440001",
-                                "name": "My Project",
-                                "is_default": False,
-                                "agent_instructions_template": "Work on {{task.title}}",
-                                "created_at": "2024-01-15T10:00:00Z",
-                                "updated_at": "2024-01-15T10:00:00Z",
-                            },
-                        ]
-                    }
-                }
-            },
-        },
-        500: {
-            "description": "Storage error",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "error": {
-                            "code": "STORAGE_ERROR",
-                            "message": "❌ Storage operation failed: Database connection lost",
-                            "details": {},
-                        }
-                    }
-                }
-            },
-        },
-    },
-)
-async def list_projects() -> Dict[str, Any]:
-    """List all projects in the system.
-
-    Returns all projects including the default projects (Chore and Repeatable) that
-    are automatically created on system initialization.
-
-    ## Response Format
-    Returns a list of projects wrapped in a `projects` key. Each project includes:
-    - **id**: Unique project identifier (UUID)
-    - **name**: Project name
-    - **is_default**: Whether this is a default project (Chore or Repeatable)
-    - **agent_instructions_template**: Optional template for AI agent instructions
-    - **created_at**: Creation timestamp (ISO 8601)
-    - **updated_at**: Last update timestamp (ISO 8601)
-
-    ## Example Response
-    ```json
-    {
-        "projects": [
-            {
-                "id": "550e8400-e29b-41d4-a716-446655440000",
-                "name": "Chore",
-                "is_default": true,
-                "agent_instructions_template": null,
-                "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:00Z"
-            }
-        ]
-    }
-    ```
-
-    Requirements: 12.1
-    """
-    try:
-        projects = project_orchestrator.list_projects()
-
-        return {
-            "projects": [
-                {
-                    "id": str(project.id),
-                    "name": project.name,
-                    "is_default": project.is_default,
-                    "agent_instructions_template": project.agent_instructions_template,
-                    "created_at": project.created_at.isoformat(),
-                    "updated_at": project.updated_at.isoformat(),
-                }
-                for project in projects
-            ]
-        }
-    except Exception as e:
-        logger.error(f"Error listing projects: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to list projects",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
 @app.post(
     "/projects",
     tags=["Projects"],
-    summary="Create Project",
-    response_description="Created project details",
+    status_code=201,
     responses={
-        200: {
+        201: {
             "description": "Project created successfully",
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Project created successfully",
+                        "message": "Project 'My Project' created successfully",
                         "project": {
-                            "id": "770e8400-e29b-41d4-a716-446655440002",
-                            "name": "Backend Development",
+                            "id": "550e8400-e29b-41d4-a716-446655440000",
+                            "name": "My Project",
                             "is_default": False,
-                            "agent_instructions_template": "Implement {{task.title}} following best practices",
-                            "created_at": "2024-01-15T10:30:00Z",
-                            "updated_at": "2024-01-15T10:30:00Z",
+                            "agent_instructions_template": None,
+                            "created_at": "2024-01-01T12:00:00Z",
+                            "updated_at": "2024-01-01T12:00:00Z",
                         },
                     }
                 }
@@ -1124,8 +693,13 @@ async def list_projects() -> Dict[str, Any]:
                     "example": {
                         "error": {
                             "code": "VALIDATION_ERROR",
-                            "message": '❌ Missing required field: name\n💡 Provide the name field\n\n🔧 Example:\n{"name": "My Project"}',
-                            "details": {"field": "name"},
+                            "message": "Validation error in fields: name. Please check the field values and try again.",
+                            "details": {
+                                "name": {
+                                    "message": "Field required",
+                                    "type": "missing",
+                                }
+                            },
                         }
                     }
                 }
@@ -1138,7 +712,7 @@ async def list_projects() -> Dict[str, Any]:
                     "example": {
                         "error": {
                             "code": "BUSINESS_LOGIC_ERROR",
-                            "message": "❌ Project with name 'Backend Development' already exists",
+                            "message": "Project with name 'My Project' already exists",
                             "details": {},
                         }
                     }
@@ -1147,233 +721,286 @@ async def list_projects() -> Dict[str, Any]:
         },
     },
 )
-async def create_project(request: Request) -> Dict[str, Any]:
+async def create_project(
+    request: ProjectCreateRequest = Body(
+        ...,
+        openapi_examples={
+            "basic": {
+                "summary": "Basic project",
+                "description": "Create a simple project without agent instructions",
+                "value": {"name": "My Project", "agent_instructions_template": None},
+            },
+            "with_template": {
+                "summary": "Project with agent instructions",
+                "description": "Create a project with custom agent instructions template",
+                "value": {
+                    "name": "Backend Development",
+                    "agent_instructions_template": "Complete the task: {task_title}. Description: {task_description}",
+                },
+            },
+        },
+    )
+) -> Dict[str, Any]:
     """Create a new project.
 
     Creates a new project with the specified name and optional agent instructions template.
     Project names must be unique across the system.
 
-    ## Request Body
-    - **name** (required, string): Unique project name
-    - **agent_instructions_template** (optional, string): Template for generating AI agent instructions
+    Args:
+        request: Project creation request with name and optional template
 
-    ## Template Variables
-    When using agent_instructions_template, you can reference:
-    - `{{task.title}}`: Task title
-    - `{{task.description}}`: Task description
-    - `{{task.status}}`: Task status
-    - `{{project.name}}`: Project name
-    - `{{task_list.name}}`: Task list name
+    Returns:
+        Dictionary with message and created project
 
-    ## Example Request
-    ```json
-    {
-        "name": "Backend Development",
-        "agent_instructions_template": "Implement {{task.title}} following best practices"
-    }
-    ```
+    Raises:
+        400 VALIDATION_ERROR: If name is empty
+        409 BUSINESS_LOGIC_ERROR: If project with same name already exists
 
-    ## Example Response
-    ```json
-    {
-        "message": "Project created successfully",
-        "project": {
-            "id": "770e8400-e29b-41d4-a716-446655440002",
-            "name": "Backend Development",
-            "is_default": false,
-            "agent_instructions_template": "Implement {{task.title}} following best practices",
-            "created_at": "2024-01-15T10:30:00Z",
-            "updated_at": "2024-01-15T10:30:00Z"
-        }
-    }
-    ```
-
-    Requirements: 12.1
+    Requirements: 2.1, 9.1, 9.3
     """
     try:
-        body = await request.json()
+        # Create project via orchestrator
+        project = orchestrators["project"].create_project(
+            name=request.name,
+            agent_instructions_template=request.agent_instructions_template,
+        )
 
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "create_project")
-
-        # Validate required fields
-        if "name" not in body:
-            raise ValidationError("Missing required field: name", {"field": "name"})
-
-        name = body["name"]
-        agent_instructions_template = body.get("agent_instructions_template")
-
-        # Create project
-        project = project_orchestrator.create_project(
-            name=name, agent_instructions_template=agent_instructions_template
+        # Convert to response model
+        project_response = ProjectResponse(
+            id=str(project.id),
+            name=project.name,
+            is_default=project.is_default,
+            agent_instructions_template=project.agent_instructions_template,
+            created_at=project.created_at.isoformat(),
+            updated_at=project.updated_at.isoformat(),
         )
 
         return {
-            "message": "Project created successfully",
-            "project": {
-                "id": str(project.id),
-                "name": project.name,
-                "is_default": project.is_default,
-                "agent_instructions_template": project.agent_instructions_template,
-                "created_at": project.created_at.isoformat(),
-                "updated_at": project.updated_at.isoformat(),
+            "message": f"Project '{project.name}' created successfully",
+            "project": project_response.model_dump(),
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
+    except Exception as e:
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in create_project: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
+
+
+@app.get(
+    "/projects",
+    tags=["Projects"],
+    responses={
+        200: {
+            "description": "List of all projects",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "projects": [
+                            {
+                                "id": "550e8400-e29b-41d4-a716-446655440000",
+                                "name": "Chore",
+                                "is_default": True,
+                                "agent_instructions_template": None,
+                                "created_at": "2024-01-01T12:00:00Z",
+                                "updated_at": "2024-01-01T12:00:00Z",
+                            },
+                            {
+                                "id": "660e8400-e29b-41d4-a716-446655440001",
+                                "name": "My Project",
+                                "is_default": False,
+                                "agent_instructions_template": "Complete: {task_title}",
+                                "created_at": "2024-01-01T13:00:00Z",
+                                "updated_at": "2024-01-01T13:00:00Z",
+                            },
+                        ]
+                    }
+                }
             },
         }
+    },
+)
+async def list_projects() -> Dict[str, Any]:
+    """List all projects.
 
-    except (ValidationError, NotFoundError, BusinessLogicError):
-        # Re-raise custom exceptions to be handled by global handlers
+    Retrieves all projects in the system, including default projects (Chore, Repeatable).
+
+    Returns:
+        Dictionary with list of projects
+
+    Requirements: 2.1, 9.2
+    """
+    try:
+        # Get all projects from orchestrator
+        projects = orchestrators["project"].list_projects()
+
+        # Convert to response models
+        project_responses = [
+            ProjectResponse(
+                id=str(p.id),
+                name=p.name,
+                is_default=p.is_default,
+                agent_instructions_template=p.agent_instructions_template,
+                created_at=p.created_at.isoformat(),
+                updated_at=p.updated_at.isoformat(),
+            )
+            for p in projects
+        ]
+
+        return {
+            "projects": [p.model_dump() for p in project_responses],
+        }
+    except ValueError:
+        # Let ValueError handler catch it
         raise
-    except ValueError as e:
-        # Classify the error and raise appropriate exception
-        classified_error = classify_value_error(e, {"operation": "create_project"})
-        raise classified_error
     except Exception as e:
-        logger.error(f"Error creating project: {e}")
-        raise StorageError("Failed to create project", {"error": str(e)})
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in list_projects: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
 
 
 @app.get("/projects/{project_id}", tags=["Projects"])
 async def get_project(project_id: str) -> Dict[str, Any]:
     """Get a single project by ID.
 
+    Retrieves a specific project by its UUID.
+
     Args:
         project_id: UUID of the project to retrieve
 
     Returns:
-        Dictionary with project details
+        Dictionary with the project
 
-    Requirements: 12.1
+    Raises:
+        404 NOT_FOUND: If project does not exist
+
+    Requirements: 2.1, 9.1
     """
-    try:
-        from uuid import UUID
+    from uuid import UUID
 
+    try:
         # Parse UUID
         try:
             project_uuid = UUID(project_id)
         except ValueError:
-            raise ValidationError(
-                "Invalid project ID format", {"field": "project_id", "received_value": project_id}
-            )
+            raise ValueError(f"Invalid project ID format: {project_id}")
 
-        # Get project
-        project = project_orchestrator.get_project(project_uuid)
+        # Get project from orchestrator
+        project = orchestrators["project"].get_project(project_uuid)
 
         if project is None:
-            raise NotFoundError(
-                f"Project with id '{project_id}' not found", {"project_id": project_id}
-            )
+            raise ValueError(f"Project with ID {project_id} does not exist")
 
-        return {
-            "project": {
-                "id": str(project.id),
-                "name": project.name,
-                "is_default": project.is_default,
-                "agent_instructions_template": project.agent_instructions_template,
-                "created_at": project.created_at.isoformat(),
-                "updated_at": project.updated_at.isoformat(),
-            }
-        }
-
-    except (ValidationError, NotFoundError):
-        # Re-raise custom exceptions to be handled by global handlers
-        raise
-    except Exception as e:
-        logger.error(f"Error getting project: {e}")
-        raise StorageError("Failed to get project", {"error": str(e)})
-
-
-@app.put("/projects/{project_id}", tags=["Projects"])
-async def update_project(project_id: str, request: Request) -> Dict[str, Any]:
-    """Update an existing project.
-
-    Request body can contain:
-    - name (optional): New project name
-    - agent_instructions_template (optional): New template (use empty string to clear)
-
-    Args:
-        project_id: UUID of the project to update
-
-    Returns:
-        Dictionary with updated project
-
-    Requirements: 12.1
-    """
-    try:
-        from uuid import UUID
-
-        # Parse UUID
-        try:
-            project_uuid = UUID(project_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid project ID format",
-                        "details": {"field": "project_id"},
-                    }
-                },
-            )
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "update_project")
-
-        # Extract update fields
-        name = body.get("name")
-        agent_instructions_template = body.get("agent_instructions_template")
-
-        # Update project
-        project = project_orchestrator.update_project(
-            project_id=project_uuid,
-            name=name,
-            agent_instructions_template=agent_instructions_template,
+        # Convert to response model
+        project_response = ProjectResponse(
+            id=str(project.id),
+            name=project.name,
+            is_default=project.is_default,
+            agent_instructions_template=project.agent_instructions_template,
+            created_at=project.created_at.isoformat(),
+            updated_at=project.updated_at.isoformat(),
         )
 
         return {
-            "message": "Project updated successfully",
-            "project": {
-                "id": str(project.id),
-                "name": project.name,
-                "is_default": project.is_default,
-                "agent_instructions_template": project.agent_instructions_template,
-                "created_at": project.created_at.isoformat(),
-                "updated_at": project.updated_at.isoformat(),
-            },
+            "project": project_response.model_dump(),
         }
-
-    except ValueError as e:
-        logger.warning(f"Validation error updating project: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": str(e),
-                        "details": {"project_id": project_id},
-                    }
-                },
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content={"error": {"code": "VALIDATION_ERROR", "message": str(e), "details": {}}},
-            )
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
     except Exception as e:
-        logger.error(f"Error updating project: {e}")
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in get_project: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to update project",
-                    "details": {"error": str(e)},
-                }
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
+
+
+@app.put("/projects/{project_id}", tags=["Projects"])
+async def update_project(
+    project_id: str,
+    request: ProjectUpdateRequest = Body(
+        ...,
+        openapi_examples={
+            "update_name": {
+                "summary": "Update project name",
+                "value": {"name": "Updated Project Name"},
             },
+            "update_template": {
+                "summary": "Update agent instructions template",
+                "value": {"agent_instructions_template": "New template: {task_title}"},
+            },
+            "clear_template": {
+                "summary": "Clear agent instructions template",
+                "value": {"agent_instructions_template": ""},
+            },
+        },
+    ),
+) -> Dict[str, Any]:
+    """Update a project.
+
+    Updates a project's name and/or agent instructions template.
+    Use empty string for agent_instructions_template to clear it.
+
+    Args:
+        project_id: UUID of the project to update
+        request: Project update request with optional name and template
+
+    Returns:
+        Dictionary with message and updated project
+
+    Raises:
+        404 NOT_FOUND: If project does not exist
+        409 BUSINESS_LOGIC_ERROR: If new name conflicts with existing project
+
+    Requirements: 2.1, 9.1, 9.3
+    """
+    from uuid import UUID
+
+    try:
+        # Parse UUID
+        try:
+            project_uuid = UUID(project_id)
+        except ValueError:
+            raise ValueError(f"Invalid project ID format: {project_id}")
+
+        # Update project via orchestrator
+        project = orchestrators["project"].update_project(
+            project_id=project_uuid,
+            name=request.name,
+            agent_instructions_template=request.agent_instructions_template,
+        )
+
+        # Convert to response model
+        project_response = ProjectResponse(
+            id=str(project.id),
+            name=project.name,
+            is_default=project.is_default,
+            agent_instructions_template=project.agent_instructions_template,
+            created_at=project.created_at.isoformat(),
+            updated_at=project.updated_at.isoformat(),
+        )
+
+        return {
+            "message": f"Project '{project.name}' updated successfully",
+            "project": project_response.model_dump(),
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
+    except Exception as e:
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in update_project: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
         )
 
 
@@ -1381,8 +1008,8 @@ async def update_project(project_id: str, request: Request) -> Dict[str, Any]:
 async def delete_project(project_id: str) -> Dict[str, Any]:
     """Delete a project.
 
-    Deletes the specified project and all its task lists and tasks.
-    Default projects (Chore and Repeatable) cannot be deleted.
+    Deletes a project and all its associated task lists and tasks (cascade delete).
+    Default projects (Chore, Repeatable) cannot be deleted.
 
     Args:
         project_id: UUID of the project to delete
@@ -1390,361 +1017,187 @@ async def delete_project(project_id: str) -> Dict[str, Any]:
     Returns:
         Dictionary with success message
 
-    Requirements: 12.1
-    """
-    try:
-        from uuid import UUID
+    Raises:
+        404 NOT_FOUND: If project does not exist
+        409 BUSINESS_LOGIC_ERROR: If attempting to delete a default project
 
+    Requirements: 2.1, 9.3
+    """
+    from uuid import UUID
+
+    try:
         # Parse UUID
         try:
             project_uuid = UUID(project_id)
         except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid project ID format",
-                        "details": {"field": "project_id"},
-                    }
-                },
-            )
+            raise ValueError(f"Invalid project ID format: {project_id}")
 
-        # Delete project
-        project_orchestrator.delete_project(project_uuid)
+        # Delete project via orchestrator
+        orchestrators["project"].delete_project(project_uuid)
 
-        return {"message": "Project deleted successfully"}
-
-    except ValueError as e:
-        logger.warning(f"Error deleting project: {e}")
-        # Check if it's a not found error or business logic error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content=format_error_with_formatter(
-                    "NOT_FOUND", str(e), {"project_id": project_id}
-                ),
-            )
-        else:
-            # Business logic error (e.g., trying to delete default project)
-            return JSONResponse(
-                status_code=409,
-                content=format_error_with_formatter(
-                    "BUSINESS_LOGIC_ERROR", str(e), {"project_id": project_id}
-                ),
-            )
+        return {
+            "message": f"Project with ID {project_id} deleted successfully",
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
     except Exception as e:
-        logger.error(f"Error deleting project: {e}")
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in delete_project: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to delete project",
-                    "details": {"error": str(e)},
-                }
-            },
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
         )
 
 
 # ============================================================================
-# Task List Endpoints
+# TaskList Endpoints
 # ============================================================================
+
+
+@app.post("/task-lists", tags=["Task Lists"], status_code=201)
+async def create_task_list(
+    request: TaskListCreateRequest = Body(
+        ...,
+        openapi_examples={
+            "basic": {
+                "summary": "Basic task list",
+                "value": {
+                    "name": "Sprint 1 Tasks",
+                    "project_id": "550e8400-e29b-41d4-a716-446655440000",
+                },
+            },
+            "with_template": {
+                "summary": "Task list with agent instructions",
+                "value": {
+                    "name": "Backend API Tasks",
+                    "project_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "agent_instructions_template": "Work on: {task_title}",
+                },
+            },
+        },
+    )
+) -> Dict[str, Any]:
+    """Create a new task list.
+
+    Creates a new task list within a project using the project's UUID.
+    Task list names must be unique within the system.
+
+    Args:
+        request: Task list creation request with name, project_id, and optional template
+
+    Returns:
+        Dictionary with message and created task list
+
+    Raises:
+        400 VALIDATION_ERROR: If name is empty or project_id is invalid
+        404 NOT_FOUND: If project_id does not exist
+        409 BUSINESS_LOGIC_ERROR: If task list with same name already exists
+
+    Requirements: 2.2, 1.1, 9.1, 9.3
+    """
+    from uuid import UUID
+
+    try:
+        # Parse project UUID
+        try:
+            project_uuid = UUID(request.project_id)
+        except ValueError:
+            raise ValueError(f"Invalid project ID format: {request.project_id}")
+
+        # Create task list via orchestrator
+        task_list = orchestrators["task_list"].create_task_list(
+            name=request.name,
+            project_id=project_uuid,
+            agent_instructions_template=request.agent_instructions_template,
+        )
+
+        # Convert to response model
+        task_list_response = TaskListResponse(
+            id=str(task_list.id),
+            name=task_list.name,
+            project_id=str(task_list.project_id),
+            agent_instructions_template=task_list.agent_instructions_template,
+            created_at=task_list.created_at.isoformat(),
+            updated_at=task_list.updated_at.isoformat(),
+        )
+
+        return {
+            "message": f"Task list '{task_list.name}' created successfully",
+            "task_list": task_list_response.model_dump(),
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
+    except Exception as e:
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in create_task_list: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
 
 
 @app.get("/task-lists", tags=["Task Lists"])
 async def list_task_lists(
-    project_id: Optional[str] = Query(None, description="UUID of project to filter by")
+    project_id: str = Query(
+        None, description="Optional project UUID to filter task lists by project"
+    )
 ) -> Dict[str, Any]:
-    """List all task lists, optionally filtered by project.
+    """List all task lists.
 
-    Query parameters:
-    - project_id (optional): UUID of project to filter by
+    Retrieves all task lists in the system, optionally filtered by project.
+
+    Args:
+        project_id: Optional project UUID to filter by
 
     Returns:
         Dictionary with list of task lists
 
-    Requirements: 12.2
-    """
-    try:
-        from uuid import UUID
+    Raises:
+        400 VALIDATION_ERROR: If project_id format is invalid
 
-        # Parse project_id if provided
+    Requirements: 2.2, 2.4, 9.2
+    """
+    from uuid import UUID
+
+    try:
+        # Parse project UUID if provided
         project_uuid = None
-        if project_id:
+        if project_id is not None:
             try:
                 project_uuid = UUID(project_id)
             except ValueError:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": "Invalid project ID format",
-                            "details": {"field": "project_id"},
-                        }
-                    },
-                )
+                raise ValueError(f"Invalid project ID format: {project_id}")
 
-        # List task lists
-        task_lists = task_list_orchestrator.list_task_lists(project_uuid)
+        # Get task lists from orchestrator
+        task_lists = orchestrators["task_list"].list_task_lists(project_uuid)
 
-        # Build a map of project_id to project_name for efficient lookup
-        project_map = {}
-        for task_list in task_lists:
-            if task_list.project_id not in project_map:
-                project = project_orchestrator.get_project(task_list.project_id)
-                project_map[task_list.project_id] = project.name if project else None
+        # Convert to response models
+        task_list_responses = [
+            TaskListResponse(
+                id=str(tl.id),
+                name=tl.name,
+                project_id=str(tl.project_id),
+                agent_instructions_template=tl.agent_instructions_template,
+                created_at=tl.created_at.isoformat(),
+                updated_at=tl.updated_at.isoformat(),
+            )
+            for tl in task_lists
+        ]
 
         return {
-            "task_lists": [
-                {
-                    "id": str(task_list.id),
-                    "name": task_list.name,
-                    "project_id": str(task_list.project_id),
-                    "project_name": project_map.get(task_list.project_id),
-                    "agent_instructions_template": task_list.agent_instructions_template,
-                    "created_at": task_list.created_at.isoformat(),
-                    "updated_at": task_list.updated_at.isoformat(),
-                }
-                for task_list in task_lists
-            ]
+            "task_lists": [tl.model_dump() for tl in task_list_responses],
         }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
     except Exception as e:
-        logger.error(f"Error listing task lists: {e}")
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in list_task_lists: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to list task lists",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.post(
-    "/task-lists",
-    tags=["Task Lists"],
-    summary="Create Task List",
-    response_description="Created task list with project information",
-    responses={
-        200: {
-            "description": "Task list created successfully",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Task list created successfully",
-                        "task_list": {
-                            "id": "880e8400-e29b-41d4-a716-446655440003",
-                            "name": "Sprint 1 Tasks",
-                            "project_id": "550e8400-e29b-41d4-a716-446655440000",
-                            "project_name": "Backend Development",
-                            "agent_instructions_template": "Complete {{task.title}} for Sprint 1",
-                            "created_at": "2024-01-15T11:00:00Z",
-                            "updated_at": "2024-01-15T11:00:00Z",
-                        },
-                    }
-                }
-            },
-        },
-        400: {
-            "description": "Validation error",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": "❌ Invalid project_id format",
-                            "details": {"field": "project_id"},
-                        }
-                    }
-                }
-            },
-        },
-        404: {
-            "description": "Project not found",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "error": {
-                            "code": "NOT_FOUND",
-                            "message": "❌ Project with id '550e8400-e29b-41d4-a716-446655440000' does not exist",
-                            "details": {},
-                        }
-                    }
-                }
-            },
-        },
-    },
-)
-async def create_task_list(request: Request) -> Dict[str, Any]:
-    """Create a new task list with flexible project assignment.
-
-    Creates a task list and assigns it to a project based on the provided parameters.
-    The response includes both project_id and project_name for convenience.
-
-    ## Project Assignment Rules (Priority Order)
-    1. If `repeatable=true`: Assign to "Repeatable" project (ignores project_id/project_name)
-    2. If `project_id` provided: Use that project (must exist)
-    3. If `project_name` provided: Use that project (create if needed) - **DEPRECATED**
-    4. If neither provided: Assign to "Chore" project
-
-    ## Request Body
-    - **name** (required, string): Task list name
-    - **project_id** (optional, UUID string): Project ID to assign to
-    - **project_name** (optional, string): Project name - **DEPRECATED, use project_id instead**
-    - **repeatable** (optional, boolean): Whether this is repeatable (default: false)
-    - **agent_instructions_template** (optional, string): Template for agent instructions
-
-    ## Example Request (Recommended - using project_id)
-    ```json
-    {
-        "name": "Sprint 1 Tasks",
-        "project_id": "550e8400-e29b-41d4-a716-446655440000",
-        "agent_instructions_template": "Complete {{task.title}} for Sprint 1"
-    }
-    ```
-
-    ## Example Request (Deprecated - using project_name)
-    ```json
-    {
-        "name": "Sprint 1 Tasks",
-        "project_name": "Backend Development",
-        "agent_instructions_template": "Complete {{task.title}} for Sprint 1"
-    }
-    ```
-
-    ## Example Request (Repeatable Task List)
-    ```json
-    {
-        "name": "Daily Standup Checklist",
-        "repeatable": true
-    }
-    ```
-
-    ## Deprecation Notice
-    ⚠️ **The `project_name` field is deprecated.** Use `project_id` instead for:
-    - Unambiguous project references
-    - Better performance (no name lookup required)
-    - Consistent ID-based entity references across the API
-
-    When both `project_id` and `project_name` are provided, `project_id` takes precedence
-    and `project_name` is ignored.
-
-    ## Response Format
-    The response includes both `project_id` and `project_name` for convenience, allowing
-    clients to display the project name without an additional lookup.
-
-    ## Example Response
-    ```json
-    {
-        "message": "Task list created successfully",
-        "task_list": {
-            "id": "880e8400-e29b-41d4-a716-446655440003",
-            "name": "Sprint 1 Tasks",
-            "project_id": "550e8400-e29b-41d4-a716-446655440000",
-            "project_name": "Backend Development",
-            "agent_instructions_template": "Complete {{task.title}} for Sprint 1",
-            "created_at": "2024-01-15T11:00:00Z",
-            "updated_at": "2024-01-15T11:00:00Z"
-        }
-    }
-    ```
-
-    Requirements: 12.2, 1.1, 1.2, 1.3, 1.4, 1.6, 11.1, 11.2, 11.3, 11.4
-    """
-    try:
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "create_task_list")
-
-        # Validate required fields
-        if "name" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: name", {"field": "name"}
-                ),
-            )
-
-        name = body["name"]
-        project_id_str = body.get("project_id")
-        project_name = body.get("project_name")
-        repeatable = body.get("repeatable", False)
-        agent_instructions_template = body.get("agent_instructions_template")
-
-        # Convert project_id string to UUID if provided
-        project_id = None
-        if project_id_str is not None:
-            try:
-                from uuid import UUID
-
-                project_id = UUID(project_id_str)
-            except (ValueError, AttributeError) as e:
-                return JSONResponse(
-                    status_code=400,
-                    content=format_error_with_formatter(
-                        "VALIDATION_ERROR",
-                        f"Invalid project_id format: {project_id_str}",
-                        {"field": "project_id", "error": str(e)},
-                    ),
-                )
-
-        # Create task list
-        task_list = task_list_orchestrator.create_task_list(
-            name=name,
-            project_id=project_id,
-            project_name=project_name,
-            repeatable=repeatable,
-            agent_instructions_template=agent_instructions_template,
-        )
-
-        # Get project to include project_name in response
-        project = project_orchestrator.get_project(task_list.project_id)
-        project_name_for_response = project.name if project else None
-
-        return {
-            "message": "Task list created successfully",
-            "task_list": {
-                "id": str(task_list.id),
-                "name": task_list.name,
-                "project_id": str(task_list.project_id),
-                "project_name": project_name_for_response,
-                "agent_instructions_template": task_list.agent_instructions_template,
-                "created_at": task_list.created_at.isoformat(),
-                "updated_at": task_list.updated_at.isoformat(),
-            },
-        }
-
-    except ValueError as e:
-        error_msg = str(e)
-        # Check if this is a "not found" error for project_id
-        if "does not exist" in error_msg and "Project with id" in error_msg:
-            logger.warning(f"Project not found: {e}")
-            return JSONResponse(
-                status_code=404,
-                content=format_error_with_formatter("NOT_FOUND", error_msg, {}),
-            )
-        # Otherwise it's a validation error
-        logger.warning(f"Validation error creating task list: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", error_msg, {}),
-        )
-    except Exception as e:
-        logger.error(f"Error creating task list: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to create task list",
-                    "details": {"error": str(e)},
-                }
-            },
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
         )
 
 
@@ -1752,174 +1205,135 @@ async def create_task_list(request: Request) -> Dict[str, Any]:
 async def get_task_list(task_list_id: str) -> Dict[str, Any]:
     """Get a single task list by ID.
 
+    Retrieves a specific task list by its UUID.
+
     Args:
         task_list_id: UUID of the task list to retrieve
 
     Returns:
-        Dictionary with task list details
+        Dictionary with the task list
 
-    Requirements: 12.2
+    Raises:
+        400 VALIDATION_ERROR: If task_list_id format is invalid
+        404 NOT_FOUND: If task list does not exist
+
+    Requirements: 2.2, 9.1
     """
-    try:
-        from uuid import UUID
+    from uuid import UUID
 
+    try:
         # Parse UUID
         try:
             task_list_uuid = UUID(task_list_id)
         except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid task list ID format",
-                        "details": {"field": "task_list_id"},
-                    }
-                },
-            )
+            raise ValueError(f"Invalid task list ID format: {task_list_id}")
 
-        # Get task list
-        task_list = task_list_orchestrator.get_task_list(task_list_uuid)
+        # Get task list from orchestrator
+        task_list = orchestrators["task_list"].get_task_list(task_list_uuid)
 
         if task_list is None:
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": f"Task list with id '{task_list_id}' not found",
-                        "details": {"task_list_id": task_list_id},
-                    }
-                },
-            )
+            raise ValueError(f"Task list with ID {task_list_id} does not exist")
 
-        # Get project to include project_name in response
-        project = project_orchestrator.get_project(task_list.project_id)
-        project_name_for_response = project.name if project else None
+        # Convert to response model
+        task_list_response = TaskListResponse(
+            id=str(task_list.id),
+            name=task_list.name,
+            project_id=str(task_list.project_id),
+            agent_instructions_template=task_list.agent_instructions_template,
+            created_at=task_list.created_at.isoformat(),
+            updated_at=task_list.updated_at.isoformat(),
+        )
 
         return {
-            "task_list": {
-                "id": str(task_list.id),
-                "name": task_list.name,
-                "project_id": str(task_list.project_id),
-                "project_name": project_name_for_response,
-                "agent_instructions_template": task_list.agent_instructions_template,
-                "created_at": task_list.created_at.isoformat(),
-                "updated_at": task_list.updated_at.isoformat(),
-            }
+            "task_list": task_list_response.model_dump(),
         }
-
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
     except Exception as e:
-        logger.error(f"Error getting task list: {e}")
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in get_task_list: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to get task list",
-                    "details": {"error": str(e)},
-                }
-            },
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
         )
 
 
 @app.put("/task-lists/{task_list_id}", tags=["Task Lists"])
-async def update_task_list(task_list_id: str, request: Request) -> Dict[str, Any]:
-    """Update an existing task list.
+async def update_task_list(
+    task_list_id: str,
+    request: TaskListUpdateRequest = Body(
+        ...,
+        openapi_examples={
+            "update_name": {
+                "summary": "Update task list name",
+                "value": {"name": "Updated Sprint Tasks"},
+            },
+            "update_template": {
+                "summary": "Update agent instructions",
+                "value": {"agent_instructions_template": "Complete: {task_title}"},
+            },
+        },
+    ),
+) -> Dict[str, Any]:
+    """Update a task list.
 
-    Request body can contain:
-    - name (optional): New task list name
-    - agent_instructions_template (optional): New template (use empty string to clear)
+    Updates a task list's name and/or agent instructions template.
+    Use empty string for agent_instructions_template to clear it.
 
     Args:
         task_list_id: UUID of the task list to update
+        request: Task list update request with optional name and template
 
     Returns:
-        Dictionary with updated task list
+        Dictionary with message and updated task list
 
-    Requirements: 12.2
+    Raises:
+        400 VALIDATION_ERROR: If task_list_id format is invalid
+        404 NOT_FOUND: If task list does not exist
+        409 BUSINESS_LOGIC_ERROR: If new name conflicts with existing task list
+
+    Requirements: 2.2, 9.1, 9.3
     """
-    try:
-        from uuid import UUID
+    from uuid import UUID
 
+    try:
         # Parse UUID
         try:
             task_list_uuid = UUID(task_list_id)
         except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid task list ID format",
-                        "details": {"field": "task_list_id"},
-                    }
-                },
-            )
+            raise ValueError(f"Invalid task list ID format: {task_list_id}")
 
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "update_task_list")
-
-        # Extract update fields
-        name = body.get("name")
-        agent_instructions_template = body.get("agent_instructions_template")
-
-        # Update task list
-        task_list = task_list_orchestrator.update_task_list(
+        # Update task list via orchestrator
+        task_list = orchestrators["task_list"].update_task_list(
             task_list_id=task_list_uuid,
-            name=name,
-            agent_instructions_template=agent_instructions_template,
+            name=request.name,
+            agent_instructions_template=request.agent_instructions_template,
         )
 
-        # Get project to include project_name in response
-        project = project_orchestrator.get_project(task_list.project_id)
-        project_name_for_response = project.name if project else None
+        # Convert to response model
+        task_list_response = TaskListResponse(
+            id=str(task_list.id),
+            name=task_list.name,
+            project_id=str(task_list.project_id),
+            agent_instructions_template=task_list.agent_instructions_template,
+            created_at=task_list.created_at.isoformat(),
+            updated_at=task_list.updated_at.isoformat(),
+        )
 
         return {
-            "message": "Task list updated successfully",
-            "task_list": {
-                "id": str(task_list.id),
-                "name": task_list.name,
-                "project_id": str(task_list.project_id),
-                "project_name": project_name_for_response,
-                "agent_instructions_template": task_list.agent_instructions_template,
-                "created_at": task_list.created_at.isoformat(),
-                "updated_at": task_list.updated_at.isoformat(),
-            },
+            "message": f"Task list '{task_list.name}' updated successfully",
+            "task_list": task_list_response.model_dump(),
         }
-
-    except ValueError as e:
-        logger.warning(f"Validation error updating task list: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": str(e),
-                        "details": {"task_list_id": task_list_id},
-                    }
-                },
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content={"error": {"code": "VALIDATION_ERROR", "message": str(e), "details": {}}},
-            )
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
     except Exception as e:
-        logger.error(f"Error updating task list: {e}")
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in update_task_list: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to update task list",
-                    "details": {"error": str(e)},
-                }
-            },
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
         )
 
 
@@ -1927,7 +1341,7 @@ async def update_task_list(task_list_id: str, request: Request) -> Dict[str, Any
 async def delete_task_list(task_list_id: str) -> Dict[str, Any]:
     """Delete a task list.
 
-    Deletes the specified task list and all its tasks.
+    Deletes a task list and all its associated tasks (cascade delete).
 
     Args:
         task_list_id: UUID of the task list to delete
@@ -1935,67 +1349,36 @@ async def delete_task_list(task_list_id: str) -> Dict[str, Any]:
     Returns:
         Dictionary with success message
 
-    Requirements: 12.2
-    """
-    try:
-        from uuid import UUID
+    Raises:
+        400 VALIDATION_ERROR: If task_list_id format is invalid
+        404 NOT_FOUND: If task list does not exist
 
+    Requirements: 2.2, 9.3
+    """
+    from uuid import UUID
+
+    try:
         # Parse UUID
         try:
             task_list_uuid = UUID(task_list_id)
         except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid task list ID format",
-                        "details": {"field": "task_list_id"},
-                    }
-                },
-            )
+            raise ValueError(f"Invalid task list ID format: {task_list_id}")
 
-        # Delete task list
-        task_list_orchestrator.delete_task_list(task_list_uuid)
+        # Delete task list via orchestrator
+        orchestrators["task_list"].delete_task_list(task_list_uuid)
 
-        return {"message": "Task list deleted successfully"}
-
-    except ValueError as e:
-        logger.warning(f"Error deleting task list: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": str(e),
-                        "details": {"task_list_id": task_list_id},
-                    }
-                },
-            )
-        else:
-            return JSONResponse(
-                status_code=409,
-                content={
-                    "error": {
-                        "code": "BUSINESS_LOGIC_ERROR",
-                        "message": str(e),
-                        "details": {"task_list_id": task_list_id},
-                    }
-                },
-            )
+        return {
+            "message": f"Task list with ID {task_list_id} deleted successfully",
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
     except Exception as e:
-        logger.error(f"Error deleting task list: {e}")
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in delete_task_list: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to delete task list",
-                    "details": {"error": str(e)},
-                }
-            },
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
         )
 
 
@@ -2003,84 +1386,63 @@ async def delete_task_list(task_list_id: str) -> Dict[str, Any]:
 async def reset_task_list(task_list_id: str) -> Dict[str, Any]:
     """Reset a repeatable task list.
 
-    Resets a task list to its initial state by:
-    - Setting all task statuses to NOT_STARTED
-    - Setting all exit criteria to INCOMPLETE
-    - Clearing execution notes
-    - Preserving task structure and other fields
-
-    Preconditions:
-    - Task list must be under the "Repeatable" project
-    - All tasks must be marked COMPLETED
+    Resets all tasks in a repeatable task list to NOT_STARTED status and all
+    exit criteria to INCOMPLETE. Only task lists under the Repeatable project
+    can be reset.
 
     Args:
         task_list_id: UUID of the task list to reset
 
     Returns:
-        Dictionary with success message
+        Dictionary with message and reset task list
 
-    Requirements: 12.2
+    Raises:
+        400 VALIDATION_ERROR: If task_list_id format is invalid
+        404 NOT_FOUND: If task list does not exist
+        409 BUSINESS_LOGIC_ERROR: If task list is not under Repeatable project
+
+    Requirements: 14.1, 14.2, 14.3, 14.4, 14.5
     """
-    try:
-        from uuid import UUID
+    from uuid import UUID
 
+    try:
         # Parse UUID
         try:
             task_list_uuid = UUID(task_list_id)
         except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid task list ID format",
-                        "details": {"field": "task_list_id"},
-                    }
-                },
-            )
+            raise ValueError(f"Invalid task list ID format: {task_list_id}")
 
-        # Reset task list
-        task_list_orchestrator.reset_task_list(task_list_uuid)
+        # Reset task list via orchestrator
+        orchestrators["task_list"].reset_task_list(task_list_uuid)
 
-        return {"message": "Task list reset successfully", "task_list_id": task_list_id}
+        # Retrieve the reset task list
+        task_list = orchestrators["task_list"].get_task_list(task_list_uuid)
+        if task_list is None:
+            raise ValueError(f"Task list with ID {task_list_id} does not exist")
 
-    except ValueError as e:
-        logger.warning(f"Error resetting task list: {e}")
-        # Check if it's a not found error or business logic error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": str(e),
-                        "details": {"task_list_id": task_list_id},
-                    }
-                },
-            )
-        else:
-            # Business logic error (e.g., not under Repeatable project, incomplete tasks)
-            return JSONResponse(
-                status_code=409,
-                content={
-                    "error": {
-                        "code": "BUSINESS_LOGIC_ERROR",
-                        "message": str(e),
-                        "details": {"task_list_id": task_list_id},
-                    }
-                },
-            )
+        # Convert to response model
+        task_list_response = TaskListResponse(
+            id=str(task_list.id),
+            name=task_list.name,
+            project_id=str(task_list.project_id),
+            agent_instructions_template=task_list.agent_instructions_template,
+            created_at=task_list.created_at.isoformat(),
+            updated_at=task_list.updated_at.isoformat(),
+        )
+
+        return {
+            "message": f"Task list '{task_list.name}' reset successfully",
+            "task_list": task_list_response.model_dump(),
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
     except Exception as e:
-        logger.error(f"Error resetting task list: {e}")
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in reset_task_list: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to reset task list",
-                    "details": {"error": str(e)},
-                }
-            },
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
         )
 
 
@@ -2089,1501 +1451,172 @@ async def reset_task_list(task_list_id: str) -> Dict[str, Any]:
 # ============================================================================
 
 
-def _serialize_task(task) -> Dict[str, Any]:
-    """Serialize a task to a dictionary for JSON response.
-
-    Args:
-        task: The task to serialize
-
-    Returns:
-        Dictionary representation of the task
-
-    Requirements: 6.1, 6.2, 6.3, 6.4, 6.5
-    """
-    # Detect blocking information
-    block_reason = None
-    if blocking_detector is not None:
-        block_reason_obj = blocking_detector.detect_blocking(task)
-        if block_reason_obj:
-            block_reason = {
-                "is_blocked": block_reason_obj.is_blocked,
-                "blocking_task_ids": [
-                    str(task_id) for task_id in block_reason_obj.blocking_task_ids
-                ],
-                "blocking_task_titles": block_reason_obj.blocking_task_titles,
-                "message": block_reason_obj.message,
-            }
-
-    return {
-        "id": str(task.id),
-        "task_list_id": str(task.task_list_id),
-        "title": task.title,
-        "description": task.description,
-        "status": task.status.value,
-        "priority": task.priority.value,
-        "dependencies": [
-            {"task_id": str(dep.task_id), "task_list_id": str(dep.task_list_id)}
-            for dep in task.dependencies
-        ],
-        "exit_criteria": [
-            {"criteria": ec.criteria, "status": ec.status.value, "comment": ec.comment}
-            for ec in task.exit_criteria
-        ],
-        "notes": [
-            {"content": note.content, "timestamp": note.timestamp.isoformat()}
-            for note in task.notes
-        ],
-        "research_notes": (
-            [
-                {"content": note.content, "timestamp": note.timestamp.isoformat()}
-                for note in task.research_notes
-            ]
-            if task.research_notes
-            else None
-        ),
-        "action_plan": (
-            [{"sequence": item.sequence, "content": item.content} for item in task.action_plan]
-            if task.action_plan
-            else None
-        ),
-        "execution_notes": (
-            [
-                {"content": note.content, "timestamp": note.timestamp.isoformat()}
-                for note in task.execution_notes
-            ]
-            if task.execution_notes
-            else None
-        ),
-        "agent_instructions_template": task.agent_instructions_template,
-        "tags": task.tags if task.tags else [],
-        "block_reason": block_reason,
-        "created_at": task.created_at.isoformat(),
-        "updated_at": task.updated_at.isoformat(),
-    }
-
-
-@app.get("/tasks", tags=["Tasks"])
-async def list_tasks(
-    task_list_id: Optional[str] = Query(None, description="UUID of task list to filter by")
+@app.get("/tasks/ready", tags=["Ready Tasks"])
+async def get_ready_tasks(
+    scope_type: str = Query(..., description="Scope type: 'project' or 'task_list'"),
+    scope_id: str = Query(..., description="UUID of the project or task list to query"),
 ) -> Dict[str, Any]:
-    """List all tasks, optionally filtered by task list.
+    """Get tasks that are ready for execution.
 
-    Query parameters:
-    - task_list_id (optional): UUID of task list to filter by
-
-    Returns:
-        Dictionary with list of tasks
-
-    Requirements: 12.3
-    """
-    try:
-        from uuid import UUID
-
-        # Parse task_list_id if provided
-        task_list_uuid = None
-        if task_list_id:
-            try:
-                task_list_uuid = UUID(task_list_id)
-            except ValueError:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": "Invalid task list ID format",
-                            "details": {"field": "task_list_id"},
-                        }
-                    },
-                )
-
-        # List tasks
-        tasks = task_orchestrator.list_tasks(task_list_uuid)
-
-        return {"tasks": [_serialize_task(task) for task in tasks]}
-    except Exception as e:
-        logger.error(f"Error listing tasks: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to list tasks",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.post("/tasks", tags=["Tasks"])
-async def create_task(request: Request) -> Dict[str, Any]:
-    """Create a new task.
-
-    Request body should contain:
-    - task_list_id (required): UUID of the task list
-    - title (required): Task title
-    - description (required): Task description
-    - status (required): Task status (NOT_STARTED, IN_PROGRESS, BLOCKED, COMPLETED)
-    - priority (required): Task priority (CRITICAL, HIGH, MEDIUM, LOW, TRIVIAL)
-    - dependencies (required): List of dependencies (can be empty)
-    - exit_criteria (required): List of exit criteria (must not be empty)
-    - notes (required): List of notes (can be empty)
-    - research_notes (optional): List of research notes
-    - action_plan (optional): Ordered list of action items
-    - execution_notes (optional): List of execution notes
-    - agent_instructions_template (optional): Template for agent instructions
-
-    Returns:
-        Dictionary with created task
-
-    Requirements: 12.3
-    """
-    try:
-        from uuid import UUID
-
-        from task_manager.models.entities import ActionPlanItem, Dependency, ExitCriteria, Note
-        from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "create_task")
-
-        # Validate required fields
-        required_fields = [
-            "task_list_id",
-            "title",
-            "description",
-            "status",
-            "priority",
-            "dependencies",
-            "exit_criteria",
-            "notes",
-        ]
-        for field in required_fields:
-            if field not in body:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": f"Missing required field: {field}",
-                            "details": {"field": field},
-                        }
-                    },
-                )
-
-        # Parse task_list_id
-        try:
-            task_list_id = UUID(body["task_list_id"])
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid task list ID format",
-                        "details": {"field": "task_list_id"},
-                    }
-                },
-            )
-
-        # Parse status
-        try:
-            status = Status(body["status"])
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": f"Invalid status value: {body['status']}",
-                        "details": {"field": "status", "valid_values": [s.value for s in Status]},
-                    }
-                },
-            )
-
-        # Parse priority
-        try:
-            priority = Priority(body["priority"])
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": f"Invalid priority value: {body['priority']}",
-                        "details": {
-                            "field": "priority",
-                            "valid_values": [p.value for p in Priority],
-                        },
-                    }
-                },
-            )
-
-        # Parse dependencies
-        dependencies = []
-        for dep_data in body["dependencies"]:
-            try:
-                dependencies.append(
-                    Dependency(
-                        task_id=UUID(dep_data["task_id"]),
-                        task_list_id=UUID(dep_data["task_list_id"]),
-                    )
-                )
-            except (KeyError, ValueError) as e:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": f"Invalid dependency format: {e}",
-                            "details": {"field": "dependencies"},
-                        }
-                    },
-                )
-
-        # Parse exit criteria
-        exit_criteria = []
-        for ec_data in body["exit_criteria"]:
-            try:
-                exit_criteria.append(
-                    ExitCriteria(
-                        criteria=ec_data["criteria"],
-                        status=ExitCriteriaStatus(ec_data.get("status", "INCOMPLETE")),
-                        comment=ec_data.get("comment"),
-                    )
-                )
-            except (KeyError, ValueError) as e:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": f"Invalid exit criteria format: {e}",
-                            "details": {"field": "exit_criteria"},
-                        }
-                    },
-                )
-
-        # Parse notes
-        notes = []
-        for note_data in body["notes"]:
-            try:
-                notes.append(
-                    Note(
-                        content=note_data["content"],
-                        timestamp=(
-                            datetime.fromisoformat(note_data["timestamp"])
-                            if "timestamp" in note_data
-                            else datetime.utcnow()
-                        ),
-                    )
-                )
-            except (KeyError, ValueError) as e:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": f"Invalid note format: {e}",
-                            "details": {"field": "notes"},
-                        }
-                    },
-                )
-
-        # Parse optional research_notes
-        research_notes = None
-        if "research_notes" in body and body["research_notes"] is not None:
-            research_notes = []
-            for note_data in body["research_notes"]:
-                try:
-                    research_notes.append(
-                        Note(
-                            content=note_data["content"],
-                            timestamp=(
-                                datetime.fromisoformat(note_data["timestamp"])
-                                if "timestamp" in note_data
-                                else datetime.utcnow()
-                            ),
-                        )
-                    )
-                except (KeyError, ValueError) as e:
-                    return JSONResponse(
-                        status_code=400,
-                        content={
-                            "error": {
-                                "code": "VALIDATION_ERROR",
-                                "message": f"Invalid research note format: {e}",
-                                "details": {"field": "research_notes"},
-                            }
-                        },
-                    )
-
-        # Parse optional action_plan
-        action_plan = None
-        if "action_plan" in body and body["action_plan"] is not None:
-            action_plan = []
-            for item_data in body["action_plan"]:
-                try:
-                    action_plan.append(
-                        ActionPlanItem(sequence=item_data["sequence"], content=item_data["content"])
-                    )
-                except (KeyError, ValueError) as e:
-                    return JSONResponse(
-                        status_code=400,
-                        content={
-                            "error": {
-                                "code": "VALIDATION_ERROR",
-                                "message": f"Invalid action plan item format: {e}",
-                                "details": {"field": "action_plan"},
-                            }
-                        },
-                    )
-
-        # Parse optional execution_notes
-        execution_notes = None
-        if "execution_notes" in body and body["execution_notes"] is not None:
-            execution_notes = []
-            for note_data in body["execution_notes"]:
-                try:
-                    execution_notes.append(
-                        Note(
-                            content=note_data["content"],
-                            timestamp=(
-                                datetime.fromisoformat(note_data["timestamp"])
-                                if "timestamp" in note_data
-                                else datetime.utcnow()
-                            ),
-                        )
-                    )
-                except (KeyError, ValueError) as e:
-                    return JSONResponse(
-                        status_code=400,
-                        content={
-                            "error": {
-                                "code": "VALIDATION_ERROR",
-                                "message": f"Invalid execution note format: {e}",
-                                "details": {"field": "execution_notes"},
-                            }
-                        },
-                    )
-
-        # Parse optional tags
-        tags = None
-        if "tags" in body and body["tags"] is not None:
-            # Ensure tags is a list
-            if not isinstance(body["tags"], list):
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": "Tags must be a list",
-                            "details": {"field": "tags"},
-                        }
-                    },
-                )
-            tags = body["tags"]
-
-        # Create task
-        task = task_orchestrator.create_task(
-            task_list_id=task_list_id,
-            title=body["title"],
-            description=body["description"],
-            status=status,
-            dependencies=dependencies,
-            exit_criteria=exit_criteria,
-            priority=priority,
-            notes=notes,
-            research_notes=research_notes,
-            action_plan=action_plan,
-            execution_notes=execution_notes,
-            agent_instructions_template=body.get("agent_instructions_template"),
-            tags=tags,
-        )
-
-        return {"message": "Task created successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        logger.warning(f"Validation error creating task: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error creating task: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to create task",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.get("/tasks/{task_id}", tags=["Tasks"])
-async def get_task(task_id: str) -> Dict[str, Any]:
-    """Get a single task by ID.
+    Returns tasks that have no pending dependencies and are in an appropriate
+    status for execution. The behavior depends on the MULTI_AGENT_ENVIRONMENT_BEHAVIOR
+    environment variable:
+    - When "true": Only NOT_STARTED tasks are returned (prevents concurrent execution)
+    - When "false": Both NOT_STARTED and IN_PROGRESS tasks are returned (allows resumption)
 
     Args:
-        task_id: UUID of the task to retrieve
+        scope_type: Either "project" or "task_list" to specify the scope
+        scope_id: UUID of the project or task list to query
 
     Returns:
-        Dictionary with task details
+        Dictionary with list of ready tasks
 
-    Requirements: 12.3
+    Raises:
+        400 VALIDATION_ERROR: If scope_type is invalid or scope_id format is invalid
+
+    Requirements: 12.1, 12.2, 12.3, 12.4, 12.5
     """
-    try:
-        from uuid import UUID
+    import os
+    from uuid import UUID
 
-        # Parse UUID
-        try:
-            task_uuid = UUID(task_id)
-        except ValueError:
-            raise ValidationError(
-                "Invalid task ID format", {"field": "task_id", "received_value": task_id}
+    try:
+        # Validate scope_type
+        valid_scope_types = ["project", "task_list"]
+        if scope_type not in valid_scope_types:
+            raise ValueError(
+                f"Invalid scope_type '{scope_type}'. Must be one of: {', '.join(valid_scope_types)}"
             )
 
-        # Get task
-        task = task_orchestrator.get_task(task_uuid)
+        # Parse scope_id
+        try:
+            scope_uuid = UUID(scope_id)
+        except ValueError:
+            raise ValueError(f"Invalid scope ID format: {scope_id}")
 
-        if task is None:
-            raise NotFoundError(f"Task with id '{task_id}' not found", {"task_id": task_id})
+        # Check MULTI_AGENT_ENVIRONMENT_BEHAVIOR setting
+        multi_agent_mode = (
+            os.environ.get("MULTI_AGENT_ENVIRONMENT_BEHAVIOR", "false").lower() == "true"
+        )
 
-        return {"task": _serialize_task(task)}
+        # Get ready tasks via blocking detector
+        ready_tasks = orchestrators["blocking"].get_ready_tasks(
+            scope_type=scope_type,
+            scope_id=scope_uuid,
+            multi_agent_mode=multi_agent_mode,
+        )
 
-    except (ValidationError, NotFoundError):
-        # Re-raise custom exceptions to be handled by global handlers
+        # Convert to response models
+        task_responses = [
+            TaskResponse(
+                id=str(t.id),
+                task_list_id=str(t.task_list_id),
+                title=t.title,
+                description=t.description,
+                status=t.status.value,
+                priority=t.priority.value,
+                dependencies=[
+                    DependencyModel(
+                        task_id=str(d.task_id),
+                        task_list_id=str(d.task_list_id),
+                    )
+                    for d in t.dependencies
+                ],
+                exit_criteria=[
+                    ExitCriteriaModel(
+                        criteria=ec["criteria"],
+                        status=ec["status"],
+                        comment=ec.get("comment"),
+                    )
+                    for ec in t.exit_criteria
+                ],
+                notes=[
+                    NoteModel(content=n["content"], timestamp=n.get("timestamp")) for n in t.notes
+                ],
+                research_notes=(
+                    [
+                        NoteModel(content=n["content"], timestamp=n.get("timestamp"))
+                        for n in t.research_notes
+                    ]
+                    if t.research_notes is not None
+                    else None
+                ),
+                action_plan=(
+                    [
+                        ActionPlanItemModel(
+                            sequence=item["sequence"],
+                            content=item["content"],
+                        )
+                        for item in t.action_plan
+                    ]
+                    if t.action_plan is not None
+                    else None
+                ),
+                execution_notes=(
+                    [
+                        NoteModel(content=n["content"], timestamp=n.get("timestamp"))
+                        for n in t.execution_notes
+                    ]
+                    if t.execution_notes is not None
+                    else None
+                ),
+                agent_instructions_template=t.agent_instructions_template,
+                tags=t.tags,
+                created_at=t.created_at.isoformat(),
+                updated_at=t.updated_at.isoformat(),
+            )
+            for t in ready_tasks
+        ]
+
+        return {
+            "tasks": [t.model_dump() for t in task_responses],
+        }
+    except ValueError:
+        # Let ValueError handler catch it
         raise
     except Exception as e:
-        logger.error(f"Error getting task: {e}")
-        raise StorageError("Failed to get task", {"error": str(e)})
-
-
-# ============================================================================
-# Bulk Operations Request Models
-# ============================================================================
-
-
-class BulkUpdateRequest(BaseModel):
-    """Request model for bulk update operations.
-
-    Requirements: 2.1
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-        json_schema_extra={
-            "example": {
-                "updates": [
-                    {"task_id": "550e8400-e29b-41d4-a716-446655440000", "title": "Updated Title"},
-                    {"task_id": "660e8400-e29b-41d4-a716-446655440001", "status": "IN_PROGRESS"},
-                ]
-            }
-        },
-    )
-
-    updates: list
-
-
-class BulkDeleteRequest(BaseModel):
-    """Request model for bulk delete operations.
-
-    Requirements: 2.2
-    """
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "task_ids": [
-                    "550e8400-e29b-41d4-a716-446655440000",
-                    "660e8400-e29b-41d4-a716-446655440001",
-                    "770e8400-e29b-41d4-a716-446655440002",
-                ]
-            }
-        }
-    )
-
-    task_ids: list[str]
-
-
-class BulkTagRequest(BaseModel):
-    """Request model for bulk tag operations.
-
-    Requirements: 2.3
-    """
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "task_ids": [
-                    "550e8400-e29b-41d4-a716-446655440000",
-                    "660e8400-e29b-41d4-a716-446655440001",
-                ],
-                "tags": ["urgent", "backend"],
-            }
-        }
-    )
-
-    task_ids: list[str]
-    tags: list[str]
-
-
-# ============================================================================
-# Bulk Operations Endpoints (Simplified Paths)
-# ============================================================================
-# Note: These endpoints provide the paths specified in the requirements document.
-# They implement the same logic as the /tasks/bulk/create, /tasks/bulk/update, etc. endpoints.
-
-
-@app.post("/tasks/bulk", tags=["Tasks", "Bulk Operations"])
-async def bulk_create_tasks_simplified(request: Request) -> Dict[str, Any]:
-    """Create multiple tasks in a single operation.
-
-    This endpoint provides the simplified path specified in requirements.
-
-    Request body should contain:
-    - tasks (required): Array of task definitions, each containing:
-      - task_list_id (required): UUID of the task list
-      - title (required): Task title
-      - description (required): Task description
-      - status (required): Task status
-      - priority (required): Task priority
-      - dependencies (required): List of dependencies (can be empty)
-      - exit_criteria (required): List of exit criteria (must not be empty)
-      - notes (required): List of notes (can be empty)
-      - tags (optional): List of tags
-      - research_notes (optional): List of research notes
-      - action_plan (optional): Ordered list of action items
-      - execution_notes (optional): List of execution notes
-      - agent_instructions_template (optional): Template for agent instructions
-
-    All tasks are validated before any are created. If any validation fails,
-    no tasks are created.
-
-    Returns:
-        Dictionary with BulkOperationResult containing success/failure details
-
-    Requirements: 7.1, 7.5, 7.6, 7.7
-    """
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "bulk_create_tasks")
-
-        # Validate required field
-        if "tasks" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: tasks", {"field": "tasks"}
-                ),
-            )
-
-        # Ensure tasks is a list
-        if not isinstance(body["tasks"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Tasks must be a list", {"field": "tasks"}
-                ),
-            )
-
-        task_definitions = body["tasks"]
-
-        # Create bulk operations handler and perform bulk create
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_create_tasks(task_definitions)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 201
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        logger.warning(f"Validation error in bulk create: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk create: {e}")
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in get_ready_tasks: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk create tasks",
-                    "details": {"error": str(e)},
-                }
-            },
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
         )
-
-
-@app.put("/tasks/bulk", tags=["Tasks", "Bulk Operations"])
-async def bulk_update_tasks_simplified(request: Request) -> Dict[str, Any]:
-    """Update multiple tasks in a single operation.
-
-    This endpoint provides the simplified path specified in requirements.
-
-    Request body should contain:
-    - updates (required): Array of task updates, each containing:
-      - task_id (required): UUID of the task to update
-      - title (optional): New task title
-      - description (optional): New task description
-      - status (optional): New task status
-      - priority (optional): New task priority
-      - agent_instructions_template (optional): New template
-
-    All updates are validated before any are applied. If any validation fails,
-    no tasks are updated.
-
-    Returns:
-        Dictionary with BulkOperationResult containing success/failure details
-
-    Requirements: 2.1, 2.4, 7.2, 7.5, 7.6, 7.7
-    """
-    print("DEBUG: bulk_update_tasks_simplified CALLED", flush=True)
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        body = await request.json()
-
-        print(f"DEBUG ENDPOINT: Received body: {body}", flush=True)
-
-        # Validate required field
-        if "updates" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: updates", {"field": "updates"}
-                ),
-            )
-
-        # Ensure updates is a list
-        if not isinstance(body["updates"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Updates must be a list", {"field": "updates"}
-                ),
-            )
-
-        updates = body["updates"]
-
-        print(f"DEBUG ENDPOINT: Updates: {updates}", flush=True)
-
-        logger.info(f"Processing {len(updates)} updates")
-
-        # Create bulk operations handler and perform bulk update
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_update_tasks(updates)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 200
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        logger.warning(f"Validation error in bulk update: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk update: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk update tasks",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.delete("/tasks/bulk", tags=["Tasks", "Bulk Operations"])
-async def bulk_delete_tasks_simplified(request: Request) -> Dict[str, Any]:
-    """Delete multiple tasks in a single operation.
-
-    This endpoint provides the simplified path specified in requirements.
-
-    Request body should contain:
-    - task_ids (required): Array of task ID strings to delete
-
-    All task IDs are validated before any are deleted. If any validation fails,
-    no tasks are deleted.
-
-    Returns:
-        Dictionary with BulkOperationResult containing success/failure details
-
-    Requirements: 2.2, 2.4, 7.3, 7.5, 7.6, 7.7
-    """
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        body = await request.json()
-
-        # Validate required field
-        if "task_ids" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: task_ids", {"field": "task_ids"}
-                ),
-            )
-
-        # Ensure task_ids is a list
-        if not isinstance(body["task_ids"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Task IDs must be a list", {"field": "task_ids"}
-                ),
-            )
-
-        task_ids = body["task_ids"]
-
-        # Create bulk operations handler and perform bulk delete
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_delete_tasks(task_ids)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 200
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        logger.warning(f"Validation error in bulk delete: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk delete: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk delete tasks",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.post("/tasks/bulk/tags", tags=["Tasks", "Bulk Operations", "Tags"])
-async def bulk_add_tags_simplified(request_body: BulkTagRequest) -> Dict[str, Any]:
-    """Add tags to multiple tasks in a single operation.
-
-    This endpoint provides the simplified path specified in requirements.
-
-    Request body should contain:
-    - task_ids (required): Array of task ID strings
-    - tags (required): Array of tag strings to add to each task
-
-    All task IDs and tags are validated before any tags are added. If any
-    validation fails, no tags are added to any tasks.
-
-    Returns:
-        Dictionary with BulkOperationResult containing success/failure details
-
-    Requirements: 2.3, 2.4, 7.4, 7.5, 7.6, 7.7
-    """
-    print(
-        f"!!! bulk_add_tags_simplified called with task_ids={request_body.task_ids}, tags={request_body.tags}"
-    )
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        # Extract task_ids and tags from the validated request body
-        task_ids = request_body.task_ids
-        tags = request_body.tags
-        print("!!! About to call bulk_handler.bulk_add_tags")
-
-        # Create bulk operations handler and perform bulk add tags
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_add_tags(task_ids, tags)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 200
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        print(f"!!! ValueError in bulk add tags: {e}")
-        logger.warning(f"Validation error in bulk add tags: {e}")
-        import traceback
-
-        print(f"!!! Traceback: {traceback.format_exc()}")
-        logger.warning(f"Traceback: {traceback.format_exc()}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk add tags: {e}")
-        import traceback
-
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk add tags",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.delete("/tasks/bulk/tags", tags=["Tasks", "Bulk Operations", "Tags"])
-async def bulk_remove_tags_simplified(request_body: BulkTagRequest) -> Dict[str, Any]:
-    """Remove tags from multiple tasks in a single operation.
-
-    This endpoint provides the simplified path specified in requirements.
-
-    Request body should contain:
-    - task_ids (required): Array of task ID strings
-    - tags (required): Array of tag strings to remove from each task
-
-    All task IDs are validated before any tags are removed. If any validation
-    fails, no tags are removed from any tasks.
-
-    Returns:
-        Dictionary with BulkOperationResult containing success/failure details
-
-    Requirements: 2.3, 2.4, 7.4, 7.5, 7.6, 7.7
-    """
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        # Extract task_ids and tags from the validated request body
-        task_ids = request_body.task_ids
-        tags = request_body.tags
-
-        # Create bulk operations handler and perform bulk remove tags
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_remove_tags(task_ids, tags)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 200
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        logger.warning(f"Validation error in bulk remove tags: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk remove tags: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk remove tags",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.put("/tasks/{task_id}", tags=["Tasks"])
-async def update_task(task_id: str, request: Request) -> Dict[str, Any]:
-    """Update an existing task.
-
-    Request body can contain:
-    - title (optional): New task title
-    - description (optional): New task description
-    - status (optional): New task status
-    - priority (optional): New task priority
-    - agent_instructions_template (optional): New template (use empty string to clear)
-
-    Note: Use specialized endpoints for updating dependencies, notes, action plan, etc.
-
-    Args:
-        task_id: UUID of the task to update
-
-    Returns:
-        Dictionary with updated task
-
-    Requirements: 12.3
-    """
-    try:
-        from uuid import UUID
-
-        from task_manager.models.enums import Priority, Status
-
-        # Parse UUID
-        try:
-            task_uuid = UUID(task_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid task ID format",
-                        "details": {"field": "task_id"},
-                    }
-                },
-            )
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "update_task")
-
-        # Parse status if provided
-        status = None
-        if "status" in body:
-            try:
-                status = Status(body["status"])
-            except ValueError:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": f"Invalid status value: {body['status']}",
-                            "details": {
-                                "field": "status",
-                                "valid_values": [s.value for s in Status],
-                            },
-                        }
-                    },
-                )
-
-        # Parse priority if provided
-        priority = None
-        if "priority" in body:
-            try:
-                priority = Priority(body["priority"])
-            except ValueError:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": f"Invalid priority value: {body['priority']}",
-                            "details": {
-                                "field": "priority",
-                                "valid_values": [p.value for p in Priority],
-                            },
-                        }
-                    },
-                )
-
-        # If status is being updated to COMPLETED, use update_status for validation
-        if status is not None and status == Status.COMPLETED:
-            # First update other fields if any
-            if (
-                body.get("title")
-                or body.get("description")
-                or body.get("priority")
-                or "agent_instructions_template" in body
-            ):
-                task = task_orchestrator.update_task(
-                    task_id=task_uuid,
-                    title=body.get("title"),
-                    description=body.get("description"),
-                    status=None,  # Don't update status yet
-                    priority=priority,
-                    agent_instructions_template=body.get("agent_instructions_template"),
-                )
-            # Then update status with validation
-            task = task_orchestrator.update_status(task_uuid, status)
-        else:
-            # Update task normally
-            task = task_orchestrator.update_task(
-                task_id=task_uuid,
-                title=body.get("title"),
-                description=body.get("description"),
-                status=status,
-                priority=priority,
-                agent_instructions_template=body.get("agent_instructions_template"),
-            )
-
-        return {"message": "Task updated successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        logger.warning(f"Validation error updating task: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": str(e),
-                        "details": {"task_id": task_id},
-                    }
-                },
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content={"error": {"code": "VALIDATION_ERROR", "message": str(e), "details": {}}},
-            )
-    except Exception as e:
-        # Check if it's a BusinessLogicError from orchestration
-        if e.__class__.__name__ == "BusinessLogicError":
-            logger.warning(f"Business logic error updating task: {e}")
-            return JSONResponse(
-                status_code=409,
-                content={
-                    "error": {
-                        "code": "BUSINESS_LOGIC_ERROR",
-                        "message": str(e),
-                        "details": {"task_id": task_id},
-                    }
-                },
-            )
-        logger.error(f"Error updating task: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to update task",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.delete("/tasks/{task_id}", tags=["Tasks"])
-async def delete_task(task_id: str) -> Dict[str, Any]:
-    """Delete a task.
-
-    Deletes the specified task and updates any tasks that depend on it.
-
-    Args:
-        task_id: UUID of the task to delete
-
-    Returns:
-        Dictionary with success message
-
-    Requirements: 12.3
-    """
-    try:
-        from uuid import UUID
-
-        # Parse UUID
-        try:
-            task_uuid = UUID(task_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid task ID format",
-                        "details": {"field": "task_id"},
-                    }
-                },
-            )
-
-        # Delete task
-        task_orchestrator.delete_task(task_uuid)
-
-        return {"message": "Task deleted successfully"}
-
-    except ValueError as e:
-        logger.warning(f"Error deleting task: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": str(e),
-                        "details": {"task_id": task_id},
-                    }
-                },
-            )
-        else:
-            return JSONResponse(
-                status_code=409,
-                content={
-                    "error": {
-                        "code": "BUSINESS_LOGIC_ERROR",
-                        "message": str(e),
-                        "details": {"task_id": task_id},
-                    }
-                },
-            )
-    except Exception as e:
-        logger.error(f"Error deleting task: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to delete task",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-# ============================================================================
-# Task Dependencies Endpoint
-# ============================================================================
-
-
-@app.put("/tasks/{task_id}/dependencies", tags=["Tasks", "Dependencies"])
-async def update_task_dependencies(task_id: str, request: Request) -> Dict[str, Any]:
-    """Update task dependencies with circular dependency validation.
-
-    Request body should contain:
-    - dependencies (required): List of dependency objects with task_id and task_list_id
-
-    Validates that:
-    - All dependencies reference existing tasks
-    - No circular dependencies are created
-
-    Args:
-        task_id: UUID of the task to update dependencies for
-
-    Returns:
-        Dictionary with updated task
-
-    Requirements: 2.4
-    """
-    try:
-        from uuid import UUID
-
-        from task_manager.models.entities import Dependency
-
-        # Parse UUID
-        try:
-            task_uuid = UUID(task_id)
-        except ValueError:
-            raise ValidationError("Invalid task ID format", {"field": "task_id"})
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "update_dependencies")
-
-        # Validate required fields
-        if "dependencies" not in body:
-            raise ValidationError("Missing required field: dependencies", {"field": "dependencies"})
-
-        # Parse dependencies
-        dependencies = []
-        for dep_data in body["dependencies"]:
-            try:
-                dependencies.append(
-                    Dependency(
-                        task_id=UUID(dep_data["task_id"]),
-                        task_list_id=UUID(dep_data["task_list_id"]),
-                    )
-                )
-            except (KeyError, ValueError) as e:
-                raise ValidationError(f"Invalid dependency format: {e}", {"field": "dependencies"})
-
-        # Update dependencies
-        task = task_orchestrator.update_dependencies(task_uuid, dependencies)
-
-        return {"message": "Task dependencies updated successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        # Classify the error
-        classified_error = classify_value_error(e, {"task_id": task_id})
-        raise classified_error
-    except Exception as e:
-        logger.error(f"Error updating task dependencies: {e}")
-        raise StorageError("Failed to update task dependencies", {"error": str(e)})
-
-
-# ============================================================================
-# Tag Management Endpoints
-# ============================================================================
-
-
-@app.post("/tasks/{task_id}/tags", tags=["Tasks", "Tags"])
-async def add_task_tags(task_id: str, request: Request) -> Dict[str, Any]:
-    """Add tags to a task.
-
-    Request body should contain:
-    - tags (required): List of tag strings to add
-
-    Tags are validated and deduplicated. Maximum 10 tags per task.
-
-    Args:
-        task_id: UUID of the task to add tags to
-
-    Returns:
-        Dictionary with updated task
-
-    Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
-    """
-    try:
-        from uuid import UUID
-
-        # Parse UUID
-        try:
-            task_uuid = UUID(task_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Invalid task ID format", {"field": "task_id"}
-                ),
-            )
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "add_tags")
-
-        # Validate required fields
-        if "tags" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: tags", {"field": "tags"}
-                ),
-            )
-
-        # Ensure tags is a list
-        if not isinstance(body["tags"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
-                ),
-            )
-
-        tags = body["tags"]
-
-        # Add tags using tag orchestrator
-        task = tag_orchestrator.add_tags(task_uuid, tags)
-
-        return {"message": "Tags added successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        logger.warning(f"Validation error adding tags: {e}")
-        # Classify the error
-        classified_error = classify_value_error(e, {"operation": "add_tags", "task_id": task_id})
-        raise classified_error
-    except Exception as e:
-        logger.error(f"Error adding tags: {e}")
-        raise StorageError("Failed to add tags", {"error": str(e)})
-
-
-@app.delete("/tasks/{task_id}/tags", tags=["Tasks", "Tags"])
-async def remove_task_tags(task_id: str, request: Request) -> Dict[str, Any]:
-    """Remove tags from a task.
-
-    Request body should contain:
-    - tags (required): List of tag strings to remove
-
-    Tags that don't exist on the task are silently ignored.
-
-    Args:
-        task_id: UUID of the task to remove tags from
-
-    Returns:
-        Dictionary with updated task
-
-    Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
-    """
-    try:
-        from uuid import UUID
-
-        # Parse UUID
-        try:
-            task_uuid = UUID(task_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Invalid task ID format", {"field": "task_id"}
-                ),
-            )
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "add_tags")
-
-        # Validate required fields
-        if "tags" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: tags", {"field": "tags"}
-                ),
-            )
-
-        # Ensure tags is a list
-        if not isinstance(body["tags"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
-                ),
-            )
-
-        tags = body["tags"]
-
-        # Remove tags using tag orchestrator
-        task = tag_orchestrator.remove_tags(task_uuid, tags)
-
-        return {"message": "Tags removed successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        logger.warning(f"Validation error removing tags: {e}")
-        # Classify the error
-        classified_error = classify_value_error(e, {"operation": "remove_tags", "task_id": task_id})
-        raise classified_error
-    except Exception as e:
-        logger.error(f"Error removing tags: {e}")
-        raise StorageError("Failed to remove tags", {"error": str(e)})
-
-
-# ============================================================================
-# Task Search Endpoint
-# ============================================================================
 
 
 @app.post(
-    "/tasks/search",
-    tags=["Search"],
-    summary="Search Tasks",
-    response_description="Search results with pagination metadata",
+    "/tasks",
+    tags=["Tasks"],
+    status_code=201,
     responses={
-        200: {
-            "description": "Search completed successfully",
+        201: {
+            "description": "Task created successfully",
             "content": {
                 "application/json": {
                     "example": {
-                        "tasks": [
-                            {
-                                "id": "990e8400-e29b-41d4-a716-446655440005",
-                                "title": "Implement user authentication",
-                                "description": "Add JWT-based authentication",
-                                "status": "IN_PROGRESS",
-                                "priority": "HIGH",
-                                "tags": ["backend", "security"],
-                                "created_at": "2024-01-15T09:00:00Z",
-                            }
-                        ],
-                        "total": 42,
-                        "limit": 50,
-                        "offset": 0,
+                        "message": "Task 'Implement user authentication' created successfully",
+                        "task": {
+                            "id": "770e8400-e29b-41d4-a716-446655440000",
+                            "task_list_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "title": "Implement user authentication",
+                            "description": "Add JWT-based authentication to the API",
+                            "status": "NOT_STARTED",
+                            "priority": "HIGH",
+                            "dependencies": [],
+                            "exit_criteria": [
+                                {
+                                    "criteria": "All tests pass",
+                                    "status": "INCOMPLETE",
+                                    "comment": None,
+                                }
+                            ],
+                            "notes": [],
+                            "research_notes": None,
+                            "action_plan": None,
+                            "execution_notes": None,
+                            "agent_instructions_template": None,
+                            "tags": ["backend", "authentication"],
+                            "created_at": "2024-01-01T12:00:00Z",
+                            "updated_at": "2024-01-01T12:00:00Z",
+                        },
                     }
                 }
             },
@@ -3595,15 +1628,381 @@ async def remove_task_tags(task_id: str, request: Request) -> Dict[str, Any]:
                     "example": {
                         "error": {
                             "code": "VALIDATION_ERROR",
-                            "message": "❌ Invalid status value",
+                            "message": "Validation error in fields: exit_criteria. Please check the field values and try again.",
                             "details": {
-                                "field": "status",
-                                "valid_values": [
-                                    "NOT_STARTED",
-                                    "IN_PROGRESS",
-                                    "BLOCKED",
-                                    "COMPLETED",
-                                ],
+                                "exit_criteria": {
+                                    "message": "Field required",
+                                    "type": "missing",
+                                }
+                            },
+                        }
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Task list not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": {
+                            "code": "NOT_FOUND",
+                            "message": "Task list with ID 550e8400-e29b-41d4-a716-446655440000 does not exist",
+                            "details": {},
+                        }
+                    }
+                }
+            },
+        },
+        409: {
+            "description": "Circular dependency detected",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": {
+                            "code": "BUSINESS_LOGIC_ERROR",
+                            "message": "Cannot add dependency: circular dependency detected",
+                            "details": {},
+                        }
+                    }
+                }
+            },
+        },
+    },
+)
+async def create_task(
+    request: TaskCreateRequest = Body(
+        ...,
+        openapi_examples={
+            "basic": {
+                "summary": "Basic task",
+                "value": {
+                    "task_list_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "title": "Implement user authentication",
+                    "description": "Add JWT-based authentication to the API",
+                    "status": "NOT_STARTED",
+                    "priority": "HIGH",
+                    "exit_criteria": [{"criteria": "All tests pass", "status": "INCOMPLETE"}],
+                    "tags": ["backend", "authentication"],
+                },
+            },
+            "with_dependencies": {
+                "summary": "Task with dependencies",
+                "value": {
+                    "task_list_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "title": "Deploy to production",
+                    "description": "Deploy the application to production environment",
+                    "status": "NOT_STARTED",
+                    "priority": "CRITICAL",
+                    "dependencies": [
+                        {
+                            "task_id": "660e8400-e29b-41d4-a716-446655440001",
+                            "task_list_id": "550e8400-e29b-41d4-a716-446655440000",
+                        }
+                    ],
+                    "exit_criteria": [
+                        {"criteria": "Application is live", "status": "INCOMPLETE"},
+                        {"criteria": "Health checks pass", "status": "INCOMPLETE"},
+                    ],
+                    "tags": ["deployment", "production"],
+                },
+            },
+        },
+    )
+) -> Dict[str, Any]:
+    """Create a new task.
+
+    Creates a new task within a task list using the task list's UUID.
+    Tasks must have at least one exit criteria and can have dependencies,
+    notes, tags, and other metadata.
+
+    Args:
+        request: Task creation request with all task fields
+
+    Returns:
+        Dictionary with message and created task
+
+    Raises:
+        400 VALIDATION_ERROR: If required fields are missing or invalid
+        404 NOT_FOUND: If task_list_id does not exist
+        409 BUSINESS_LOGIC_ERROR: If dependencies create circular references
+
+    Requirements: 2.3, 1.2, 1.3, 2.4
+    """
+    from uuid import UUID
+
+    from task_manager.models.entities import (
+        ActionPlanItem,
+        Dependency,
+        ExitCriteria,
+        Note,
+    )
+    from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+
+    # Parse task_list_id
+    try:
+        task_list_uuid = UUID(request.task_list_id)
+    except ValueError:
+        raise ValueError(f"Invalid task list ID format: {request.task_list_id}")
+
+    # Parse status and priority
+    try:
+        status = Status[request.status]
+    except KeyError:
+        raise ValueError(f"Invalid status: {request.status}")
+
+    try:
+        priority = Priority[request.priority]
+    except KeyError:
+        raise ValueError(f"Invalid priority: {request.priority}")
+
+    # Convert dependencies
+    dependencies = []
+    for dep in request.dependencies:
+        try:
+            dep_task_id = UUID(dep.task_id)
+            dep_task_list_id = UUID(dep.task_list_id)
+            dependencies.append(
+                Dependency(
+                    task_id=dep_task_id,
+                    task_list_id=dep_task_list_id,
+                )
+            )
+        except ValueError as e:
+            raise ValueError(f"Invalid dependency ID format: {e}")
+
+    # Convert exit criteria
+    exit_criteria = []
+    for ec in request.exit_criteria:
+        try:
+            ec_status = ExitCriteriaStatus[ec.status]
+        except KeyError:
+            raise ValueError(f"Invalid exit criteria status: {ec.status}")
+
+        exit_criteria.append(
+            ExitCriteria(
+                criteria=ec.criteria,
+                status=ec_status,
+                comment=ec.comment,
+            )
+        )
+
+    # Convert notes
+    from datetime import datetime, timezone
+
+    notes = []
+    for note in request.notes:
+        timestamp = note.timestamp
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+        else:
+            # Parse ISO 8601 string to datetime
+            timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        notes.append(Note(content=note.content, timestamp=timestamp))
+
+    # Convert research notes
+    research_notes = None
+    if request.research_notes is not None:
+        research_notes = []
+        for note in request.research_notes:
+            timestamp = note.timestamp
+            if timestamp is None:
+                timestamp = datetime.now(timezone.utc)
+            else:
+                # Parse ISO 8601 string to datetime
+                timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            research_notes.append(Note(content=note.content, timestamp=timestamp))
+
+    # Convert action plan
+    action_plan = None
+    if request.action_plan is not None:
+        action_plan = []
+        for item in request.action_plan:
+            action_plan.append(
+                ActionPlanItem(
+                    sequence=item.sequence,
+                    content=item.content,
+                )
+            )
+
+    # Convert execution notes
+    execution_notes = None
+    if request.execution_notes is not None:
+        execution_notes = []
+        for note in request.execution_notes:
+            timestamp = note.timestamp
+            if timestamp is None:
+                timestamp = datetime.now(timezone.utc)
+            else:
+                # Parse ISO 8601 string to datetime
+                timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            execution_notes.append(Note(content=note.content, timestamp=timestamp))
+
+    try:
+        # Create task via orchestrator
+        task = orchestrators["task"].create_task(
+            task_list_id=task_list_uuid,
+            title=request.title,
+            description=request.description,
+            status=status,
+            dependencies=dependencies,
+            exit_criteria=exit_criteria,
+            priority=priority,
+            notes=notes,
+            research_notes=research_notes,
+            action_plan=action_plan,
+            execution_notes=execution_notes,
+            agent_instructions_template=request.agent_instructions_template,
+            tags=request.tags,
+        )
+
+        # Convert to response model
+        task_response = TaskResponse(
+            id=str(task.id),
+            task_list_id=str(task.task_list_id),
+            title=task.title,
+            description=task.description,
+            status=task.status.name,
+            priority=task.priority.name,
+            dependencies=[
+                DependencyModel(
+                    task_id=str(dep.task_id),
+                    task_list_id=str(dep.task_list_id),
+                )
+                for dep in task.dependencies
+            ],
+            exit_criteria=[
+                ExitCriteriaModel(
+                    criteria=ec.criteria,
+                    status=ec.status.name,
+                    comment=ec.comment,
+                )
+                for ec in task.exit_criteria
+            ],
+            notes=[note_to_model(note) for note in task.notes],
+            research_notes=(
+                [note_to_model(note) for note in task.research_notes]
+                if task.research_notes
+                else None
+            ),
+            action_plan=(
+                [
+                    ActionPlanItemModel(
+                        sequence=item.sequence,
+                        content=item.content,
+                    )
+                    for item in task.action_plan
+                ]
+                if task.action_plan
+                else None
+            ),
+            execution_notes=(
+                [note_to_model(note) for note in task.execution_notes]
+                if task.execution_notes
+                else None
+            ),
+            agent_instructions_template=task.agent_instructions_template,
+            tags=task.tags if task.tags else [],
+            created_at=task.created_at.isoformat(),
+            updated_at=task.updated_at.isoformat(),
+        )
+
+        return {
+            "message": f"Task '{task.title}' created successfully",
+            "task": task_response.model_dump(),
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
+    except Exception as e:
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in create_task: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
+
+
+# Bulk Operation Endpoints
+# ============================================================================
+
+
+@app.post(
+    "/tasks/bulk",
+    tags=["Bulk Operations"],
+    responses={
+        200: {
+            "description": "All tasks created successfully",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    },
+                    "example": {
+                        "total": 2,
+                        "succeeded": 2,
+                        "failed": 0,
+                        "results": [
+                            {"task_id": "770e8400-e29b-41d4-a716-446655440000"},
+                            {"task_id": "880e8400-e29b-41d4-a716-446655440001"},
+                        ],
+                        "errors": [],
+                    },
+                }
+            },
+        },
+        207: {
+            "description": "Partial success - some tasks created, some failed",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    },
+                    "example": {
+                        "total": 3,
+                        "succeeded": 2,
+                        "failed": 1,
+                        "results": [
+                            {"task_id": "770e8400-e29b-41d4-a716-446655440000"},
+                            {"task_id": "880e8400-e29b-41d4-a716-446655440001"},
+                        ],
+                        "errors": [
+                            {
+                                "index": 2,
+                                "error": "Task list with ID 550e8400-e29b-41d4-a716-446655440099 does not exist",
+                            }
+                        ],
+                    },
+                }
+            },
+        },
+        400: {
+            "description": "Validation error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "message": "Validation error in fields: exit_criteria. Please check the field values and try again.",
+                            "details": {
+                                "exit_criteria": {
+                                    "message": "Field required",
+                                    "type": "missing",
+                                }
                             },
                         }
                     }
@@ -3612,261 +2011,928 @@ async def remove_task_tags(task_id: str, request: Request) -> Dict[str, Any]:
         },
     },
 )
-async def search_tasks_endpoint(request: Request) -> Dict[str, Any]:
-    """Search and filter tasks using multiple criteria.
-
-    Performs a flexible search across tasks with support for text search, status/priority
-    filtering, tag filtering, project filtering, pagination, and sorting.
-
-    ## Request Body (All Optional)
-    - **query** (string): Text to search in task titles and descriptions (case-insensitive)
-    - **status** (array of strings): Filter by status values
-      - Valid values: `NOT_STARTED`, `IN_PROGRESS`, `BLOCKED`, `COMPLETED`
-    - **priority** (array of strings): Filter by priority values
-      - Valid values: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `TRIVIAL`
-    - **tags** (array of strings): Filter by tags (tasks must have at least one matching tag)
-    - **project_id** (UUID string): Filter by project ID
-    - **limit** (integer): Maximum results to return (default: 50, max: 100)
-    - **offset** (integer): Number of results to skip for pagination (default: 0)
-    - **sort_by** (string): Sort criteria (default: "relevance")
-      - Valid values: `relevance`, `created_at`, `updated_at`, `priority`
-
-    ## Search Behavior
-    - **Text Search**: Searches both title and description fields (case-insensitive)
-    - **Status/Priority Filters**: Tasks matching ANY of the provided values are returned (OR logic)
-    - **Tag Filter**: Tasks with AT LEAST ONE matching tag are returned
-    - **Combined Filters**: All filters are combined with AND logic
-
-    ## Pagination
-    Use `limit` and `offset` to paginate through results:
-    - Page 1: `offset=0, limit=50`
-    - Page 2: `offset=50, limit=50`
-    - Page 3: `offset=100, limit=50`
-
-    ## Example Request (Simple Text Search)
-    ```json
-    {
-        "query": "authentication",
-        "limit": 20
-    }
-    ```
-
-    ## Example Request (Complex Filter)
-    ```json
-    {
-        "query": "API",
-        "status": ["IN_PROGRESS", "NOT_STARTED"],
-        "priority": ["HIGH", "CRITICAL"],
-        "tags": ["backend", "urgent"],
-        "project_id": "550e8400-e29b-41d4-a716-446655440000",
-        "limit": 50,
-        "offset": 0,
-        "sort_by": "priority"
-    }
-    ```
-
-    ## Example Response
-    ```json
-    {
-        "tasks": [
-            {
-                "id": "990e8400-e29b-41d4-a716-446655440005",
-                "task_list_id": "880e8400-e29b-41d4-a716-446655440003",
-                "title": "Implement user authentication",
-                "description": "Add JWT-based authentication to API",
-                "status": "IN_PROGRESS",
-                "priority": "HIGH",
-                "tags": ["backend", "security", "urgent"],
-                "dependencies": [],
-                "exit_criteria": [...],
-                "created_at": "2024-01-15T09:00:00Z",
-                "updated_at": "2024-01-15T10:30:00Z"
+async def bulk_create_tasks(
+    request: Any = Body(
+        ...,
+        openapi_examples={
+            "bulk_create": {
+                "summary": "Create multiple tasks",
+                "value": {
+                    "tasks": [
+                        {
+                            "task_list_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "title": "Task 1",
+                            "description": "First task",
+                            "status": "NOT_STARTED",
+                            "priority": "HIGH",
+                            "exit_criteria": [{"criteria": "Complete", "status": "INCOMPLETE"}],
+                        },
+                        {
+                            "task_list_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "title": "Task 2",
+                            "description": "Second task",
+                            "status": "NOT_STARTED",
+                            "priority": "MEDIUM",
+                            "exit_criteria": [{"criteria": "Complete", "status": "INCOMPLETE"}],
+                        },
+                    ]
+                },
             }
-        ],
-        "total": 42,
-        "limit": 50,
-        "offset": 0
-    }
-    ```
+        },
+    )
+) -> JSONResponse:
+    """Bulk create multiple tasks.
 
-    ## Response Fields
-    - **tasks**: Array of matching tasks (see task schema for full structure)
-    - **total**: Total number of matching tasks (across all pages)
-    - **limit**: Maximum results per page (as requested)
-    - **offset**: Current offset (as requested)
+    Creates multiple tasks in a single operation. Validates all task definitions
+    before creating any tasks. If any validation fails, no tasks are created.
 
-    Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9
-    """
-    try:
-        from uuid import UUID
-
-        from task_manager.models.entities import SearchCriteria
-        from task_manager.models.enums import Priority, Status
-        from task_manager.orchestration.search_orchestrator import SearchOrchestrator
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "search_tasks")
-
-        # Parse status list if provided
-        status_list = None
-        if "status" in body and body["status"] is not None:
-            if not isinstance(body["status"], list):
-                raise ValidationError("Status must be a list", {"field": "status"})
-            try:
-                status_list = [Status(s) for s in body["status"]]
-            except ValueError as e:
-                raise ValidationError(
-                    f"Invalid status value: {e}",
-                    {"field": "status", "valid_values": [s.value for s in Status]},
-                )
-
-        # Parse priority list if provided
-        priority_list = None
-        if "priority" in body and body["priority"] is not None:
-            if not isinstance(body["priority"], list):
-                raise ValidationError("Priority must be a list", {"field": "priority"})
-            try:
-                priority_list = [Priority(p) for p in body["priority"]]
-            except ValueError as e:
-                raise ValidationError(
-                    f"Invalid priority value: {e}",
-                    {"field": "priority", "valid_values": [p.value for p in Priority]},
-                )
-
-        # Parse tags list if provided
-        tags_list = None
-        if "tags" in body and body["tags"] is not None:
-            if not isinstance(body["tags"], list):
-                raise ValidationError("Tags must be a list", {"field": "tags"})
-            tags_list = body["tags"]
-
-        # Parse project_id if provided
-        project_id_uuid = None
-        if "project_id" in body and body["project_id"] is not None:
-            try:
-                project_id_uuid = UUID(body["project_id"])
-            except ValueError:
-                raise ValidationError("Invalid project ID format", {"field": "project_id"})
-
-        # Create SearchCriteria object
-        criteria = SearchCriteria(
-            query=body.get("query"),
-            status=status_list,
-            priority=priority_list,
-            tags=tags_list,
-            project_id=project_id_uuid,
-            limit=body.get("limit", 50),
-            offset=body.get("offset", 0),
-            sort_by=body.get("sort_by", "relevance"),
-        )
-
-        # Create search orchestrator and perform search
-        search_orchestrator = SearchOrchestrator(data_store)
-        results = search_orchestrator.search_tasks(criteria)
-        total_count = search_orchestrator.count_results(criteria)
-
-        return {
-            "tasks": [_serialize_task(task) for task in results],
-            "total": total_count,
-            "limit": criteria.limit,
-            "offset": criteria.offset,
-        }
-
-    except ValueError as e:
-        logger.warning(f"Validation error searching tasks: {e}")
-        # Classify the error
-        classified_error = classify_value_error(e, {"operation": "search_tasks"})
-        raise classified_error
-    except Exception as e:
-        logger.error(f"Error searching tasks: {e}")
-        raise StorageError("Failed to search tasks", {"error": str(e)})
-
-
-@app.get("/tasks/ready", tags=["Tasks"])
-async def get_ready_tasks_endpoint(
-    scope_type: str = Query(..., description="Scope type: 'project' or 'task_list'"),
-    scope_id: str = Query(..., description="UUID of the project or task list"),
-) -> Dict[str, Any]:
-    """Get tasks that are ready for execution within a specified scope.
-
-    A task is "ready" if:
-    1. It is not already COMPLETED
-    2. It has no dependencies or all dependencies are COMPLETED
-    3. In multi-agent mode (MULTI_AGENT_ENVIRONMENT_BEHAVIOR=true):
-       - Only NOT_STARTED tasks are ready (prevents concurrent execution)
-    4. In single-agent mode (default):
-       - Both NOT_STARTED and IN_PROGRESS tasks are ready (allows resumption)
-
-    Query parameters:
-    - scope_type (required): Either "project" or "task_list"
-    - scope_id (required): UUID of the project or task list
+    Args:
+        request: Dictionary with 'tasks' key containing list of task creation requests, or a list directly
 
     Returns:
-        Dictionary with list of ready tasks
+        JSONResponse with BulkOperationResult and appropriate status code
 
-    Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7
+    Raises:
+        400 VALIDATION_ERROR: If any task definition is invalid
+        207 MULTI_STATUS: If some tasks succeed and some fail
+        200 OK: If all tasks succeed
+
+    Requirements: 3.1, 3.4, 3.5
     """
+    # Extract tasks from request - handle both list and dict formats
+    if isinstance(request, list):
+        tasks = request
+    else:
+        tasks = request.get("tasks", [])
+
+    # Convert to dictionaries for the bulk handler (tasks are already dicts from JSON)
+    task_definitions = tasks
+
+    # Perform bulk create
+    result = orchestrators["bulk"].bulk_create_tasks(task_definitions)
+
+    # Convert to response model
+    response = BulkOperationResultResponse(
+        total=result.total,
+        succeeded=result.succeeded,
+        failed=result.failed,
+        results=result.results,
+        errors=result.errors,
+    )
+
+    # Determine status code
+    if result.failed == 0:
+        # All succeeded
+        status_code = 200
+    elif result.succeeded == 0:
+        # All failed
+        status_code = 400
+    else:
+        # Partial success
+        status_code = 207
+
+    return JSONResponse(
+        status_code=status_code,
+        content=response.model_dump(),
+    )
+
+
+@app.put(
+    "/tasks/bulk",
+    tags=["Bulk Operations"],
+    responses={
+        200: {
+            "description": "All tasks updated successfully",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    }
+                }
+            },
+        },
+        207: {
+            "description": "Partial success",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def bulk_update_tasks(
+    request: Any = Body(
+        ...,
+        openapi_examples={
+            "bulk_update": {
+                "summary": "Update multiple tasks",
+                "value": {
+                    "updates": [
+                        {
+                            "task_id": "770e8400-e29b-41d4-a716-446655440000",
+                            "status": "IN_PROGRESS",
+                        },
+                        {"task_id": "880e8400-e29b-41d4-a716-446655440001", "priority": "CRITICAL"},
+                    ]
+                },
+            }
+        },
+    )
+) -> JSONResponse:
+    """Bulk update multiple tasks.
+
+    Updates multiple tasks in a single operation. Each update must contain a
+    'task_id' field and at least one field to update. Validates all updates
+    before applying any changes.
+
+    Args:
+        request: Dictionary with 'updates' key containing list of update requests
+
+    Returns:
+        JSONResponse with BulkOperationResult and appropriate status code
+
+    Raises:
+        400 VALIDATION_ERROR: If any update is invalid
+        207 MULTI_STATUS: If some updates succeed and some fail
+        200 OK: If all updates succeed
+
+    Requirements: 3.2, 3.4, 3.5
+    """
+    # Extract updates from request - handle both list and dict formats
+    if isinstance(request, list):
+        update_dicts = request
+    else:
+        update_dicts = request.get("updates", [])
+
+    # Perform bulk update
+    result = orchestrators["bulk"].bulk_update_tasks(update_dicts)
+
+    # Convert to response model
+    response = BulkOperationResultResponse(
+        total=result.total,
+        succeeded=result.succeeded,
+        failed=result.failed,
+        results=result.results,
+        errors=result.errors,
+    )
+
+    # Determine status code
+    if result.failed == 0:
+        # All succeeded
+        status_code = 200
+    elif result.succeeded == 0:
+        # All failed
+        status_code = 400
+    else:
+        # Partial success
+        status_code = 207
+
+    return JSONResponse(
+        status_code=status_code,
+        content=response.model_dump(),
+    )
+
+
+@app.delete(
+    "/tasks/bulk",
+    tags=["Bulk Operations"],
+    responses={
+        200: {
+            "description": "All tasks deleted successfully",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    }
+                }
+            },
+        },
+        207: {
+            "description": "Partial success",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def bulk_delete_tasks(request: Any = Body(...)) -> JSONResponse:
+    """Bulk delete multiple tasks.
+
+    Deletes multiple tasks in a single operation. Validates all task IDs
+    before deleting any tasks.
+
+    Args:
+        request: Dictionary with 'task_ids' key containing list of task IDs, or a list directly
+
+    Returns:
+        JSONResponse with BulkOperationResult and appropriate status code
+
+    Raises:
+        400 VALIDATION_ERROR: If any task ID is invalid
+        207 MULTI_STATUS: If some deletions succeed and some fail
+        200 OK: If all deletions succeed
+
+    Requirements: 3.3, 3.4, 3.5
+    """
+    # Extract task_ids from request - handle both list and dict formats
+    if isinstance(request, list):
+        task_ids = request
+    else:
+        task_ids = request.get("task_ids", [])
+
+    # Perform bulk delete
+    result = orchestrators["bulk"].bulk_delete_tasks(task_ids)
+
+    # Convert to response model
+    response = BulkOperationResultResponse(
+        total=result.total,
+        succeeded=result.succeeded,
+        failed=result.failed,
+        results=result.results,
+        errors=result.errors,
+    )
+
+    # Determine status code
+    if result.failed == 0:
+        # All succeeded
+        status_code = 200
+    elif result.succeeded == 0:
+        # All failed
+        status_code = 400
+    else:
+        # Partial success
+        status_code = 207
+
+    return JSONResponse(
+        status_code=status_code,
+        content=response.model_dump(),
+    )
+
+
+@app.post(
+    "/tasks/bulk/tags",
+    tags=["Bulk Operations"],
+    responses={
+        200: {
+            "description": "Tags added to all tasks successfully",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    }
+                }
+            },
+        },
+        207: {
+            "description": "Partial success",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def bulk_add_tags(
+    request: Dict[str, Any] = Body(
+        ...,
+        openapi_examples={
+            "bulk_add_tags": {
+                "summary": "Add tags to multiple tasks",
+                "value": {
+                    "task_ids": [
+                        "770e8400-e29b-41d4-a716-446655440000",
+                        "880e8400-e29b-41d4-a716-446655440001",
+                    ],
+                    "tags": ["urgent", "backend"],
+                },
+            }
+        },
+    )
+) -> JSONResponse:
+    """Bulk add tags to multiple tasks.
+
+    Adds the specified tags to multiple tasks in a single operation. Validates
+    all task IDs and tags before adding tags to any tasks.
+
+    Args:
+        request: Dictionary with 'task_ids' (list of task ID strings) and 'tags' (list of tag strings)
+
+    Returns:
+        JSONResponse with BulkOperationResult and appropriate status code
+
+    Raises:
+        400 VALIDATION_ERROR: If any task ID or tag is invalid
+        207 MULTI_STATUS: If some operations succeed and some fail
+        200 OK: If all operations succeed
+
+    Requirements: 3.4, 3.5
+    """
+    # Extract task_ids and tags from request
+    task_ids = request.get("task_ids", [])
+    tags = request.get("tags", [])
+
+    # Perform bulk add tags
+    result = orchestrators["bulk"].bulk_add_tags(task_ids, tags)
+
+    # Convert to response model
+    response = BulkOperationResultResponse(
+        total=result.total,
+        succeeded=result.succeeded,
+        failed=result.failed,
+        results=result.results,
+        errors=result.errors,
+    )
+
+    # Determine status code
+    if result.failed == 0:
+        # All succeeded
+        status_code = 200
+    elif result.succeeded == 0:
+        # All failed
+        status_code = 400
+    else:
+        # Partial success
+        status_code = 207
+
+    return JSONResponse(
+        status_code=status_code,
+        content=response.model_dump(),
+    )
+
+
+@app.delete(
+    "/tasks/bulk/tags",
+    tags=["Bulk Operations"],
+    responses={
+        200: {
+            "description": "Tags removed from all tasks successfully",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    }
+                }
+            },
+        },
+        207: {
+            "description": "Partial success",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "total": {"type": "integer"},
+                            "succeeded": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "results": {"type": "array", "items": {"type": "object"}},
+                            "errors": {"type": "array", "items": {"type": "object"}},
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+async def bulk_remove_tags(request: Dict[str, Any]) -> JSONResponse:
+    """Bulk remove tags from multiple tasks.
+
+    Removes the specified tags from multiple tasks in a single operation. Validates
+    all task IDs before removing tags from any tasks.
+
+    Args:
+        request: Dictionary with 'task_ids' (list of task ID strings) and 'tags' (list of tag strings)
+
+    Returns:
+        JSONResponse with BulkOperationResult and appropriate status code
+
+    Raises:
+        400 VALIDATION_ERROR: If any task ID is invalid
+        207 MULTI_STATUS: If some operations succeed and some fail
+        200 OK: If all operations succeed
+
+    Requirements: 3.4, 3.5
+    """
+    # Extract task_ids and tags from request
+    task_ids = request.get("task_ids", [])
+    tags = request.get("tags", [])
+
+    # Perform bulk remove tags
+    result = orchestrators["bulk"].bulk_remove_tags(task_ids, tags)
+
+    # Convert to response model
+    response = BulkOperationResultResponse(
+        total=result.total,
+        succeeded=result.succeeded,
+        failed=result.failed,
+        results=result.results,
+        errors=result.errors,
+    )
+
+    # Determine status code
+    if result.failed == 0:
+        # All succeeded
+        status_code = 200
+    elif result.succeeded == 0:
+        # All failed
+        status_code = 400
+    else:
+        # Partial success
+        status_code = 207
+
+    return JSONResponse(
+        status_code=status_code,
+        content=response.model_dump(),
+    )
+
+
+# ============================================================================
+@app.get("/tasks", tags=["Tasks"])
+async def list_tasks(
+    task_list_id: str = Query(
+        None, description="Optional task list UUID to filter tasks by task list"
+    )
+) -> Dict[str, Any]:
+    """List all tasks.
+
+    Retrieves all tasks in the system, optionally filtered by task list.
+
+    Args:
+        task_list_id: Optional task list UUID to filter by
+
+    Returns:
+        Dictionary with list of tasks
+
+    Raises:
+        400 VALIDATION_ERROR: If task_list_id format is invalid
+
+    Requirements: 2.3, 2.4, 9.2
+    """
+    from uuid import UUID
+
     try:
-        from uuid import UUID
+        # Parse task_list_id if provided
+        task_list_uuid = None
+        if task_list_id is not None:
+            try:
+                task_list_uuid = UUID(task_list_id)
+            except ValueError:
+                raise ValueError(f"Invalid task list ID format: {task_list_id}")
 
-        # Validate scope_type
-        if scope_type not in ["project", "task_list"]:
-            raise ValidationError(
-                f"Invalid scope_type '{scope_type}'. Must be 'project' or 'task_list'",
-                {"field": "scope_type", "valid_values": ["project", "task_list"]},
+        # Get tasks from orchestrator
+        tasks = orchestrators["task"].list_tasks(task_list_uuid)
+
+        # Convert to response models
+        task_responses = []
+        for task in tasks:
+            task_response = TaskResponse(
+                id=str(task.id),
+                task_list_id=str(task.task_list_id),
+                title=task.title,
+                description=task.description,
+                status=task.status.name,
+                priority=task.priority.name,
+                dependencies=[
+                    DependencyModel(
+                        task_id=str(dep.task_id),
+                        task_list_id=str(dep.task_list_id),
+                    )
+                    for dep in task.dependencies
+                ],
+                exit_criteria=[
+                    ExitCriteriaModel(
+                        criteria=ec.criteria,
+                        status=ec.status.name,
+                        comment=ec.comment,
+                    )
+                    for ec in task.exit_criteria
+                ],
+                notes=[note_to_model(note) for note in task.notes],
+                research_notes=(
+                    [note_to_model(note) for note in task.research_notes]
+                    if task.research_notes
+                    else None
+                ),
+                action_plan=(
+                    [
+                        ActionPlanItemModel(
+                            sequence=item.sequence,
+                            content=item.content,
+                        )
+                        for item in task.action_plan
+                    ]
+                    if task.action_plan
+                    else None
+                ),
+                execution_notes=(
+                    [note_to_model(note) for note in task.execution_notes]
+                    if task.execution_notes
+                    else None
+                ),
+                agent_instructions_template=task.agent_instructions_template,
+                tags=task.tags if task.tags else [],
+                created_at=task.created_at.isoformat(),
+                updated_at=task.updated_at.isoformat(),
             )
+            task_responses.append(task_response)
 
-        # Parse scope_id
+        return {
+            "tasks": [t.model_dump() for t in task_responses],
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
+    except Exception as e:
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in list_tasks: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
+
+
+@app.get("/tasks/{task_id}", tags=["Tasks"])
+async def get_task(task_id: str) -> Dict[str, Any]:
+    """Get a single task by ID.
+
+    Retrieves a specific task by its UUID.
+
+    Args:
+        task_id: UUID of the task to retrieve
+
+    Returns:
+        Dictionary with the task
+
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid
+        404 NOT_FOUND: If task does not exist
+
+    Requirements: 2.3, 9.1
+    """
+    from uuid import UUID
+
+    try:
+        # Parse UUID
         try:
-            scope_uuid = UUID(scope_id)
+            task_uuid = UUID(task_id)
         except ValueError:
-            raise ValidationError("Invalid scope ID format", {"field": "scope_id"})
+            raise ValueError(f"Invalid task ID format: {task_id}")
 
-        # Get ready tasks using dependency orchestrator
-        ready_tasks = dependency_orchestrator.get_ready_tasks(
-            scope_type=scope_type, scope_id=scope_uuid
+        # Get task from orchestrator
+        task = orchestrators["task"].get_task(task_uuid)
+
+        if task is None:
+            raise ValueError(f"Task with ID {task_id} does not exist")
+
+        # Convert to response model
+        task_response = TaskResponse(
+            id=str(task.id),
+            task_list_id=str(task.task_list_id),
+            title=task.title,
+            description=task.description,
+            status=task.status.name,
+            priority=task.priority.name,
+            dependencies=[
+                DependencyModel(
+                    task_id=str(dep.task_id),
+                    task_list_id=str(dep.task_list_id),
+                )
+                for dep in task.dependencies
+            ],
+            exit_criteria=[
+                ExitCriteriaModel(
+                    criteria=ec.criteria,
+                    status=ec.status.name,
+                    comment=ec.comment,
+                )
+                for ec in task.exit_criteria
+            ],
+            notes=[note_to_model(note) for note in task.notes],
+            research_notes=(
+                [note_to_model(note) for note in task.research_notes]
+                if task.research_notes
+                else None
+            ),
+            action_plan=(
+                [
+                    ActionPlanItemModel(
+                        sequence=item.sequence,
+                        content=item.content,
+                    )
+                    for item in task.action_plan
+                ]
+                if task.action_plan
+                else None
+            ),
+            execution_notes=(
+                [note_to_model(note) for note in task.execution_notes]
+                if task.execution_notes
+                else None
+            ),
+            agent_instructions_template=task.agent_instructions_template,
+            tags=task.tags if task.tags else [],
+            created_at=task.created_at.isoformat(),
+            updated_at=task.updated_at.isoformat(),
         )
 
         return {
-            "tasks": [_serialize_task(task) for task in ready_tasks],
-            "scope_type": scope_type,
-            "scope_id": scope_id,
-            "count": len(ready_tasks),
+            "task": task_response.model_dump(),
         }
-
-    except ValueError as e:
-        logger.warning(f"Error getting ready tasks: {e}")
-        # Classify the error
-        classified_error = classify_value_error(e, {"scope_type": scope_type, "scope_id": scope_id})
-        raise classified_error
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
     except Exception as e:
-        logger.error(f"Error getting ready tasks: {e}")
-        raise StorageError("Failed to get ready tasks", {"error": str(e)})
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in get_task: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
+
+
+@app.put("/tasks/{task_id}", tags=["Tasks"])
+async def update_task(
+    task_id: str,
+    request: TaskUpdateRequest = Body(
+        ...,
+        openapi_examples={
+            "update_status": {"summary": "Update task status", "value": {"status": "IN_PROGRESS"}},
+            "update_priority": {
+                "summary": "Update task priority",
+                "value": {"priority": "CRITICAL"},
+            },
+            "update_multiple": {
+                "summary": "Update multiple fields",
+                "value": {
+                    "title": "Updated task title",
+                    "description": "Updated description",
+                    "status": "COMPLETED",
+                    "priority": "HIGH",
+                },
+            },
+        },
+    ),
+) -> Dict[str, Any]:
+    """Update a task.
+
+    Updates a task's title, description, status, priority, and/or agent instructions template.
+    Use empty string for agent_instructions_template to clear it.
+
+    Args:
+        task_id: UUID of the task to update
+        request: Task update request with optional fields
+
+    Returns:
+        Dictionary with message and updated task
+
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid or fields are invalid
+        404 NOT_FOUND: If task does not exist
+        409 BUSINESS_LOGIC_ERROR: If status change violates business rules
+
+    Requirements: 2.3, 9.1, 9.3
+    """
+    from uuid import UUID
+
+    from task_manager.models.enums import Priority, Status
+
+    try:
+        # Parse UUID
+        try:
+            task_uuid = UUID(task_id)
+        except ValueError:
+            raise ValueError(f"Invalid task ID format: {task_id}")
+
+        # Parse status if provided
+        status = None
+        if request.status is not None:
+            try:
+                status = Status[request.status]
+            except KeyError:
+                raise ValueError(f"Invalid status: {request.status}")
+
+        # Parse priority if provided
+        priority = None
+        if request.priority is not None:
+            try:
+                priority = Priority[request.priority]
+            except KeyError:
+                raise ValueError(f"Invalid priority: {request.priority}")
+
+        # Update task via orchestrator
+        task = orchestrators["task"].update_task(
+            task_id=task_uuid,
+            title=request.title,
+            description=request.description,
+            status=status,
+            priority=priority,
+            agent_instructions_template=request.agent_instructions_template,
+        )
+
+        # Convert to response model
+        task_response = TaskResponse(
+            id=str(task.id),
+            task_list_id=str(task.task_list_id),
+            title=task.title,
+            description=task.description,
+            status=task.status.name,
+            priority=task.priority.name,
+            dependencies=[
+                DependencyModel(
+                    task_id=str(dep.task_id),
+                    task_list_id=str(dep.task_list_id),
+                )
+                for dep in task.dependencies
+            ],
+            exit_criteria=[
+                ExitCriteriaModel(
+                    criteria=ec.criteria,
+                    status=ec.status.name,
+                    comment=ec.comment,
+                )
+                for ec in task.exit_criteria
+            ],
+            notes=[note_to_model(note) for note in task.notes],
+            research_notes=(
+                [note_to_model(note) for note in task.research_notes]
+                if task.research_notes
+                else None
+            ),
+            action_plan=(
+                [
+                    ActionPlanItemModel(
+                        sequence=item.sequence,
+                        content=item.content,
+                    )
+                    for item in task.action_plan
+                ]
+                if task.action_plan
+                else None
+            ),
+            execution_notes=(
+                [note_to_model(note) for note in task.execution_notes]
+                if task.execution_notes
+                else None
+            ),
+            agent_instructions_template=task.agent_instructions_template,
+            tags=task.tags if task.tags else [],
+            created_at=task.created_at.isoformat(),
+            updated_at=task.updated_at.isoformat(),
+        )
+
+        return {
+            "message": f"Task '{task.title}' updated successfully",
+            "task": task_response.model_dump(),
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
+    except Exception as e:
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in update_task: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
+
+
+@app.delete("/tasks/{task_id}", tags=["Tasks"])
+async def delete_task(task_id: str) -> Dict[str, Any]:
+    """Delete a task.
+
+    Deletes a task and cleans up any dependencies referencing it.
+
+    Args:
+        task_id: UUID of the task to delete
+
+    Returns:
+        Dictionary with success message
+
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid
+        404 NOT_FOUND: If task does not exist
+
+    Requirements: 2.3, 9.3
+    """
+    from uuid import UUID
+
+    try:
+        # Parse UUID
+        try:
+            task_uuid = UUID(task_id)
+        except ValueError:
+            raise ValueError(f"Invalid task ID format: {task_id}")
+
+        # Delete task via orchestrator
+        orchestrators["task"].delete_task(task_uuid)
+
+        return {
+            "message": f"Task with ID {task_id} deleted successfully",
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
+    except Exception as e:
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in delete_task: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
 
 
 # ============================================================================
-# Task Note Endpoints
+# Task Sub-Entity Endpoints
 # ============================================================================
 
 
-@app.post("/tasks/{task_id}/notes", tags=["Tasks", "Notes"])
-async def add_task_note(task_id: str, request: Request) -> Dict[str, Any]:
+@app.post("/tasks/{task_id}/notes", tags=["Task Notes"])
+async def add_note(
+    task_id: str,
+    request: NoteRequest = Body(
+        ...,
+        openapi_examples={
+            "simple": {
+                "summary": "Simple note",
+                "value": {"content": "This is a general note about the task"},
+            }
+        },
+    ),
+) -> Dict[str, Any]:
     """Add a general note to a task.
 
-    Request body should contain:
-    - content (required): The content of the note
-
-    A timestamp is automatically generated for the note.
+    Adds a timestamped note to the task's notes list.
 
     Args:
-        task_id: UUID of the task to add the note to
+        task_id: UUID of the task
+        request: Note content
 
     Returns:
-        Dictionary with updated task
+        Dictionary with message and updated task
 
-    Requirements: 2.5
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid or content is empty
+        404 NOT_FOUND: If task does not exist
+
+    Requirements: 4.1
     """
     from uuid import UUID
 
@@ -3874,44 +2940,96 @@ async def add_task_note(task_id: str, request: Request) -> Dict[str, Any]:
     try:
         task_uuid = UUID(task_id)
     except ValueError:
-        raise ValidationError("Invalid task ID format", {"field": "task_id"})
+        raise ValueError(f"Invalid task ID format: {task_id}")
 
-    body = await request.json()
+    # Add note via orchestrator
+    task = orchestrators["task"].add_note(
+        task_id=task_uuid,
+        content=request.content,
+    )
 
-    # Validate required fields
-    if "content" not in body:
-        raise ValidationError("Missing required field: content", {"field": "content"})
+    # Convert to response model
+    task_response = TaskResponse(
+        id=str(task.id),
+        task_list_id=str(task.task_list_id),
+        title=task.title,
+        description=task.description,
+        status=task.status.name,
+        priority=task.priority.name,
+        dependencies=[
+            DependencyModel(
+                task_id=str(dep.task_id),
+                task_list_id=str(dep.task_list_id),
+            )
+            for dep in task.dependencies
+        ],
+        exit_criteria=[
+            ExitCriteriaModel(
+                criteria=ec.criteria,
+                status=ec.status.name,
+                comment=ec.comment,
+            )
+            for ec in task.exit_criteria
+        ],
+        notes=[note_to_model(note) for note in task.notes],
+        research_notes=(
+            [note_to_model(note) for note in task.research_notes] if task.research_notes else None
+        ),
+        action_plan=(
+            [
+                ActionPlanItemModel(
+                    sequence=item.sequence,
+                    content=item.content,
+                )
+                for item in task.action_plan
+            ]
+            if task.action_plan
+            else None
+        ),
+        execution_notes=(
+            [note_to_model(note) for note in task.execution_notes] if task.execution_notes else None
+        ),
+        agent_instructions_template=task.agent_instructions_template,
+        tags=task.tags if task.tags else [],
+        created_at=task.created_at.isoformat(),
+        updated_at=task.updated_at.isoformat(),
+    )
 
-    content = body["content"]
-
-    try:
-        # Add note using task orchestrator
-        task = task_orchestrator.add_note(task_uuid, content)
-
-        return {"message": "Note added successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        # Classify the error
-        classified_error = classify_value_error(e, {"task_id": task_id})
-        raise classified_error
+    return {
+        "message": f"Note added to task '{task.title}'",
+        "task": task_response.model_dump(),
+    }
 
 
-@app.post("/tasks/{task_id}/research-notes", tags=["Tasks", "Notes"])
-async def add_research_note(task_id: str, request: Request) -> Dict[str, Any]:
+@app.post("/tasks/{task_id}/research-notes", tags=["Task Notes"])
+async def add_research_note(
+    task_id: str,
+    request: NoteRequest = Body(
+        ...,
+        openapi_examples={
+            "research": {
+                "summary": "Research finding",
+                "value": {"content": "Found that JWT tokens should expire after 1 hour"},
+            }
+        },
+    ),
+) -> Dict[str, Any]:
     """Add a research note to a task.
 
-    Request body should contain:
-    - content (required): The content of the research note
-
-    A timestamp is automatically generated for the note.
+    Adds a timestamped research note to the task's research notes list.
 
     Args:
-        task_id: UUID of the task to add the research note to
+        task_id: UUID of the task
+        request: Note content
 
     Returns:
-        Dictionary with updated task
+        Dictionary with message and updated task
 
-    Requirements: 2.6
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid or content is empty
+        404 NOT_FOUND: If task does not exist
+
+    Requirements: 4.2
     """
     from uuid import UUID
 
@@ -3919,44 +3037,98 @@ async def add_research_note(task_id: str, request: Request) -> Dict[str, Any]:
     try:
         task_uuid = UUID(task_id)
     except ValueError:
-        raise ValidationError("Invalid task ID format", {"field": "task_id"})
+        raise ValueError(f"Invalid task ID format: {task_id}")
 
-    body = await request.json()
+    # Add research note via orchestrator
+    task = orchestrators["task"].add_research_note(
+        task_id=task_uuid,
+        content=request.content,
+    )
 
-    # Validate required fields
-    if "content" not in body:
-        raise ValidationError("Missing required field: content", {"field": "content"})
+    # Convert to response model
+    task_response = TaskResponse(
+        id=str(task.id),
+        task_list_id=str(task.task_list_id),
+        title=task.title,
+        description=task.description,
+        status=task.status.name,
+        priority=task.priority.name,
+        dependencies=[
+            DependencyModel(
+                task_id=str(dep.task_id),
+                task_list_id=str(dep.task_list_id),
+            )
+            for dep in task.dependencies
+        ],
+        exit_criteria=[
+            ExitCriteriaModel(
+                criteria=ec.criteria,
+                status=ec.status.name,
+                comment=ec.comment,
+            )
+            for ec in task.exit_criteria
+        ],
+        notes=[note_to_model(note) for note in task.notes],
+        research_notes=(
+            [note_to_model(note) for note in task.research_notes] if task.research_notes else None
+        ),
+        action_plan=(
+            [
+                ActionPlanItemModel(
+                    sequence=item.sequence,
+                    content=item.content,
+                )
+                for item in task.action_plan
+            ]
+            if task.action_plan
+            else None
+        ),
+        execution_notes=(
+            [note_to_model(note) for note in task.execution_notes] if task.execution_notes else None
+        ),
+        agent_instructions_template=task.agent_instructions_template,
+        tags=task.tags if task.tags else [],
+        created_at=task.created_at.isoformat(),
+        updated_at=task.updated_at.isoformat(),
+    )
 
-    content = body["content"]
-
-    try:
-        # Add research note using task orchestrator
-        task = task_orchestrator.add_research_note(task_uuid, content)
-
-        return {"message": "Research note added successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        # Classify the error
-        classified_error = classify_value_error(e, {"task_id": task_id})
-        raise classified_error
+    return {
+        "message": f"Research note added to task '{task.title}'",
+        "task": task_response.model_dump(),
+    }
 
 
-@app.post("/tasks/{task_id}/execution-notes", tags=["Tasks", "Notes"])
-async def add_execution_note(task_id: str, request: Request) -> Dict[str, Any]:
+@app.post("/tasks/{task_id}/execution-notes", tags=["Task Notes"])
+async def add_execution_note(
+    task_id: str,
+    request: NoteRequest = Body(
+        ...,
+        openapi_examples={
+            "execution": {
+                "summary": "Execution note",
+                "value": {
+                    "content": "Encountered issue with database connection, resolved by updating config"
+                },
+            }
+        },
+    ),
+) -> Dict[str, Any]:
     """Add an execution note to a task.
 
-    Request body should contain:
-    - content (required): The content of the execution note
-
-    A timestamp is automatically generated for the note.
+    Adds a timestamped execution note to the task's execution notes list.
 
     Args:
-        task_id: UUID of the task to add the execution note to
+        task_id: UUID of the task
+        request: Note content
 
     Returns:
-        Dictionary with updated task
+        Dictionary with message and updated task
 
-    Requirements: 2.7
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid or content is empty
+        404 NOT_FOUND: If task does not exist
+
+    Requirements: 4.3
     """
     from uuid import UUID
 
@@ -3964,52 +3136,101 @@ async def add_execution_note(task_id: str, request: Request) -> Dict[str, Any]:
     try:
         task_uuid = UUID(task_id)
     except ValueError:
-        raise ValidationError("Invalid task ID format", {"field": "task_id"})
+        raise ValueError(f"Invalid task ID format: {task_id}")
 
-    body = await request.json()
+    # Add execution note via orchestrator
+    task = orchestrators["task"].add_execution_note(
+        task_id=task_uuid,
+        content=request.content,
+    )
 
-    # Validate required fields
-    if "content" not in body:
-        raise ValidationError("Missing required field: content", {"field": "content"})
+    # Convert to response model
+    task_response = TaskResponse(
+        id=str(task.id),
+        task_list_id=str(task.task_list_id),
+        title=task.title,
+        description=task.description,
+        status=task.status.name,
+        priority=task.priority.name,
+        dependencies=[
+            DependencyModel(
+                task_id=str(dep.task_id),
+                task_list_id=str(dep.task_list_id),
+            )
+            for dep in task.dependencies
+        ],
+        exit_criteria=[
+            ExitCriteriaModel(
+                criteria=ec.criteria,
+                status=ec.status.name,
+                comment=ec.comment,
+            )
+            for ec in task.exit_criteria
+        ],
+        notes=[note_to_model(note) for note in task.notes],
+        research_notes=(
+            [note_to_model(note) for note in task.research_notes] if task.research_notes else None
+        ),
+        action_plan=(
+            [
+                ActionPlanItemModel(
+                    sequence=item.sequence,
+                    content=item.content,
+                )
+                for item in task.action_plan
+            ]
+            if task.action_plan
+            else None
+        ),
+        execution_notes=(
+            [note_to_model(note) for note in task.execution_notes] if task.execution_notes else None
+        ),
+        agent_instructions_template=task.agent_instructions_template,
+        tags=task.tags if task.tags else [],
+        created_at=task.created_at.isoformat(),
+        updated_at=task.updated_at.isoformat(),
+    )
 
-    content = body["content"]
-
-    try:
-        # Add execution note using task orchestrator
-        task = task_orchestrator.add_execution_note(task_uuid, content)
-
-        return {"message": "Execution note added successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        # Classify the error
-        classified_error = classify_value_error(e, {"task_id": task_id})
-        raise classified_error
+    return {
+        "message": f"Execution note added to task '{task.title}'",
+        "task": task_response.model_dump(),
+    }
 
 
-# ============================================================================
-# Task Metadata Endpoints
-# ============================================================================
-
-
-@app.put("/tasks/{task_id}/action-plan", tags=["Tasks"])
-async def update_action_plan(task_id: str, request: Request) -> Dict[str, Any]:
+@app.put("/tasks/{task_id}/action-plan", tags=["Task Metadata"])
+async def update_action_plan(
+    task_id: str,
+    request: List[ActionPlanItemModel] = Body(
+        ...,
+        openapi_examples={
+            "action_plan": {
+                "summary": "Task action plan",
+                "value": [
+                    {"sequence": 0, "content": "Set up development environment"},
+                    {"sequence": 1, "content": "Implement authentication logic"},
+                    {"sequence": 2, "content": "Write unit tests"},
+                    {"sequence": 3, "content": "Deploy to staging"},
+                ],
+            }
+        },
+    ),
+) -> Dict[str, Any]:
     """Update the action plan for a task.
 
-    Request body should contain:
-    - action_plan (required): Ordered list of action items, each containing:
-      - sequence (required): Order position (0-indexed integer)
-      - content (required): Description of the action
-
-    Replaces the task's action plan with the new ordered list.
-    The sequence numbers determine the order of items.
+    Replaces the task's action plan with the provided list of action items.
 
     Args:
-        task_id: UUID of the task to update the action plan for
+        task_id: UUID of the task
+        request: List of action plan items
 
     Returns:
-        Dictionary with updated task
+        Dictionary with message and updated task
 
-    Requirements: 2.8
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid or action plan is invalid
+        404 NOT_FOUND: If task does not exist
+
+    Requirements: 4.4
     """
     from uuid import UUID
 
@@ -4019,114 +3240,110 @@ async def update_action_plan(task_id: str, request: Request) -> Dict[str, Any]:
     try:
         task_uuid = UUID(task_id)
     except ValueError:
-        raise ValidationError("Invalid task ID format", {"field": "task_id"})
+        raise ValueError(f"Invalid task ID format: {task_id}")
 
-    body = await request.json()
+    # Convert action plan items
+    action_plan = []
+    for item in request:
+        action_plan.append(
+            ActionPlanItem(
+                sequence=item.sequence,
+                content=item.content,
+            )
+        )
 
-    # Validate required fields
-    if "action_plan" not in body:
-        raise ValidationError("Missing required field: action_plan", {"field": "action_plan"})
+    # Update action plan via orchestrator
+    task = orchestrators["task"].update_action_plan(
+        task_id=task_uuid,
+        action_plan=action_plan,
+    )
 
-    # Parse action plan
-    action_plan_data = body["action_plan"]
-
-    # Allow null/None to clear the action plan
-    if action_plan_data is None:
-        action_plan = None
-    else:
-        # Ensure action_plan is a list
-        if not isinstance(action_plan_data, list):
-            raise ValidationError("Action plan must be a list or null", {"field": "action_plan"})
-
-        action_plan = []
-        seen_sequences = set()
-
-        for idx, item_data in enumerate(action_plan_data):
-            # Validate item structure
-            if not isinstance(item_data, dict):
-                raise ValidationError(
-                    f"Action plan item at index {idx} must be an object",
-                    {"field": f"action_plan[{idx}]"},
+    # Convert to response model
+    task_response = TaskResponse(
+        id=str(task.id),
+        task_list_id=str(task.task_list_id),
+        title=task.title,
+        description=task.description,
+        status=task.status.name,
+        priority=task.priority.name,
+        dependencies=[
+            DependencyModel(
+                task_id=str(dep.task_id),
+                task_list_id=str(dep.task_list_id),
+            )
+            for dep in task.dependencies
+        ],
+        exit_criteria=[
+            ExitCriteriaModel(
+                criteria=ec.criteria,
+                status=ec.status.name,
+                comment=ec.comment,
+            )
+            for ec in task.exit_criteria
+        ],
+        notes=[note_to_model(note) for note in task.notes],
+        research_notes=(
+            [note_to_model(note) for note in task.research_notes] if task.research_notes else None
+        ),
+        action_plan=(
+            [
+                ActionPlanItemModel(
+                    sequence=item.sequence,
+                    content=item.content,
                 )
+                for item in task.action_plan
+            ]
+            if task.action_plan
+            else None
+        ),
+        execution_notes=(
+            [note_to_model(note) for note in task.execution_notes] if task.execution_notes else None
+        ),
+        agent_instructions_template=task.agent_instructions_template,
+        tags=task.tags if task.tags else [],
+        created_at=task.created_at.isoformat(),
+        updated_at=task.updated_at.isoformat(),
+    )
 
-            if "sequence" not in item_data:
-                raise ValidationError(
-                    f"Action plan item at index {idx} missing required field: sequence",
-                    {"field": f"action_plan[{idx}].sequence"},
-                )
-
-            if "content" not in item_data:
-                raise ValidationError(
-                    f"Action plan item at index {idx} missing required field: content",
-                    {"field": f"action_plan[{idx}].content"},
-                )
-
-            # Validate sequence is an integer
-            try:
-                sequence = int(item_data["sequence"])
-            except (ValueError, TypeError):
-                raise ValidationError(
-                    f"Action plan item at index {idx} has invalid sequence: must be an integer",
-                    {"field": f"action_plan[{idx}].sequence"},
-                )
-
-            # Validate sequence is non-negative
-            if sequence < 0:
-                raise ValidationError(
-                    f"Action plan item at index {idx} has invalid sequence: must be non-negative",
-                    {"field": f"action_plan[{idx}].sequence"},
-                )
-
-            # Check for duplicate sequences
-            if sequence in seen_sequences:
-                raise ValidationError(
-                    f"Action plan has duplicate sequence number: {sequence}",
-                    {"field": "action_plan", "duplicate_sequence": sequence},
-                )
-
-            seen_sequences.add(sequence)
-
-            # Validate content is non-empty
-            content = item_data["content"]
-            if not content or not str(content).strip():
-                raise ValidationError(
-                    f"Action plan item at index {idx} has empty content",
-                    {"field": f"action_plan[{idx}].content"},
-                )
-
-            action_plan.append(ActionPlanItem(sequence=sequence, content=str(content)))
-
-    try:
-        # Update action plan using task orchestrator
-        task = task_orchestrator.update_action_plan(task_uuid, action_plan)
-
-        return {"message": "Action plan updated successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        # Classify the error
-        classified_error = classify_value_error(e, {"task_id": task_id})
-        raise classified_error
+    return {
+        "message": f"Action plan updated for task '{task.title}'",
+        "task": task_response.model_dump(),
+    }
 
 
-@app.put("/tasks/{task_id}/exit-criteria", tags=["Tasks"])
-async def update_exit_criteria(task_id: str, request: Request) -> Dict[str, Any]:
+@app.put("/tasks/{task_id}/exit-criteria", tags=["Task Metadata"])
+async def update_exit_criteria(
+    task_id: str,
+    request: List[ExitCriteriaModel] = Body(
+        ...,
+        openapi_examples={
+            "exit_criteria": {
+                "summary": "Task exit criteria",
+                "value": [
+                    {"criteria": "All unit tests pass", "status": "COMPLETE"},
+                    {"criteria": "Code review approved", "status": "INCOMPLETE"},
+                    {"criteria": "Documentation updated", "status": "INCOMPLETE"},
+                ],
+            }
+        },
+    ),
+) -> Dict[str, Any]:
     """Update exit criteria for a task.
 
-    Request body should contain:
-    - exit_criteria (required): List of exit criteria, each containing:
-      - criteria (required): Description of the completion condition
-      - status (required): Status - "INCOMPLETE" or "COMPLETE"
-      - comment (optional): Optional comment about the criteria
-
-    Updates the task's exit criteria list. At least one exit criteria is required.
+    Replaces the task's exit criteria with the provided list.
 
     Args:
-        task_id: UUID of the task to update exit criteria for
+        task_id: UUID of the task
+        request: List of exit criteria
 
     Returns:
-        Dictionary with updated task
+        Dictionary with message and updated task
 
-    Requirements: 2.9
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid or exit criteria is invalid
+        404 NOT_FOUND: If task does not exist
+
+    Requirements: 4.5
     """
     from uuid import UUID
 
@@ -4137,110 +3354,234 @@ async def update_exit_criteria(task_id: str, request: Request) -> Dict[str, Any]
     try:
         task_uuid = UUID(task_id)
     except ValueError:
-        raise ValidationError("Invalid task ID format", {"field": "task_id"})
+        raise ValueError(f"Invalid task ID format: {task_id}")
 
-    body = await request.json()
+    # Convert exit criteria
+    exit_criteria = []
+    for ec in request:
+        try:
+            ec_status = ExitCriteriaStatus[ec.status]
+        except KeyError:
+            raise ValueError(f"Invalid exit criteria status: {ec.status}")
 
-    # Validate required fields
-    if "exit_criteria" not in body:
-        raise ValidationError("Missing required field: exit_criteria", {"field": "exit_criteria"})
-
-    exit_criteria_data = body["exit_criteria"]
-
-    # Ensure exit_criteria is a list
-    if not isinstance(exit_criteria_data, list):
-        raise ValidationError("Exit criteria must be a list", {"field": "exit_criteria"})
-
-    # Validate not empty
-    if not exit_criteria_data:
-        raise ValidationError(
-            "Exit criteria cannot be empty: at least one criteria is required",
-            {"field": "exit_criteria"},
+        exit_criteria.append(
+            ExitCriteria(
+                criteria=ec.criteria,
+                status=ec_status,
+                comment=ec.comment,
+            )
         )
 
-    exit_criteria = []
+    # Update exit criteria via orchestrator
+    task = orchestrators["task"].update_exit_criteria(
+        task_id=task_uuid,
+        exit_criteria=exit_criteria,
+    )
 
-    for idx, ec_data in enumerate(exit_criteria_data):
-        # Validate item structure
-        if not isinstance(ec_data, dict):
-            raise ValidationError(
-                f"Exit criteria item at index {idx} must be an object",
-                {"field": f"exit_criteria[{idx}]"},
+    # Convert to response model
+    task_response = TaskResponse(
+        id=str(task.id),
+        task_list_id=str(task.task_list_id),
+        title=task.title,
+        description=task.description,
+        status=task.status.name,
+        priority=task.priority.name,
+        dependencies=[
+            DependencyModel(
+                task_id=str(dep.task_id),
+                task_list_id=str(dep.task_list_id),
             )
-
-        if "criteria" not in ec_data:
-            raise ValidationError(
-                f"Exit criteria item at index {idx} missing required field: criteria",
-                {"field": f"exit_criteria[{idx}].criteria"},
+            for dep in task.dependencies
+        ],
+        exit_criteria=[
+            ExitCriteriaModel(
+                criteria=ec.criteria,
+                status=ec.status.name,
+                comment=ec.comment,
             )
+            for ec in task.exit_criteria
+        ],
+        notes=[note_to_model(note) for note in task.notes],
+        research_notes=(
+            [note_to_model(note) for note in task.research_notes] if task.research_notes else None
+        ),
+        action_plan=(
+            [
+                ActionPlanItemModel(
+                    sequence=item.sequence,
+                    content=item.content,
+                )
+                for item in task.action_plan
+            ]
+            if task.action_plan
+            else None
+        ),
+        execution_notes=(
+            [note_to_model(note) for note in task.execution_notes] if task.execution_notes else None
+        ),
+        agent_instructions_template=task.agent_instructions_template,
+        tags=task.tags if task.tags else [],
+        created_at=task.created_at.isoformat(),
+        updated_at=task.updated_at.isoformat(),
+    )
 
-        if "status" not in ec_data:
-            raise ValidationError(
-                f"Exit criteria item at index {idx} missing required field: status",
-                {"field": f"exit_criteria[{idx}].status"},
-            )
-
-        # Validate criteria is non-empty
-        criteria = ec_data["criteria"]
-        if not criteria or not str(criteria).strip():
-            raise ValidationError(
-                f"Exit criteria item at index {idx} has empty criteria",
-                {"field": f"exit_criteria[{idx}].criteria"},
-            )
-
-        # Validate status
-        try:
-            status = ExitCriteriaStatus(ec_data["status"])
-        except ValueError:
-            raise ValidationError(
-                f"Exit criteria item at index {idx} has invalid status: {ec_data['status']}",
-                {
-                    "field": f"exit_criteria[{idx}].status",
-                    "valid_values": [s.value for s in ExitCriteriaStatus],
-                },
-            )
-
-        # Get optional comment
-        comment = ec_data.get("comment")
-
-        exit_criteria.append(ExitCriteria(criteria=str(criteria), status=status, comment=comment))
-
-    try:
-        # Update exit criteria using task orchestrator
-        task = task_orchestrator.update_exit_criteria(task_uuid, exit_criteria)
-
-        return {"message": "Exit criteria updated successfully", "task": _serialize_task(task)}
-
-    except ValueError as e:
-        # Classify the error
-        classified_error = classify_value_error(e, {"task_id": task_id})
-        raise classified_error
+    return {
+        "message": f"Exit criteria updated for task '{task.title}'",
+        "task": task_response.model_dump(),
+    }
 
 
-# ============================================================================
-# Agent Instructions Endpoint
-# ============================================================================
+@app.put("/tasks/{task_id}/dependencies", tags=["Task Metadata"])
+async def update_dependencies(
+    task_id: str,
+    request: List[DependencyModel] = Body(
+        ...,
+        openapi_examples={
+            "dependencies": {
+                "summary": "Task dependencies",
+                "value": [
+                    {
+                        "task_id": "660e8400-e29b-41d4-a716-446655440001",
+                        "task_list_id": "550e8400-e29b-41d4-a716-446655440000",
+                    },
+                    {
+                        "task_id": "770e8400-e29b-41d4-a716-446655440002",
+                        "task_list_id": "550e8400-e29b-41d4-a716-446655440000",
+                    },
+                ],
+            }
+        },
+    ),
+) -> Dict[str, Any]:
+    """Update dependencies for a task.
 
-
-@app.get("/tasks/{task_id}/agent-instructions", tags=["Tasks", "Agent Instructions"])
-async def get_agent_instructions(task_id: str) -> Dict[str, Any]:
-    """Get generated agent instructions for a task.
-
-    Uses template resolution hierarchy:
-    1. Task template (highest priority)
-    2. Task list template
-    3. Project template
-    4. Fallback to serialized task details (lowest priority)
-
-    Templates support variable substitution using {property_name} format.
+    Replaces the task's dependencies with the provided list. Validates that
+    no circular dependencies are created.
 
     Args:
-        task_id: UUID of the task to generate instructions for
+        task_id: UUID of the task
+        request: List of dependencies
 
     Returns:
-        Dictionary with generated instructions and template source
+        Dictionary with message and updated task
 
-    Requirements: 8.1, 8.2, 8.3, 8.4
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid or dependency IDs are invalid
+        404 NOT_FOUND: If task does not exist
+        409 BUSINESS_LOGIC_ERROR: If circular dependency is detected
+
+    Requirements: 4.6
+    """
+    from uuid import UUID
+
+    from task_manager.models.entities import Dependency
+
+    # Parse UUID
+    try:
+        task_uuid = UUID(task_id)
+    except ValueError:
+        raise ValueError(f"Invalid task ID format: {task_id}")
+
+    # Convert dependencies
+    dependencies = []
+    for dep in request:
+        try:
+            dep_task_id = UUID(dep.task_id)
+            dep_task_list_id = UUID(dep.task_list_id)
+            dependencies.append(
+                Dependency(
+                    task_id=dep_task_id,
+                    task_list_id=dep_task_list_id,
+                )
+            )
+        except ValueError as e:
+            raise ValueError(f"Invalid dependency ID format: {e}")
+
+    # Update dependencies via orchestrator
+    task = orchestrators["task"].update_dependencies(
+        task_id=task_uuid,
+        dependencies=dependencies,
+    )
+
+    # Convert to response model
+    task_response = TaskResponse(
+        id=str(task.id),
+        task_list_id=str(task.task_list_id),
+        title=task.title,
+        description=task.description,
+        status=task.status.name,
+        priority=task.priority.name,
+        dependencies=[
+            DependencyModel(
+                task_id=str(dep.task_id),
+                task_list_id=str(dep.task_list_id),
+            )
+            for dep in task.dependencies
+        ],
+        exit_criteria=[
+            ExitCriteriaModel(
+                criteria=ec.criteria,
+                status=ec.status.name,
+                comment=ec.comment,
+            )
+            for ec in task.exit_criteria
+        ],
+        notes=[note_to_model(note) for note in task.notes],
+        research_notes=(
+            [note_to_model(note) for note in task.research_notes] if task.research_notes else None
+        ),
+        action_plan=(
+            [
+                ActionPlanItemModel(
+                    sequence=item.sequence,
+                    content=item.content,
+                )
+                for item in task.action_plan
+            ]
+            if task.action_plan
+            else None
+        ),
+        execution_notes=(
+            [note_to_model(note) for note in task.execution_notes] if task.execution_notes else None
+        ),
+        agent_instructions_template=task.agent_instructions_template,
+        tags=task.tags if task.tags else [],
+        created_at=task.created_at.isoformat(),
+        updated_at=task.updated_at.isoformat(),
+    )
+
+    return {
+        "message": f"Dependencies updated for task '{task.title}'",
+        "task": task_response.model_dump(),
+    }
+
+
+@app.post("/tasks/{task_id}/tags", tags=["Tags"])
+async def add_tags(
+    task_id: str,
+    request: TagsRequest = Body(
+        ...,
+        openapi_examples={
+            "tags": {"summary": "Add tags", "value": {"tags": ["backend", "api", "authentication"]}}
+        },
+    ),
+) -> Dict[str, Any]:
+    """Add tags to a task.
+
+    Adds the specified tags to the task with validation and deduplication.
+
+    Args:
+        task_id: UUID of the task
+        request: List of tags to add
+
+    Returns:
+        Dictionary with message and updated task
+
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid or tags are invalid
+        404 NOT_FOUND: If task does not exist
+
+    Requirements: 4.7
     """
     from uuid import UUID
 
@@ -4248,941 +3589,205 @@ async def get_agent_instructions(task_id: str) -> Dict[str, Any]:
     try:
         task_uuid = UUID(task_id)
     except ValueError:
-        raise ValidationError("Invalid task ID format", {"field": "task_id"})
+        raise ValueError(f"Invalid task ID format: {task_id}")
 
+    # Add tags via orchestrator
+    task = orchestrators["tag"].add_tags(
+        task_id=task_uuid,
+        tags=request.tags,
+    )
+
+    # Convert to response model
+    task_response = TaskResponse(
+        id=str(task.id),
+        task_list_id=str(task.task_list_id),
+        title=task.title,
+        description=task.description,
+        status=task.status.name,
+        priority=task.priority.name,
+        dependencies=[
+            DependencyModel(
+                task_id=str(dep.task_id),
+                task_list_id=str(dep.task_list_id),
+            )
+            for dep in task.dependencies
+        ],
+        exit_criteria=[
+            ExitCriteriaModel(
+                criteria=ec.criteria,
+                status=ec.status.name,
+                comment=ec.comment,
+            )
+            for ec in task.exit_criteria
+        ],
+        notes=[note_to_model(note) for note in task.notes],
+        research_notes=(
+            [note_to_model(note) for note in task.research_notes] if task.research_notes else None
+        ),
+        action_plan=(
+            [
+                ActionPlanItemModel(
+                    sequence=item.sequence,
+                    content=item.content,
+                )
+                for item in task.action_plan
+            ]
+            if task.action_plan
+            else None
+        ),
+        execution_notes=(
+            [note_to_model(note) for note in task.execution_notes] if task.execution_notes else None
+        ),
+        agent_instructions_template=task.agent_instructions_template,
+        tags=task.tags if task.tags else [],
+        created_at=task.created_at.isoformat(),
+        updated_at=task.updated_at.isoformat(),
+    )
+
+    return {
+        "message": f"Tags added to task '{task.title}'",
+        "task": task_response.model_dump(),
+    }
+
+
+@app.delete("/tasks/{task_id}/tags", tags=["Tags"])
+async def remove_tags(task_id: str, request: TagsRequest) -> Dict[str, Any]:
+    """Remove tags from a task.
+
+    Removes the specified tags from the task. Tags that don't exist are silently ignored.
+
+    Args:
+        task_id: UUID of the task
+        request: List of tags to remove
+
+    Returns:
+        Dictionary with message and updated task
+
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid
+        404 NOT_FOUND: If task does not exist
+
+    Requirements: 4.8
+    """
+    from uuid import UUID
+
+    # Parse UUID
     try:
-        # Get task
-        task = task_orchestrator.get_task(task_uuid)
+        task_uuid = UUID(task_id)
+    except ValueError:
+        raise ValueError(f"Invalid task ID format: {task_id}")
 
-        if task is None:
-            raise NotFoundError(f"Task with id '{task_id}' not found", {"task_id": task_id})
+    # Remove tags via orchestrator
+    task = orchestrators["tag"].remove_tags(
+        task_id=task_uuid,
+        tags=request.tags,
+    )
 
-        # Get task list and project for template resolution
-        task_list = data_store.get_task_list(task.task_list_id)
-        project = None
-        if task_list:
-            project = data_store.get_project(task_list.project_id)
+    # Convert to response model
+    task_response = TaskResponse(
+        id=str(task.id),
+        task_list_id=str(task.task_list_id),
+        title=task.title,
+        description=task.description,
+        status=task.status.name,
+        priority=task.priority.name,
+        dependencies=[
+            DependencyModel(
+                task_id=str(dep.task_id),
+                task_list_id=str(dep.task_list_id),
+            )
+            for dep in task.dependencies
+        ],
+        exit_criteria=[
+            ExitCriteriaModel(
+                criteria=ec.criteria,
+                status=ec.status.name,
+                comment=ec.comment,
+            )
+            for ec in task.exit_criteria
+        ],
+        notes=[note_to_model(note) for note in task.notes],
+        research_notes=(
+            [note_to_model(note) for note in task.research_notes] if task.research_notes else None
+        ),
+        action_plan=(
+            [
+                ActionPlanItemModel(
+                    sequence=item.sequence,
+                    content=item.content,
+                )
+                for item in task.action_plan
+            ]
+            if task.action_plan
+            else None
+        ),
+        execution_notes=(
+            [note_to_model(note) for note in task.execution_notes] if task.execution_notes else None
+        ),
+        agent_instructions_template=task.agent_instructions_template,
+        tags=task.tags if task.tags else [],
+        created_at=task.created_at.isoformat(),
+        updated_at=task.updated_at.isoformat(),
+    )
 
-        # Determine template source
-        template_source = "fallback"
-        if task.agent_instructions_template:
-            template_source = "task"
-        elif task_list and task_list.agent_instructions_template:
-            template_source = "task_list"
-        elif project and project.agent_instructions_template:
-            template_source = "project"
-
-        # Generate agent instructions using template engine
-        instructions = template_engine.get_agent_instructions(task)
-
-        return {"instructions": instructions, "template_source": template_source}
-
-    except ValueError as e:
-        # Classify the error
-        classified_error = classify_value_error(e, {"task_id": task_id})
-        raise classified_error
+    return {
+        "message": f"Tags removed from task '{task.title}'",
+        "task": task_response.model_dump(),
+    }
 
 
 # ============================================================================
-# Bulk Operations Endpoints
+# Search Endpoints
 # ============================================================================
 
 
 @app.post(
-    "/tasks/bulk/create",
-    tags=["Bulk Operations"],
-    summary="Bulk Create Tasks",
-    response_description="Bulk operation results with success/failure details",
-    responses={
-        201: {
-            "description": "All tasks created successfully",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "result": {
-                            "total": 3,
-                            "succeeded": 3,
-                            "failed": 0,
-                            "results": [
-                                {
-                                    "index": 0,
-                                    "success": True,
-                                    "task_id": "aa0e8400-e29b-41d4-a716-446655440010",
-                                },
-                                {
-                                    "index": 1,
-                                    "success": True,
-                                    "task_id": "bb0e8400-e29b-41d4-a716-446655440011",
-                                },
-                                {
-                                    "index": 2,
-                                    "success": True,
-                                    "task_id": "cc0e8400-e29b-41d4-a716-446655440012",
-                                },
-                            ],
-                            "errors": [],
-                        }
-                    }
-                }
-            },
-        },
-        207: {
-            "description": "Partial success - some tasks created, some failed",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "result": {
-                            "total": 3,
-                            "succeeded": 2,
-                            "failed": 1,
-                            "results": [
-                                {
-                                    "index": 0,
-                                    "success": True,
-                                    "task_id": "aa0e8400-e29b-41d4-a716-446655440010",
-                                },
-                                {"index": 1, "success": False, "error": "Invalid task_list_id"},
-                                {
-                                    "index": 2,
-                                    "success": True,
-                                    "task_id": "cc0e8400-e29b-41d4-a716-446655440012",
-                                },
-                            ],
-                            "errors": [{"index": 1, "error": "Invalid task_list_id"}],
-                        }
-                    }
-                }
-            },
-        },
-        400: {
-            "description": "Validation error or all tasks failed",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "error": {
-                            "code": "VALIDATION_ERROR",
-                            "message": "❌ Missing required field: tasks",
-                            "details": {"field": "tasks"},
-                        }
-                    }
-                }
-            },
-        },
-    },
-)
-async def bulk_create_tasks(request: Request) -> Dict[str, Any]:
-    """Create multiple tasks in a single operation.
-
-    Allows creating multiple tasks efficiently in one request. All tasks are validated
-    before any are created. Returns detailed results for each task including success/failure
-    status.
-
-    ## Request Body
-    - **tasks** (required, array): Array of task definitions
-
-    Each task definition must contain:
-    - **task_list_id** (required, UUID string): Task list to create task in
-    - **title** (required, string): Task title
-    - **description** (required, string): Task description
-    - **status** (required, string): Initial status (NOT_STARTED, IN_PROGRESS, BLOCKED, COMPLETED)
-    - **priority** (required, string): Priority level (CRITICAL, HIGH, MEDIUM, LOW, TRIVIAL)
-    - **dependencies** (required, array): List of dependencies (can be empty)
-    - **exit_criteria** (required, array): List of exit criteria (must not be empty)
-    - **notes** (required, array): List of notes (can be empty)
-    - **tags** (optional, array): List of tags
-    - **research_notes** (optional, array): List of research notes
-    - **action_plan** (optional, array): Ordered list of action items
-    - **execution_notes** (optional, array): List of execution notes
-    - **agent_instructions_template** (optional, string): Template for agent instructions
-
-    ## Validation
-    All tasks are validated before any are created. If validation fails for any task,
-    the operation continues and returns detailed error information for each failure.
-
-    ## Example Request
-    ```json
-    {
-        "tasks": [
-            {
-                "task_list_id": "880e8400-e29b-41d4-a716-446655440003",
-                "title": "Setup database",
-                "description": "Configure PostgreSQL database",
-                "status": "NOT_STARTED",
-                "priority": "HIGH",
-                "dependencies": [],
-                "exit_criteria": [
-                    {"criteria": "Database is running", "status": "INCOMPLETE"}
-                ],
-                "notes": [],
-                "tags": ["backend", "infrastructure"]
-            },
-            {
-                "task_list_id": "880e8400-e29b-41d4-a716-446655440003",
-                "title": "Create API endpoints",
-                "description": "Implement REST API",
-                "status": "NOT_STARTED",
-                "priority": "MEDIUM",
-                "dependencies": [],
-                "exit_criteria": [
-                    {"criteria": "All endpoints tested", "status": "INCOMPLETE"}
-                ],
-                "notes": []
-            }
-        ]
-    }
-    ```
-
-    ## Response Format
-    - **total**: Total number of tasks attempted
-    - **succeeded**: Number of successfully created tasks
-    - **failed**: Number of failed task creations
-    - **results**: Array of individual results with index, success status, and task_id or error
-    - **errors**: Array of errors with index and error message
-
-    ## Status Codes
-    - **201**: All tasks created successfully
-    - **207 Multi-Status**: Partial success (some tasks created, some failed)
-    - **400**: Validation error or all tasks failed
-
-    ## Example Success Response (HTTP 201)
-    ```json
-    {
-        "result": {
-            "total": 2,
-            "succeeded": 2,
-            "failed": 0,
-            "results": [
-                {"index": 0, "success": true, "task_id": "aa0e8400-e29b-41d4-a716-446655440010"},
-                {"index": 1, "success": true, "task_id": "bb0e8400-e29b-41d4-a716-446655440011"}
-            ],
-            "errors": []
-        }
-    }
-    ```
-
-    ## Example Partial Success Response (HTTP 207)
-    ```json
-    {
-        "result": {
-            "total": 2,
-            "succeeded": 1,
-            "failed": 1,
-            "results": [
-                {"index": 0, "success": true, "task_id": "aa0e8400-e29b-41d4-a716-446655440010"},
-                {"index": 1, "success": false, "error": "Invalid task_list_id"}
-            ],
-            "errors": [
-                {"index": 1, "error": "Invalid task_list_id"}
-            ]
-        }
-    }
-    ```
-
-    Requirements: 7.1, 7.5, 7.6
-    """
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "bulk_create_tasks")
-
-        # Validate required field
-        if "tasks" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: tasks", {"field": "tasks"}
-                ),
-            )
-
-        # Ensure tasks is a list
-        if not isinstance(body["tasks"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Tasks must be a list", {"field": "tasks"}
-                ),
-            )
-
-        task_definitions = body["tasks"]
-
-        # Create bulk operations handler and perform bulk create
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_create_tasks(task_definitions)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 201
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        logger.warning(f"Validation error in bulk create: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk create: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk create tasks",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.put("/tasks/bulk/update", tags=["Tasks", "Bulk Operations"])
-async def bulk_update_tasks(request: Request) -> Dict[str, Any]:
-    """Update multiple tasks in a single operation.
-
-    Request body should contain:
-    - updates (required): Array of task updates, each containing:
-      - task_id (required): UUID of the task to update
-      - title (optional): New task title
-      - description (optional): New task description
-      - status (optional): New task status
-      - priority (optional): New task priority
-      - agent_instructions_template (optional): New template
-
-    All updates are validated before any are applied. If any validation fails,
-    no tasks are updated.
-
-    Returns:
-        Dictionary with BulkOperationResult containing success/failure details
-
-    Requirements: 7.2, 7.5, 7.6
-    """
-    sys.stderr.write("DEBUG: OLD BULK UPDATE ENDPOINT CALLED (/tasks/bulk/update)\n")
-    sys.stderr.flush()
-    logger.info("Old bulk update endpoint called")
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        body = await request.json()
-
-        sys.stderr.write(f"DEBUG OLD: Received body: {body}\n")
-        sys.stderr.flush()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "bulk_update_tasks")
-
-        # Validate required field
-        if "updates" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: updates", {"field": "updates"}
-                ),
-            )
-
-        # Ensure updates is a list
-        if not isinstance(body["updates"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Updates must be a list", {"field": "updates"}
-                ),
-            )
-
-        updates = body["updates"]
-
-        # Create bulk operations handler and perform bulk update
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_update_tasks(updates)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 200
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        logger.warning(f"Validation error in bulk update: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk update: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk update tasks",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.delete("/tasks/bulk/delete", tags=["Tasks", "Bulk Operations"])
-async def bulk_delete_tasks(request: Request) -> Dict[str, Any]:
-    """Delete multiple tasks in a single operation.
-
-    Request body should contain:
-    - task_ids (required): Array of task ID strings to delete
-
-    All task IDs are validated before any are deleted. If any validation fails,
-    no tasks are deleted.
-
-    Returns:
-        Dictionary with BulkOperationResult containing success/failure details
-
-    Requirements: 7.3, 7.5, 7.6
-    """
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "bulk_delete_tasks")
-
-        # Validate required field
-        if "task_ids" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: task_ids", {"field": "task_ids"}
-                ),
-            )
-
-        # Ensure task_ids is a list
-        if not isinstance(body["task_ids"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Task IDs must be a list", {"field": "task_ids"}
-                ),
-            )
-
-        task_ids = body["task_ids"]
-
-        # Create bulk operations handler and perform bulk delete
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_delete_tasks(task_ids)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 200
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        logger.warning(f"Validation error in bulk delete: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk delete: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk delete tasks",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.post("/tasks/bulk/tags/add", tags=["Tasks", "Bulk Operations", "Tags"])
-async def bulk_add_tags(request: Request) -> Dict[str, Any]:
-    """Add tags to multiple tasks in a single operation.
-
-    Request body should contain:
-    - task_ids (required): Array of task ID strings
-    - tags (required): Array of tag strings to add to each task
-
-    All task IDs and tags are validated before any tags are added. If any
-    validation fails, no tags are added to any tasks.
-
-    Returns:
-        Dictionary with BulkOperationResult containing success/failure details
-
-    Requirements: 7.4, 7.5, 7.6
-    """
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "bulk_add_tags")
-
-        # Validate required fields
-        if "task_ids" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: task_ids", {"field": "task_ids"}
-                ),
-            )
-
-        if "tags" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: tags", {"field": "tags"}
-                ),
-            )
-
-        # Ensure task_ids is a list
-        if not isinstance(body["task_ids"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Task IDs must be a list", {"field": "task_ids"}
-                ),
-            )
-
-        # Ensure tags is a list
-        if not isinstance(body["tags"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
-                ),
-            )
-
-        task_ids = body["task_ids"]
-        tags = body["tags"]
-
-        # Create bulk operations handler and perform bulk add tags
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_add_tags(task_ids, tags)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 200
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        logger.warning(f"Validation error in bulk add tags: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk add tags: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk add tags",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.post("/tasks/bulk/tags/remove", tags=["Tasks", "Bulk Operations", "Tags"])
-async def bulk_remove_tags(request: Request) -> Dict[str, Any]:
-    """Remove tags from multiple tasks in a single operation.
-
-    Request body should contain:
-    - task_ids (required): Array of task ID strings
-    - tags (required): Array of tag strings to remove from each task
-
-    All task IDs are validated before any tags are removed. If any validation
-    fails, no tags are removed from any tasks.
-
-    Returns:
-        Dictionary with BulkOperationResult containing success/failure details
-
-    Requirements: 7.4, 7.5, 7.6
-    """
-    try:
-        from task_manager.orchestration.bulk_operations_handler import BulkOperationsHandler
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "bulk_remove_tags")
-
-        # Validate required fields
-        if "task_ids" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: task_ids", {"field": "task_ids"}
-                ),
-            )
-
-        if "tags" not in body:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Missing required field: tags", {"field": "tags"}
-                ),
-            )
-
-        # Ensure task_ids is a list
-        if not isinstance(body["task_ids"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Task IDs must be a list", {"field": "task_ids"}
-                ),
-            )
-
-        # Ensure tags is a list
-        if not isinstance(body["tags"], list):
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
-                ),
-            )
-
-        task_ids = body["task_ids"]
-        tags = body["tags"]
-
-        # Create bulk operations handler and perform bulk remove tags
-        bulk_handler = BulkOperationsHandler(data_store)
-        result = bulk_handler.bulk_remove_tags(task_ids, tags)
-
-        # Return appropriate status code based on result
-        if len(result.errors) > 0 and result.succeeded == 0:
-            # All failed or validation errors
-            status_code = 400
-        elif result.failed > 0:
-            # Partial failure
-            status_code = 207  # Multi-Status
-        else:
-            # All succeeded
-            status_code = 200
-
-        return JSONResponse(
-            status_code=status_code,
-            content={
-                "result": {
-                    "total": result.total,
-                    "succeeded": result.succeeded,
-                    "failed": result.failed,
-                    "results": result.results,
-                    "errors": result.errors,
-                }
-            },
-        )
-
-    except ValueError as e:
-        logger.warning(f"Validation error in bulk remove tags: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error in bulk remove tags: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to bulk remove tags",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-# ============================================================================
-# Search Endpoint
-# ============================================================================
-
-
-@app.post("/search/tasks", tags=["Tasks", "Search"])
-async def search_tasks(request: Request) -> Dict[str, Any]:
-    """Search tasks with multiple filtering criteria.
-
-    Request body should contain SearchCriteria:
-    - query (optional): Text to search in task titles and descriptions
-    - status (optional): List of status values to filter by
-    - priority (optional): List of priority values to filter by
-    - tags (optional): List of tags to filter by
-    - project_name (optional): Project name to filter by
-    - limit (optional): Maximum number of results (default: 50, max: 100)
-    - offset (optional): Number of results to skip (default: 0)
-    - sort_by (optional): Sort criteria - "relevance", "created_at", "updated_at", or "priority" (default: "relevance")
-
-    Returns:
-        Dictionary with search results and metadata
-
-    Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8
-    """
-    try:
-        from task_manager.models.entities import SearchCriteria
-        from task_manager.models.enums import Priority, Status
-        from task_manager.orchestration.search_orchestrator import SearchOrchestrator
-
-        body = await request.json()
-
-        # Apply preprocessing for agent-friendly type conversion
-        body = preprocess_request_body(body, "search_tasks")
-
-        # Parse status list if provided
-        status_list = None
-        if "status" in body and body["status"] is not None:
-            if not isinstance(body["status"], list):
-                return JSONResponse(
-                    status_code=400,
-                    content=format_error_with_formatter(
-                        "VALIDATION_ERROR", "Status must be a list", {"field": "status"}
-                    ),
-                )
-            try:
-                status_list = [Status(s) for s in body["status"]]
-            except ValueError as e:
-                return JSONResponse(
-                    status_code=400,
-                    content=format_error_with_formatter(
-                        "VALIDATION_ERROR",
-                        f"Invalid status value: {e}",
-                        {"field": "status", "valid_values": [s.value for s in Status]},
-                    ),
-                )
-
-        # Parse priority list if provided
-        priority_list = None
-        if "priority" in body and body["priority"] is not None:
-            if not isinstance(body["priority"], list):
-                return JSONResponse(
-                    status_code=400,
-                    content=format_error_with_formatter(
-                        "VALIDATION_ERROR", "Priority must be a list", {"field": "priority"}
-                    ),
-                )
-            try:
-                priority_list = [Priority(p) for p in body["priority"]]
-            except ValueError as e:
-                return JSONResponse(
-                    status_code=400,
-                    content=format_error_with_formatter(
-                        "VALIDATION_ERROR",
-                        f"Invalid priority value: {e}",
-                        {"field": "priority", "valid_values": [p.value for p in Priority]},
-                    ),
-                )
-
-        # Parse tags list if provided
-        tags_list = None
-        if "tags" in body and body["tags"] is not None:
-            if not isinstance(body["tags"], list):
-                return JSONResponse(
-                    status_code=400,
-                    content=format_error_with_formatter(
-                        "VALIDATION_ERROR", "Tags must be a list", {"field": "tags"}
-                    ),
-                )
-            tags_list = body["tags"]
-
-        # Create SearchCriteria object
-        criteria = SearchCriteria(
-            query=body.get("query"),
-            status=status_list,
-            priority=priority_list,
-            tags=tags_list,
-            project_name=body.get("project_name"),
-            limit=body.get("limit", 50),
-            offset=body.get("offset", 0),
-            sort_by=body.get("sort_by", "relevance"),
-        )
-
-        # Create search orchestrator and perform search
-        search_orchestrator = SearchOrchestrator(data_store)
-        results = search_orchestrator.search_tasks(criteria)
-        total_count = search_orchestrator.count_results(criteria)
-
-        return {
-            "results": [_serialize_task(task) for task in results],
-            "metadata": {
-                "total_count": total_count,
-                "returned_count": len(results),
-                "limit": criteria.limit,
-                "offset": criteria.offset,
-                "sort_by": criteria.sort_by,
-                "has_more": (criteria.offset + len(results)) < total_count,
-            },
-        }
-
-    except ValueError as e:
-        logger.warning(f"Validation error searching tasks: {e}")
-        return JSONResponse(
-            status_code=400,
-            content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-        )
-    except Exception as e:
-        logger.error(f"Error searching tasks: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to search tasks",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-# ============================================================================
-# Dependency Analysis Endpoints
-# ============================================================================
-
-
-# ============================================================================
-# Generic Dependency Analysis Endpoints
-# ============================================================================
-
-
-@app.get(
-    "/dependencies/analyze",
-    tags=["Dependencies"],
-    summary="Analyze Dependencies",
-    response_description="Comprehensive dependency analysis results",
+    "/tasks/search",
+    tags=["Search"],
     responses={
         200: {
-            "description": "Analysis completed successfully",
+            "description": "Search results",
             "content": {
                 "application/json": {
                     "example": {
-                        "analysis": {
-                            "critical_path": [
-                                "aa0e8400-e29b-41d4-a716-446655440010",
-                                "bb0e8400-e29b-41d4-a716-446655440011",
-                                "cc0e8400-e29b-41d4-a716-446655440012",
-                            ],
-                            "critical_path_length": 3,
-                            "bottleneck_tasks": [
-                                {
-                                    "task_id": "aa0e8400-e29b-41d4-a716-446655440010",
-                                    "blocked_count": 5,
-                                }
-                            ],
-                            "leaf_tasks": [
-                                "dd0e8400-e29b-41d4-a716-446655440013",
-                                "ee0e8400-e29b-41d4-a716-446655440014",
-                            ],
-                            "completion_progress": 45.5,
-                            "total_tasks": 10,
-                            "completed_tasks": 4,
-                            "circular_dependencies": [],
-                        },
-                        "scope_type": "project",
-                        "scope_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "tasks": [
+                            {
+                                "id": "770e8400-e29b-41d4-a716-446655440000",
+                                "task_list_id": "550e8400-e29b-41d4-a716-446655440000",
+                                "title": "Implement user authentication",
+                                "description": "Add JWT-based authentication to the API",
+                                "status": "IN_PROGRESS",
+                                "priority": "HIGH",
+                                "dependencies": [],
+                                "exit_criteria": [
+                                    {
+                                        "criteria": "All tests pass",
+                                        "status": "INCOMPLETE",
+                                        "comment": None,
+                                    }
+                                ],
+                                "notes": [],
+                                "research_notes": None,
+                                "action_plan": None,
+                                "execution_notes": None,
+                                "agent_instructions_template": None,
+                                "tags": ["backend", "authentication"],
+                                "created_at": "2024-01-01T12:00:00Z",
+                                "updated_at": "2024-01-01T13:00:00Z",
+                            }
+                        ]
                     }
                 }
             },
         },
         400: {
-            "description": "Invalid scope_type or scope_id",
+            "description": "Validation error",
             "content": {
                 "application/json": {
                     "example": {
                         "error": {
                             "code": "VALIDATION_ERROR",
-                            "message": "❌ Invalid scope_type 'invalid'. Must be 'project' or 'task_list'",
-                            "details": {
-                                "field": "scope_type",
-                                "valid_values": ["project", "task_list"],
-                            },
-                        }
-                    }
-                }
-            },
-        },
-        404: {
-            "description": "Scope not found",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "error": {
-                            "code": "NOT_FOUND",
-                            "message": "❌ Project does not exist",
+                            "message": "Invalid sort_by value: invalid_sort",
                             "details": {},
                         }
                     }
@@ -5191,770 +3796,438 @@ async def search_tasks(request: Request) -> Dict[str, Any]:
         },
     },
 )
+async def search_tasks(
+    request: SearchCriteriaRequest = Body(
+        ...,
+        openapi_examples={
+            "text_search": {
+                "summary": "Search by text",
+                "value": {"query": "authentication", "limit": 10, "offset": 0},
+            },
+            "filter_by_status": {
+                "summary": "Filter by status and priority",
+                "value": {
+                    "status": ["IN_PROGRESS", "NOT_STARTED"],
+                    "priority": ["HIGH", "CRITICAL"],
+                    "limit": 20,
+                    "offset": 0,
+                    "sort_by": "priority",
+                },
+            },
+            "filter_by_tags": {
+                "summary": "Filter by tags",
+                "value": {"tags": ["backend", "api"], "limit": 50, "offset": 0},
+            },
+        },
+    )
+) -> Dict[str, Any]:
+    """Search tasks with multiple filter criteria.
+
+    Searches for tasks matching the specified criteria including text search,
+    status filtering, priority filtering, tag filtering, and project filtering.
+    Supports pagination and sorting.
+
+    Args:
+        request: Search criteria including query, filters, pagination, and sorting
+
+    Returns:
+        Dictionary with list of matching tasks
+
+    Raises:
+        400 VALIDATION_ERROR: If sort_by is invalid or limit is out of range
+
+    Requirements: 10.1, 10.2, 10.3, 10.4, 10.5
+    """
+    from uuid import UUID
+
+    from task_manager.models.entities import SearchCriteria
+    from task_manager.models.enums import Priority, Status
+
+    # Convert request to SearchCriteria entity
+    # Parse status values
+    status_list = None
+    if request.status:
+        try:
+            status_list = [Status[s] for s in request.status]
+        except KeyError as e:
+            raise ValueError(f"Invalid status value: {e}")
+
+    # Parse priority values
+    priority_list = None
+    if request.priority:
+        try:
+            priority_list = [Priority[p] for p in request.priority]
+        except KeyError as e:
+            raise ValueError(f"Invalid priority value: {e}")
+
+    # Parse project_id
+    project_uuid = None
+    if request.project_id:
+        try:
+            project_uuid = UUID(request.project_id)
+        except ValueError:
+            raise ValueError(f"Invalid project ID format: {request.project_id}")
+
+    # Create SearchCriteria
+    criteria = SearchCriteria(
+        query=request.query,
+        status=status_list,
+        priority=priority_list,
+        tags=request.tags,
+        project_id=project_uuid,
+        limit=request.limit,
+        offset=request.offset,
+        sort_by=request.sort_by,
+    )
+
+    # Perform search
+    tasks = orchestrators["search"].search_tasks(criteria)
+
+    # Convert tasks to response models
+    task_responses = []
+    for task in tasks:
+        task_response = TaskResponse(
+            id=str(task.id),
+            task_list_id=str(task.task_list_id),
+            title=task.title,
+            description=task.description,
+            status=task.status.value,
+            priority=task.priority.value,
+            dependencies=[
+                DependencyModel(
+                    task_id=str(dep.task_id),
+                    task_list_id=str(dep.task_list_id),
+                )
+                for dep in task.dependencies
+            ],
+            exit_criteria=[
+                ExitCriteriaModel(
+                    criteria=ec["criteria"],
+                    status=ec["status"],
+                    comment=ec.get("comment"),
+                )
+                for ec in task.exit_criteria
+            ],
+            notes=[
+                NoteModel(content=note["content"], timestamp=note.get("timestamp"))
+                for note in task.notes
+            ],
+            research_notes=(
+                [
+                    NoteModel(content=note["content"], timestamp=note.get("timestamp"))
+                    for note in task.research_notes
+                ]
+                if task.research_notes
+                else None
+            ),
+            action_plan=(
+                [
+                    ActionPlanItemModel(
+                        sequence=item["sequence"],
+                        content=item["content"],
+                    )
+                    for item in task.action_plan
+                ]
+                if task.action_plan
+                else None
+            ),
+            execution_notes=(
+                [
+                    NoteModel(content=note["content"], timestamp=note.get("timestamp"))
+                    for note in task.execution_notes
+                ]
+                if task.execution_notes
+                else None
+            ),
+            agent_instructions_template=task.agent_instructions_template,
+            tags=task.tags,
+            created_at=task.created_at.isoformat(),
+            updated_at=task.updated_at.isoformat(),
+        )
+        task_responses.append(task_response)
+
+    return {
+        "tasks": [t.model_dump() for t in task_responses],
+    }
+
+
+# ============================================================================
+# Dependency Analysis Endpoints
+# ============================================================================
+
+
+@app.get("/dependencies/analyze", tags=["Dependencies"])
 async def analyze_dependencies(
     scope_type: str = Query(..., description="Scope type: 'project' or 'task_list'"),
-    scope_id: str = Query(..., description="UUID of the project or task list"),
+    scope_id: str = Query(..., description="UUID of the project or task list to analyze"),
 ) -> Dict[str, Any]:
-    """Analyze task dependencies within a project or task list.
+    """Analyze task dependencies within a scope.
 
-    Performs comprehensive dependency graph analysis to identify critical paths,
-    bottlenecks, leaf tasks, progress, and circular dependencies. Useful for
-    understanding project structure and identifying potential issues.
+    Performs comprehensive analysis of the dependency graph including critical path
+    identification, bottleneck detection, leaf task identification, progress calculation,
+    and circular dependency detection.
 
-    ## Query Parameters
-    - **scope_type** (required, string): Scope of analysis
-      - Valid values: `project`, `task_list`
-    - **scope_id** (required, UUID string): ID of the project or task list to analyze
+    Args:
+        scope_type: Either "project" or "task_list" to specify the scope
+        scope_id: UUID of the project or task list to analyze
 
-    ## Analysis Results
-    - **critical_path**: Longest chain of dependent tasks (array of task IDs)
-    - **critical_path_length**: Number of tasks in the critical path
-    - **bottleneck_tasks**: Tasks that block multiple other tasks
-      - Each entry includes `task_id` and `blocked_count` (number of tasks blocked)
-    - **leaf_tasks**: Tasks with no dependencies (can be started immediately)
-    - **completion_progress**: Percentage of tasks completed (0-100)
-    - **total_tasks**: Total number of tasks in scope
-    - **completed_tasks**: Number of completed tasks
-    - **circular_dependencies**: Array of circular dependency cycles (empty if none)
-      - Each cycle is an array of task IDs forming the cycle
+    Returns:
+        Dictionary with dependency analysis results
 
-    ## Use Cases
-    - **Project Planning**: Identify critical path to estimate project duration
-    - **Resource Allocation**: Focus on bottleneck tasks that unblock others
-    - **Progress Tracking**: Monitor completion percentage
-    - **Dependency Validation**: Detect circular dependencies that need resolution
+    Raises:
+        400 VALIDATION_ERROR: If scope_type is invalid or scope_id format is invalid
+        404 NOT_FOUND: If scope_id does not exist
 
-    ## Example Request
-    ```
-    GET /dependencies/analyze?scope_type=project&scope_id=550e8400-e29b-41d4-a716-446655440000
-    ```
-
-    ## Example Response
-    ```json
-    {
-        "analysis": {
-            "critical_path": [
-                "aa0e8400-e29b-41d4-a716-446655440010",
-                "bb0e8400-e29b-41d4-a716-446655440011",
-                "cc0e8400-e29b-41d4-a716-446655440012"
-            ],
-            "critical_path_length": 3,
-            "bottleneck_tasks": [
-                {
-                    "task_id": "aa0e8400-e29b-41d4-a716-446655440010",
-                    "blocked_count": 5
-                }
-            ],
-            "leaf_tasks": [
-                "dd0e8400-e29b-41d4-a716-446655440013",
-                "ee0e8400-e29b-41d4-a716-446655440014"
-            ],
-            "completion_progress": 45.5,
-            "total_tasks": 10,
-            "completed_tasks": 4,
-            "circular_dependencies": []
-        },
-        "scope_type": "project",
-        "scope_id": "550e8400-e29b-41d4-a716-446655440000"
-    }
-    ```
-
-    ## Interpreting Results
-    - **Critical Path**: Focus on these tasks as delays will impact overall timeline
-    - **Bottlenecks**: Prioritize these tasks to unblock dependent work
-    - **Leaf Tasks**: These can be started immediately (no dependencies)
-    - **Circular Dependencies**: Must be resolved before tasks can be completed
-
-    Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9
+    Requirements: 11.1, 11.2, 11.3
     """
+    from uuid import UUID
+
+    # Parse scope_id
     try:
-        from uuid import UUID
+        scope_uuid = UUID(scope_id)
+    except ValueError:
+        raise ValueError(f"Invalid scope ID format: {scope_id}")
 
-        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
+    # Perform analysis via dependency analyzer
+    analysis = orchestrators["dependency_analyzer"].analyze(scope_type, scope_uuid)
 
-        # Validate scope_type
-        if scope_type not in ["project", "task_list"]:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    f"Invalid scope_type '{scope_type}'. Must be 'project' or 'task_list'",
-                    {
-                        "field": "scope_type",
-                        "valid_values": ["project", "task_list"],
-                    },
-                ),
-            )
+    # Convert UUIDs to strings in the analysis result
+    analysis_dict = {
+        "critical_path": [str(task_id) for task_id in analysis.critical_path],
+        "critical_path_length": analysis.critical_path_length,
+        "bottleneck_tasks": [
+            {"task_id": str(task_id), "blocked_count": count}
+            for task_id, count in analysis.bottleneck_tasks
+        ],
+        "leaf_tasks": [str(task_id) for task_id in analysis.leaf_tasks],
+        "completion_progress": analysis.completion_progress,
+        "total_tasks": analysis.total_tasks,
+        "completed_tasks": analysis.completed_tasks,
+        "circular_dependencies": [
+            [str(task_id) for task_id in cycle] for cycle in analysis.circular_dependencies
+        ],
+    }
 
-        # Parse scope_id
-        try:
-            scope_uuid = UUID(scope_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    "Invalid scope ID format",
-                    {"field": "scope_id"},
-                ),
-            )
-
-        # Create analyzer and perform analysis
-        analyzer = DependencyAnalyzer(data_store)
-        analysis = analyzer.analyze(scope_type=scope_type, scope_id=scope_uuid)
-
-        return {
-            "analysis": {
-                "critical_path": [str(task_id) for task_id in analysis.critical_path],
-                "critical_path_length": analysis.critical_path_length,
-                "bottleneck_tasks": [
-                    {"task_id": str(task_id), "blocked_count": count}
-                    for task_id, count in analysis.bottleneck_tasks
-                ],
-                "leaf_tasks": [str(task_id) for task_id in analysis.leaf_tasks],
-                "completion_progress": analysis.completion_progress,
-                "total_tasks": analysis.total_tasks,
-                "completed_tasks": analysis.completed_tasks,
-                "circular_dependencies": [
-                    [str(task_id) for task_id in cycle] for cycle in analysis.circular_dependencies
-                ],
-            },
-            "scope_type": scope_type,
-            "scope_id": scope_id,
-        }
-
-    except ValueError as e:
-        logger.warning(f"Error analyzing dependencies: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content=format_error_with_formatter(
-                    "NOT_FOUND", str(e), {"scope_type": scope_type, "scope_id": scope_id}
-                ),
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-            )
-    except Exception as e:
-        logger.error(f"Error analyzing dependencies: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to analyze dependencies",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
+    return {
+        "analysis": analysis_dict,
+    }
 
 
 @app.get("/dependencies/visualize", tags=["Dependencies"])
 async def visualize_dependencies(
     scope_type: str = Query(..., description="Scope type: 'project' or 'task_list'"),
-    scope_id: str = Query(..., description="UUID of the project or task list"),
-    format: str = Query(
-        "ascii", description="Visualization format: 'ascii', 'dot', or 'mermaid'"
-    ),  # pylint: disable=redefined-builtin
+    scope_id: str = Query(..., description="UUID of the project or task list to visualize"),
+    viz_format: str = Query(
+        "ascii", description="Visualization format: 'ascii', 'dot', or 'mermaid'", alias="format"
+    ),
 ) -> Dict[str, Any]:
-    """Visualize dependencies within a scope (project or task list).
+    """Visualize task dependency graph.
 
-    Generates a visualization of the dependency graph in the requested format.
+    Generates a visualization of the dependency graph in the specified format.
+    Supports ASCII art, Graphviz DOT format, and Mermaid diagram formats.
 
-    Query parameters:
-    - scope_type (required): Either "project" or "task_list"
-    - scope_id (required): UUID of the project or task list
-    - format (optional): Visualization format - "ascii", "dot", or "mermaid" (default: "ascii")
+    Args:
+        scope_type: Either "project" or "task_list" to specify the scope
+        scope_id: UUID of the project or task list to visualize
+        format: Visualization format - "ascii", "dot", or "mermaid" (default: "ascii")
 
     Returns:
         Dictionary with visualization string
 
-    Requirements: 5.1, 5.2, 5.3, 5.8, 5.9, 5.10
+    Raises:
+        400 VALIDATION_ERROR: If scope_type, scope_id, or format is invalid
+        404 NOT_FOUND: If scope_id does not exist
+
+    Requirements: 11.4, 11.5
     """
-    try:
-        from uuid import UUID
+    from uuid import UUID
 
-        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
-
-        # Validate scope_type
-        if scope_type not in ["project", "task_list"]:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    f"Invalid scope_type '{scope_type}'. Must be 'project' or 'task_list'",
-                    {
-                        "field": "scope_type",
-                        "valid_values": ["project", "task_list"],
-                    },
-                ),
-            )
-
-        # Validate format
-        valid_formats = ["ascii", "dot", "mermaid"]
-        if format not in valid_formats:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    f"Invalid format '{format}'. Must be one of: {', '.join(valid_formats)}",
-                    {"field": "format", "valid_values": valid_formats},
-                ),
-            )
-
-        # Parse scope_id
-        try:
-            scope_uuid = UUID(scope_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    "Invalid scope ID format",
-                    {"field": "scope_id"},
-                ),
-            )
-
-        # Create analyzer and generate visualization
-        analyzer = DependencyAnalyzer(data_store)
-
-        if format == "ascii":
-            visualization = analyzer.visualize_ascii(scope_type=scope_type, scope_id=scope_uuid)
-        elif format == "dot":
-            visualization = analyzer.visualize_dot(scope_type=scope_type, scope_id=scope_uuid)
-        elif format == "mermaid":
-            visualization = analyzer.visualize_mermaid(scope_type=scope_type, scope_id=scope_uuid)
-        else:
-            # Should not reach here due to validation above
-            visualization = ""
-
-        return {
-            "visualization": visualization,
-            "format": format,
-            "scope_type": scope_type,
-            "scope_id": scope_id,
-        }
-
-    except ValueError as e:
-        logger.warning(f"Error visualizing dependencies: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content=format_error_with_formatter(
-                    "NOT_FOUND", str(e), {"scope_type": scope_type, "scope_id": scope_id}
-                ),
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-            )
-    except Exception as e:
-        logger.error(f"Error visualizing dependencies: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to visualize dependencies",
-                    "details": {"error": str(e)},
-                }
-            },
+    # Validate format
+    valid_formats = ["ascii", "dot", "mermaid"]
+    if viz_format not in valid_formats:
+        raise ValueError(
+            f"Invalid format '{viz_format}'. Must be one of: {', '.join(valid_formats)}"
         )
 
+    # Parse scope_id
+    try:
+        scope_uuid = UUID(scope_id)
+    except ValueError:
+        raise ValueError(f"Invalid scope ID format: {scope_id}")
+
+    # Generate visualization based on format
+    visualization: str
+    if viz_format == "ascii":
+        visualization = orchestrators["dependency_analyzer"].visualize_ascii(scope_type, scope_uuid)
+    elif viz_format == "dot":
+        visualization = orchestrators["dependency_analyzer"].visualize_dot(scope_type, scope_uuid)
+    else:  # mermaid
+        visualization = orchestrators["dependency_analyzer"].visualize_mermaid(
+            scope_type, scope_uuid
+        )
+
+    return {
+        "visualization": visualization,
+    }
+
 
 # ============================================================================
-# Resource-Specific Dependency Analysis Endpoints (Legacy)
+# Agent Instructions Endpoint
 # ============================================================================
 
 
-@app.get("/projects/{project_id}/dependencies/analysis", tags=["Projects", "Dependencies"])
+@app.get("/tasks/{task_id}/agent-instructions", tags=["Agent Instructions"])
+async def get_agent_instructions(task_id: str) -> Dict[str, Any]:
+    """Get agent instructions for a task.
+
+    Generates context-aware agent instructions using a template hierarchy system.
+    The system searches for templates in this order:
+    1. Task-level template (highest priority)
+    2. Task list-level template
+    3. Project-level template
+    4. Serialized task details (fallback)
+
+    Templates support variable substitution using {property_name} format.
+    Supported variables: {id}, {title}, {description}, {status}, {priority}, {task_list_id}
+
+    Args:
+        task_id: UUID of the task to generate instructions for
+
+    Returns:
+        Dictionary with generated instructions
+
+    Raises:
+        400 VALIDATION_ERROR: If task_id format is invalid
+        404 NOT_FOUND: If task does not exist
+        500 STORAGE_ERROR: If template rendering fails
+
+    Requirements: 13.1, 13.2, 13.3, 13.4, 13.5
+    """
+    from uuid import UUID
+
+    # Parse task_id
+    try:
+        task_uuid = UUID(task_id)
+    except ValueError:
+        raise ValueError(f"Invalid task ID format: {task_id}")
+
+    # Get task from data store
+    task = data_store.get_task(task_uuid)
+
+    if task is None:
+        raise ValueError(f"Task with ID {task_id} does not exist")
+
+    # Generate agent instructions using template engine
+    try:
+        instructions = orchestrators["template"].get_agent_instructions(task)
+    except (ValueError, KeyError, RuntimeError) as e:
+        logger.error(f"Failed to generate agent instructions for task {task_id}: {e}")
+        raise RuntimeError(f"Failed to generate agent instructions: {str(e)}") from e
+
+    return {
+        "instructions": instructions,
+    }
+
+
+# ============================================================================
+# Alternative Endpoint Paths (for backwards compatibility and convenience)
+# ============================================================================
+
+
+@app.post("/search/tasks", tags=["Search"], include_in_schema=True)
+async def search_tasks_alt(
+    request: SearchCriteriaRequest = Body(
+        ...,
+        openapi_examples={
+            "text_search": {
+                "summary": "Search by text",
+                "value": {"query": "authentication", "limit": 10, "offset": 0},
+            }
+        },
+    )
+) -> Dict[str, Any]:
+    """Alternative path for task search: POST /search/tasks.
+
+    This is an alternative endpoint path for searching tasks.
+    See POST /tasks/search for full documentation.
+    """
+    return await search_tasks(request)
+
+
+@app.get("/ready-tasks", tags=["Ready Tasks"], include_in_schema=True)
+async def get_ready_tasks_alt(
+    scope_type: str = Query(..., description="Scope type: 'project' or 'task_list'"),
+    scope_id: str = Query(..., description="UUID of the project or task list to query"),
+) -> Dict[str, Any]:
+    """Alternative path for ready tasks: GET /ready-tasks.
+
+    This is an alternative endpoint path for getting ready tasks.
+    See GET /tasks/ready for full documentation.
+    """
+    return await get_ready_tasks(scope_type, scope_id)
+
+
+@app.get(
+    "/projects/{project_id}/dependencies/analysis", tags=["Dependencies"], include_in_schema=True
+)
 async def analyze_project_dependencies(project_id: str) -> Dict[str, Any]:
-    """Analyze dependencies for all tasks in a project.
+    """Alternative path for project dependency analysis: GET /projects/{project_id}/dependencies/analysis.
 
-    Performs comprehensive dependency analysis including:
-    - Critical path identification
-    - Bottleneck detection
-    - Leaf task identification
-    - Progress calculation
-    - Circular dependency detection
-
-    Args:
-        project_id: UUID of the project to analyze
-
-    Returns:
-        Dictionary with dependency analysis results
-
-    Requirements: 5.1, 5.2, 5.3, 5.7, 5.8
+    This is a convenience endpoint for analyzing dependencies within a specific project.
+    See GET /dependencies/analyze for full documentation.
     """
-    try:
-        from uuid import UUID
-
-        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
-
-        # Parse UUID
-        try:
-            project_uuid = UUID(project_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    "Invalid project ID format",
-                    {"field": "project_id"},
-                ),
-            )
-
-        # Create analyzer and perform analysis
-        analyzer = DependencyAnalyzer(data_store)
-        analysis = analyzer.analyze(scope_type="project", scope_id=project_uuid)
-
-        return {
-            "analysis": {
-                "critical_path": [str(task_id) for task_id in analysis.critical_path],
-                "critical_path_length": analysis.critical_path_length,
-                "bottleneck_tasks": [
-                    {"task_id": str(task_id), "blocked_count": count}
-                    for task_id, count in analysis.bottleneck_tasks
-                ],
-                "leaf_tasks": [str(task_id) for task_id in analysis.leaf_tasks],
-                "completion_progress": analysis.completion_progress,
-                "total_tasks": analysis.total_tasks,
-                "completed_tasks": analysis.completed_tasks,
-                "circular_dependencies": [
-                    [str(task_id) for task_id in cycle] for cycle in analysis.circular_dependencies
-                ],
-            },
-            "scope_type": "project",
-            "scope_id": project_id,
-        }
-
-    except ValueError as e:
-        logger.warning(f"Error analyzing project dependencies: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content=format_error_with_formatter(
-                    "NOT_FOUND", str(e), {"project_id": project_id}
-                ),
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-            )
-    except Exception as e:
-        logger.error(f"Error analyzing project dependencies: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to analyze project dependencies",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
+    return await analyze_dependencies(scope_type="project", scope_id=project_id)
 
 
-@app.get("/task-lists/{task_list_id}/dependencies/analysis", tags=["Task Lists", "Dependencies"])
-async def analyze_task_list_dependencies(task_list_id: str) -> Dict[str, Any]:
-    """Analyze dependencies for all tasks in a task list.
-
-    Performs comprehensive dependency analysis including:
-    - Critical path identification
-    - Bottleneck detection
-    - Leaf task identification
-    - Progress calculation
-    - Circular dependency detection
-
-    Args:
-        task_list_id: UUID of the task list to analyze
-
-    Returns:
-        Dictionary with dependency analysis results
-
-    Requirements: 5.1, 5.2, 5.3, 5.7, 5.8
-    """
-    try:
-        from uuid import UUID
-
-        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
-
-        # Parse UUID
-        try:
-            task_list_uuid = UUID(task_list_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    "Invalid task list ID format",
-                    {"field": "task_list_id"},
-                ),
-            )
-
-        # Create analyzer and perform analysis
-        analyzer = DependencyAnalyzer(data_store)
-        analysis = analyzer.analyze(scope_type="task_list", scope_id=task_list_uuid)
-
-        return {
-            "analysis": {
-                "critical_path": [str(task_id) for task_id in analysis.critical_path],
-                "critical_path_length": analysis.critical_path_length,
-                "bottleneck_tasks": [
-                    {"task_id": str(task_id), "blocked_count": count}
-                    for task_id, count in analysis.bottleneck_tasks
-                ],
-                "leaf_tasks": [str(task_id) for task_id in analysis.leaf_tasks],
-                "completion_progress": analysis.completion_progress,
-                "total_tasks": analysis.total_tasks,
-                "completed_tasks": analysis.completed_tasks,
-                "circular_dependencies": [
-                    [str(task_id) for task_id in cycle] for cycle in analysis.circular_dependencies
-                ],
-            },
-            "scope_type": "task_list",
-            "scope_id": task_list_id,
-        }
-
-    except ValueError as e:
-        logger.warning(f"Error analyzing task list dependencies: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content=format_error_with_formatter(
-                    "NOT_FOUND", str(e), {"task_list_id": task_list_id}
-                ),
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-            )
-    except Exception as e:
-        logger.error(f"Error analyzing task list dependencies: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to analyze task list dependencies",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-@app.get("/projects/{project_id}/dependencies/visualize", tags=["Projects", "Dependencies"])
+@app.get(
+    "/projects/{project_id}/dependencies/visualize", tags=["Dependencies"], include_in_schema=True
+)
 async def visualize_project_dependencies(
     project_id: str,
-    format: str = Query(
-        "ascii", description="Visualization format: 'ascii', 'dot', or 'mermaid'"
-    ),  # pylint: disable=redefined-builtin
+    viz_format: str = Query(
+        "ascii", description="Visualization format: 'ascii', 'dot', or 'mermaid'", alias="format"
+    ),
 ) -> Dict[str, Any]:
-    """Visualize dependencies for all tasks in a project.
+    """Alternative path for project dependency visualization: GET /projects/{project_id}/dependencies/visualize.
 
-    Generates a visualization of the dependency graph in the requested format.
-
-    Args:
-        project_id: UUID of the project to visualize
-
-    Query parameters:
-    - format (optional): Visualization format - "ascii", "dot", or "mermaid" (default: "ascii")
-
-    Returns:
-        Dictionary with visualization string
-
-    Requirements: 5.4, 5.5, 5.6
+    This is a convenience endpoint for visualizing dependencies within a specific project.
+    See GET /dependencies/visualize for full documentation.
     """
-    try:
-        from uuid import UUID
-
-        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
-
-        # Validate format
-        valid_formats = ["ascii", "dot", "mermaid"]
-        if format not in valid_formats:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    f"Invalid format '{format}'. Must be one of: {', '.join(valid_formats)}",
-                    {"field": "format", "valid_values": valid_formats},
-                ),
-            )
-
-        # Parse UUID
-        try:
-            project_uuid = UUID(project_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    "Invalid project ID format",
-                    {"field": "project_id"},
-                ),
-            )
-
-        # Create analyzer and generate visualization
-        analyzer = DependencyAnalyzer(data_store)
-
-        if format == "ascii":
-            visualization = analyzer.visualize_ascii(scope_type="project", scope_id=project_uuid)
-        elif format == "dot":
-            visualization = analyzer.visualize_dot(scope_type="project", scope_id=project_uuid)
-        elif format == "mermaid":
-            visualization = analyzer.visualize_mermaid(scope_type="project", scope_id=project_uuid)
-        else:
-            # Should not reach here due to validation above
-            visualization = ""
-
-        return {
-            "visualization": visualization,
-            "format": format,
-            "scope_type": "project",
-            "scope_id": project_id,
-        }
-
-    except ValueError as e:
-        logger.warning(f"Error visualizing project dependencies: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content=format_error_with_formatter(
-                    "NOT_FOUND", str(e), {"project_id": project_id}
-                ),
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-            )
-    except Exception as e:
-        logger.error(f"Error visualizing project dependencies: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to visualize project dependencies",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
+    return await visualize_dependencies(
+        scope_type="project", scope_id=project_id, viz_format=viz_format
+    )
 
 
-@app.get("/task-lists/{task_list_id}/dependencies/visualize", tags=["Task Lists", "Dependencies"])
+@app.get(
+    "/task-lists/{task_list_id}/dependencies/analysis",
+    tags=["Dependencies"],
+    include_in_schema=True,
+)
+async def analyze_task_list_dependencies(task_list_id: str) -> Dict[str, Any]:
+    """Alternative path for task list dependency analysis: GET /task-lists/{task_list_id}/dependencies/analysis.
+
+    This is a convenience endpoint for analyzing dependencies within a specific task list.
+    See GET /dependencies/analyze for full documentation.
+    """
+    return await analyze_dependencies(scope_type="task_list", scope_id=task_list_id)
+
+
+@app.get(
+    "/task-lists/{task_list_id}/dependencies/visualize",
+    tags=["Dependencies"],
+    include_in_schema=True,
+)
 async def visualize_task_list_dependencies(
     task_list_id: str,
-    format: str = Query(
-        "ascii", description="Visualization format: 'ascii', 'dot', or 'mermaid'"
-    ),  # pylint: disable=redefined-builtin
+    viz_format: str = Query(
+        "ascii", description="Visualization format: 'ascii', 'dot', or 'mermaid'", alias="format"
+    ),
 ) -> Dict[str, Any]:
-    """Visualize dependencies for all tasks in a task list.
+    """Alternative path for task list dependency visualization: GET /task-lists/{task_list_id}/dependencies/visualize.
 
-    Generates a visualization of the dependency graph in the requested format.
-
-    Args:
-        task_list_id: UUID of the task list to visualize
-
-    Query parameters:
-    - format (optional): Visualization format - "ascii", "dot", or "mermaid" (default: "ascii")
-
-    Returns:
-        Dictionary with visualization string
-
-    Requirements: 5.4, 5.5, 5.6
+    This is a convenience endpoint for visualizing dependencies within a specific task list.
+    See GET /dependencies/visualize for full documentation.
     """
-    try:
-        from uuid import UUID
-
-        from task_manager.orchestration.dependency_analyzer import DependencyAnalyzer
-
-        # Validate format
-        valid_formats = ["ascii", "dot", "mermaid"]
-        if format not in valid_formats:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    f"Invalid format '{format}'. Must be one of: {', '.join(valid_formats)}",
-                    {"field": "format", "valid_values": valid_formats},
-                ),
-            )
-
-        # Parse UUID
-        try:
-            task_list_uuid = UUID(task_list_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter(
-                    "VALIDATION_ERROR",
-                    "Invalid task list ID format",
-                    {"field": "task_list_id"},
-                ),
-            )
-
-        # Create analyzer and generate visualization
-        analyzer = DependencyAnalyzer(data_store)
-
-        if format == "ascii":
-            visualization = analyzer.visualize_ascii(
-                scope_type="task_list", scope_id=task_list_uuid
-            )
-        elif format == "dot":
-            visualization = analyzer.visualize_dot(scope_type="task_list", scope_id=task_list_uuid)
-        elif format == "mermaid":
-            visualization = analyzer.visualize_mermaid(
-                scope_type="task_list", scope_id=task_list_uuid
-            )
-        else:
-            # Should not reach here due to validation above
-            visualization = ""
-
-        return {
-            "visualization": visualization,
-            "format": format,
-            "scope_type": "task_list",
-            "scope_id": task_list_id,
-        }
-
-    except ValueError as e:
-        logger.warning(f"Error visualizing task list dependencies: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content=format_error_with_formatter(
-                    "NOT_FOUND", str(e), {"task_list_id": task_list_id}
-                ),
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content=format_error_with_formatter("VALIDATION_ERROR", str(e), {}),
-            )
-    except Exception as e:
-        logger.error(f"Error visualizing task list dependencies: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to visualize task list dependencies",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
-
-
-# ============================================================================
-# Ready Tasks Endpoint
-# ============================================================================
-
-
-@app.get("/ready-tasks", tags=["Tasks"])
-async def get_ready_tasks(
-    scope_type: str = Query(..., description="Scope type: 'project' or 'task_list'"),
-    scope_id: str = Query(..., description="UUID of the project or task list"),
-) -> Dict[str, Any]:
-    """Get ready tasks for a project or task list.
-
-    A task is "ready" if it has no dependencies or all dependencies are completed.
-
-    Query parameters:
-    - scope_type (required): Either "project" or "task_list"
-    - scope_id (required): UUID of the project or task list
-
-    Returns:
-        Dictionary with list of ready tasks
-
-    Requirements: 12.4
-    """
-    try:
-        from uuid import UUID
-
-        # Validate scope_type
-        if scope_type not in ["project", "task_list"]:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": f"Invalid scope_type '{scope_type}'. Must be 'project' or 'task_list'",
-                        "details": {
-                            "field": "scope_type",
-                            "valid_values": ["project", "task_list"],
-                        },
-                    }
-                },
-            )
-
-        # Parse scope_id
-        try:
-            scope_uuid = UUID(scope_id)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Invalid scope ID format",
-                        "details": {"field": "scope_id"},
-                    }
-                },
-            )
-
-        # Get ready tasks
-        ready_tasks = dependency_orchestrator.get_ready_tasks(
-            scope_type=scope_type, scope_id=scope_uuid
-        )
-
-        return {
-            "ready_tasks": [_serialize_task(task) for task in ready_tasks],
-            "scope_type": scope_type,
-            "scope_id": scope_id,
-            "count": len(ready_tasks),
-        }
-
-    except ValueError as e:
-        logger.warning(f"Error getting ready tasks: {e}")
-        # Check if it's a not found error
-        if "does not exist" in str(e):
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": str(e),
-                        "details": {"scope_type": scope_type, "scope_id": scope_id},
-                    }
-                },
-            )
-        else:
-            return JSONResponse(
-                status_code=400,
-                content={"error": {"code": "VALIDATION_ERROR", "message": str(e), "details": {}}},
-            )
-    except Exception as e:
-        logger.error(f"Error getting ready tasks: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "STORAGE_ERROR",
-                    "message": "Failed to get ready tasks",
-                    "details": {"error": str(e)},
-                }
-            },
-        )
+    return await visualize_dependencies(
+        scope_type="task_list", scope_id=task_list_id, viz_format=viz_format
+    )

@@ -52,9 +52,14 @@ def test_root_endpoint(test_client):
     assert response.status_code == 200
     data = response.json()
     assert "message" in data
+    assert "name" in data
     assert "version" in data
-    assert "docs" in data
-    assert data["message"] == "Task Management System API"
+    assert "description" in data
+    assert "docs_url" in data
+    assert "redoc_url" in data
+    assert data["message"] == "Welcome to Task Management System API"
+    assert data["name"] == "Task Management System API"
+    assert data["version"] == "0.1.0-alpha"
 
 
 def test_health_endpoint(test_client):
@@ -181,7 +186,7 @@ def test_create_project(test_client):
         "/projects", json={"name": "Test Project", "agent_instructions_template": "Test template"}
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     data = response.json()
     assert "project" in data
 
@@ -234,7 +239,7 @@ def test_create_project_duplicate_name(test_client):
     """
     # Create first project
     response1 = test_client.post("/projects", json={"name": "Duplicate Project"})
-    assert response1.status_code == 200
+    assert response1.status_code == 201
 
     # Try to create second project with same name
     response2 = test_client.post("/projects", json={"name": "Duplicate Project"})
@@ -253,7 +258,7 @@ def test_get_project(test_client):
     """
     # Create a project first
     create_response = test_client.post("/projects", json={"name": "Get Test Project"})
-    assert create_response.status_code == 200
+    assert create_response.status_code == 201
     project_id = create_response.json()["project"]["id"]
 
     # Get the project
@@ -304,7 +309,7 @@ def test_update_project(test_client):
     """
     # Create a project first
     create_response = test_client.post("/projects", json={"name": "Original Name"})
-    assert create_response.status_code == 200
+    assert create_response.status_code == 201
     project_id = create_response.json()["project"]["id"]
 
     # Update the project
@@ -349,7 +354,7 @@ def test_update_project_invalid_name(test_client):
     """
     # Create a project first
     create_response = test_client.post("/projects", json={"name": "Test Project"})
-    assert create_response.status_code == 200
+    assert create_response.status_code == 201
     project_id = create_response.json()["project"]["id"]
 
     # Try to update with empty name
@@ -368,7 +373,7 @@ def test_delete_project(test_client):
     """
     # Create a project first
     create_response = test_client.post("/projects", json={"name": "Project to Delete"})
-    assert create_response.status_code == 200
+    assert create_response.status_code == 201
     project_id = create_response.json()["project"]["id"]
 
     # Delete the project
@@ -377,7 +382,7 @@ def test_delete_project(test_client):
     assert response.status_code == 200
     data = response.json()
     assert "message" in data
-    assert "Project deleted successfully" in data["message"]
+    assert "deleted successfully" in data["message"]
 
     # Verify project was deleted
     get_response = test_client.get(f"/projects/{project_id}")
@@ -450,14 +455,18 @@ def test_list_task_lists_filtered_by_project(test_client):
     """
     # Create a project
     project_response = test_client.post("/projects", json={"name": "Filter Test Project"})
-    assert project_response.status_code == 200
+    assert project_response.status_code == 201
     project_id = project_response.json()["project"]["id"]
 
+    # Get Chore project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    chore_project = next(p for p in projects if p["name"] == "Chore")
+    chore_project_id = chore_project["id"]
+
     # Create task lists in different projects
-    test_client.post(
-        "/task-lists", json={"name": "Task List 1", "project_name": "Filter Test Project"}
-    )
-    test_client.post("/task-lists", json={"name": "Task List 2"})  # Goes to Chore
+    test_client.post("/task-lists", json={"name": "Task List 1", "project_id": project_id})
+    test_client.post("/task-lists", json={"name": "Task List 2", "project_id": chore_project_id})
 
     # List task lists filtered by project
     response = test_client.get(f"/task-lists?project_id={project_id}")
@@ -471,13 +480,22 @@ def test_list_task_lists_filtered_by_project(test_client):
 
 
 def test_create_task_list_default_to_chore(test_client):
-    """Test creating a task list without project defaults to Chore.
+    """Test creating a task list with Chore project ID.
 
     Requirements: 12.2
     """
-    response = test_client.post("/task-lists", json={"name": "Default Task List"})
+    # Get Chore project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    chore_project = next(p for p in projects if p["name"] == "Chore")
+    chore_project_id = chore_project["id"]
 
-    assert response.status_code == 200
+    # Create task list with Chore project ID
+    response = test_client.post(
+        "/task-lists", json={"name": "Default Task List", "project_id": chore_project_id}
+    )
+
+    assert response.status_code == 201
     data = response.json()
     assert "task_list" in data
 
@@ -489,22 +507,26 @@ def test_create_task_list_default_to_chore(test_client):
     assert "updated_at" in task_list
 
     # Verify it's under Chore project
-    projects_response = test_client.get("/projects")
-    projects = projects_response.json()["projects"]
-    chore_project = next(p for p in projects if p["name"] == "Chore")
-    assert task_list["project_id"] == chore_project["id"]
+    assert task_list["project_id"] == chore_project_id
 
 
 def test_create_task_list_repeatable(test_client):
-    """Test creating a repeatable task list assigns to Repeatable project.
+    """Test creating a task list with Repeatable project ID.
 
     Requirements: 12.2
     """
+    # Get Repeatable project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    repeatable_project = next(p for p in projects if p["name"] == "Repeatable")
+    repeatable_project_id = repeatable_project["id"]
+
+    # Create task list with Repeatable project ID
     response = test_client.post(
-        "/task-lists", json={"name": "Repeatable Task List", "repeatable": True}
+        "/task-lists", json={"name": "Repeatable Task List", "project_id": repeatable_project_id}
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     data = response.json()
     assert "task_list" in data
 
@@ -512,27 +534,30 @@ def test_create_task_list_repeatable(test_client):
     assert task_list["name"] == "Repeatable Task List"
 
     # Verify it's under Repeatable project
-    projects_response = test_client.get("/projects")
-    projects = projects_response.json()["projects"]
-    repeatable_project = next(p for p in projects if p["name"] == "Repeatable")
-    assert task_list["project_id"] == repeatable_project["id"]
+    assert task_list["project_id"] == repeatable_project_id
 
 
-def test_create_task_list_with_project_name(test_client):
-    """Test creating a task list with specified project name.
+def test_create_task_list_with_project_id(test_client):
+    """Test creating a task list with specified project ID.
 
     Requirements: 12.2
     """
+    # Create a custom project first
+    project_response = test_client.post("/projects", json={"name": "Custom Project"})
+    assert project_response.status_code == 201
+    custom_project_id = project_response.json()["project"]["id"]
+
+    # Create task list with custom project ID
     response = test_client.post(
         "/task-lists",
         json={
             "name": "Custom Project Task List",
-            "project_name": "Custom Project",
+            "project_id": custom_project_id,
             "agent_instructions_template": "Test template",
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     data = response.json()
     assert "task_list" in data
 
@@ -540,12 +565,8 @@ def test_create_task_list_with_project_name(test_client):
     assert task_list["name"] == "Custom Project Task List"
     assert task_list["agent_instructions_template"] == "Test template"
 
-    # Verify project was created
-    projects_response = test_client.get("/projects")
-    projects = projects_response.json()["projects"]
-    custom_project = next((p for p in projects if p["name"] == "Custom Project"), None)
-    assert custom_project is not None
-    assert task_list["project_id"] == custom_project["id"]
+    # Verify it's under the custom project
+    assert task_list["project_id"] == custom_project_id
 
 
 def test_create_task_list_missing_name(test_client):
@@ -580,9 +601,17 @@ def test_get_task_list(test_client):
 
     Requirements: 12.2
     """
+    # Get Chore project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    chore_project = next(p for p in projects if p["name"] == "Chore")
+    chore_project_id = chore_project["id"]
+
     # Create a task list first
-    create_response = test_client.post("/task-lists", json={"name": "Get Test Task List"})
-    assert create_response.status_code == 200
+    create_response = test_client.post(
+        "/task-lists", json={"name": "Get Test Task List", "project_id": chore_project_id}
+    )
+    assert create_response.status_code == 201
     task_list_id = create_response.json()["task_list"]["id"]
 
     # Get the task list
@@ -631,9 +660,17 @@ def test_update_task_list(test_client):
 
     Requirements: 12.2
     """
+    # Get Chore project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    chore_project = next(p for p in projects if p["name"] == "Chore")
+    chore_project_id = chore_project["id"]
+
     # Create a task list first
-    create_response = test_client.post("/task-lists", json={"name": "Original Task List Name"})
-    assert create_response.status_code == 200
+    create_response = test_client.post(
+        "/task-lists", json={"name": "Original Task List Name", "project_id": chore_project_id}
+    )
+    assert create_response.status_code == 201
     task_list_id = create_response.json()["task_list"]["id"]
 
     # Update the task list
@@ -675,9 +712,17 @@ def test_update_task_list_invalid_name(test_client):
 
     Requirements: 12.2, 12.5
     """
+    # Get Chore project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    chore_project = next(p for p in projects if p["name"] == "Chore")
+    chore_project_id = chore_project["id"]
+
     # Create a task list first
-    create_response = test_client.post("/task-lists", json={"name": "Test Task List"})
-    assert create_response.status_code == 200
+    create_response = test_client.post(
+        "/task-lists", json={"name": "Test Task List", "project_id": chore_project_id}
+    )
+    assert create_response.status_code == 201
     task_list_id = create_response.json()["task_list"]["id"]
 
     # Try to update with empty name
@@ -694,9 +739,17 @@ def test_delete_task_list(test_client):
 
     Requirements: 12.2
     """
+    # Get Chore project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    chore_project = next(p for p in projects if p["name"] == "Chore")
+    chore_project_id = chore_project["id"]
+
     # Create a task list first
-    create_response = test_client.post("/task-lists", json={"name": "Task List to Delete"})
-    assert create_response.status_code == 200
+    create_response = test_client.post(
+        "/task-lists", json={"name": "Task List to Delete", "project_id": chore_project_id}
+    )
+    assert create_response.status_code == 201
     task_list_id = create_response.json()["task_list"]["id"]
 
     # Delete the task list
@@ -705,7 +758,7 @@ def test_delete_task_list(test_client):
     assert response.status_code == 200
     data = response.json()
     assert "message" in data
-    assert "Task list deleted successfully" in data["message"]
+    assert "deleted successfully" in data["message"]
 
     # Verify task list was deleted
     get_response = test_client.get(f"/task-lists/{task_list_id}")
@@ -733,9 +786,17 @@ def test_reset_task_list_not_repeatable(test_client):
 
     Requirements: 12.2, 12.5
     """
+    # Get Chore project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    chore_project = next(p for p in projects if p["name"] == "Chore")
+    chore_project_id = chore_project["id"]
+
     # Create a task list under Chore (not repeatable)
-    create_response = test_client.post("/task-lists", json={"name": "Non-Repeatable Task List"})
-    assert create_response.status_code == 200
+    create_response = test_client.post(
+        "/task-lists", json={"name": "Non-Repeatable Task List", "project_id": chore_project_id}
+    )
+    assert create_response.status_code == 201
     task_list_id = create_response.json()["task_list"]["id"]
 
     # Try to reset it
@@ -753,11 +814,18 @@ def test_reset_task_list_with_incomplete_tasks(test_client):
 
     Requirements: 12.2, 12.5
     """
+    # Get Repeatable project ID
+    projects_response = test_client.get("/projects")
+    projects = projects_response.json()["projects"]
+    repeatable_project = next(p for p in projects if p["name"] == "Repeatable")
+    repeatable_project_id = repeatable_project["id"]
+
     # Create a repeatable task list
     create_response = test_client.post(
-        "/task-lists", json={"name": "Repeatable with Incomplete", "repeatable": True}
+        "/task-lists",
+        json={"name": "Repeatable with Incomplete", "project_id": repeatable_project_id},
     )
-    assert create_response.status_code == 200
+    assert create_response.status_code == 201
     task_list_id = create_response.json()["task_list"]["id"]
 
     # Try to reset it (should fail because no tasks or tasks are incomplete)

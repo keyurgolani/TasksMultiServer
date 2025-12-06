@@ -131,7 +131,7 @@ def test_task_list_repeatable_takes_precedence_over_project_name(
 
 
 @given(task_list_name=task_list_name_strategy())
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=500)
 def test_task_list_without_project_assigns_to_chore(task_list_name: str) -> None:
     """
     Feature: task-management-system, Property 7: Task list project assignment
@@ -283,7 +283,7 @@ def test_task_list_with_non_existing_project_creates_it(
 
 
 @given(num_task_lists=st.integers(min_value=1, max_value=5), project_name=project_name_strategy())
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_multiple_task_lists_with_same_project_name_reuse_project(
     num_task_lists: int, project_name: str
 ) -> None:

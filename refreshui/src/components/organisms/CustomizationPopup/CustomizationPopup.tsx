@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Check } from "lucide-react";
+import { X, Check, RotateCcw } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { LivePreviewPanel } from "../LivePreviewPanel";
 import { EffectsControlPanel } from "../EffectsControlPanel";
@@ -16,6 +16,14 @@ import {
   fontThemes,
   defaultEffectSettings,
 } from "../../../styles/themes";
+
+/**
+ * Curated default theme settings
+ * These are the recommended defaults that provide a good starting point
+ */
+export const curatedDefaultColorScheme = colorThemes.dark;
+export const curatedDefaultTypography = fontThemes.inter;
+export const curatedDefaultEffects: EffectSettings = { ...defaultEffectSettings };
 
 /**
  * CustomizationPopup Organism Component
@@ -56,6 +64,8 @@ export interface CustomizationPopupProps {
   onEffectsChange?: (key: keyof EffectSettings, value: number) => void;
   /** Callback when all changes are applied (Apply button clicked) */
   onApply?: (colorScheme: ColorTheme, typography: FontTheme, effects: EffectSettings) => void;
+  /** Callback when reset to defaults is clicked - resets all settings to curated defaults */
+  onResetToDefaults?: () => void;
   /** Additional CSS classes */
   className?: string;
 }
@@ -84,6 +94,7 @@ const CustomizationPopupContent: React.FC<CustomizationPopupProps> = ({
   onTypographyChange,
   onEffectsChange,
   onApply,
+  onResetToDefaults,
   className,
 }) => {
   const popupRef = useRef<HTMLDivElement>(null);
@@ -123,6 +134,21 @@ const CustomizationPopupContent: React.FC<CustomizationPopupProps> = ({
     }
     onClose();
   }, [pendingColorScheme, pendingTypography, pendingEffects, onColorSchemeChange, onTypographyChange, onEffectsChange, onApply, onClose]);
+
+  // Handle Reset to Defaults action - restore curated default values in preview only (Requirements 10.1, 10.2, 10.3)
+  // The main UI will only change when the user clicks Apply
+  const handleResetToDefaults = useCallback(() => {
+    // Update local preview state to defaults - this only affects the preview panel
+    // The main UI remains unchanged until the user clicks Apply
+    setPendingColorScheme(curatedDefaultColorScheme);
+    setPendingTypography(curatedDefaultTypography);
+    setPendingEffects({ ...curatedDefaultEffects });
+    
+    // Call the onResetToDefaults callback if provided (for any additional handling)
+    if (onResetToDefaults) {
+      onResetToDefaults();
+    }
+  }, [onResetToDefaults]);
 
   // Handle outside click - treat as Cancel (Requirement 52.5)
   const handleOutsideClick = useCallback(() => {
@@ -341,30 +367,45 @@ const CustomizationPopupContent: React.FC<CustomizationPopupProps> = ({
               </div>
             </div>
 
-            {/* Footer with Apply and Cancel buttons (Requirement 52.1) */}
+            {/* Footer with Reset to Defaults, Apply and Cancel buttons (Requirements 10.1, 52.1) */}
             <div
-              className="flex-shrink-0 flex items-center justify-end gap-3 px-6 py-3 border-t border-[var(--border)]"
+              className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-t border-[var(--border)]"
               style={{ backgroundColor: "var(--bg-surface)" }}
               data-testid="customization-popup-footer"
             >
+              {/* Reset to Defaults button on the left (Requirement 10.1) */}
               <Button
-                variant="secondary"
+                variant="ghost"
                 size="md"
-                onClick={handleCancel}
-                data-testid="customization-popup-cancel"
+                onClick={handleResetToDefaults}
+                data-testid="customization-popup-reset"
+                title="Reset all settings to curated default values"
               >
-                <X size={16} className="mr-2" />
-                Cancel
+                <RotateCcw size={16} className="mr-2" />
+                Reset to Defaults
               </Button>
-              <Button
-                variant="primary"
-                size="md"
-                onClick={handleApply}
-                data-testid="customization-popup-apply"
-              >
-                <Check size={16} className="mr-2" />
-                Apply
-              </Button>
+              
+              {/* Apply and Cancel buttons on the right */}
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={handleCancel}
+                  data-testid="customization-popup-cancel"
+                >
+                  <X size={16} className="mr-2" />
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={handleApply}
+                  data-testid="customization-popup-apply"
+                >
+                  <Check size={16} className="mr-2" />
+                  Apply
+                </Button>
+              </div>
             </div>
           </motion.div>
         </div>
@@ -413,6 +454,7 @@ export const CustomizationPopup: React.FC<CustomizationPopupProps> = ({
   onTypographyChange,
   onEffectsChange,
   onApply,
+  onResetToDefaults,
   className,
 }) => {
   // Generate a new key each time the popup opens to ensure fresh state
@@ -434,6 +476,7 @@ export const CustomizationPopup: React.FC<CustomizationPopupProps> = ({
       onTypographyChange={onTypographyChange}
       onEffectsChange={onEffectsChange}
       onApply={onApply}
+      onResetToDefaults={onResetToDefaults}
       className={className}
     />
   );

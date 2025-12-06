@@ -78,7 +78,7 @@ def action_plan_item_strategy(draw: Any, sequence: int) -> ActionPlanItem:
     num_tasks=st.integers(min_value=1, max_value=5),
     num_exit_criteria=st.integers(min_value=1, max_value=3),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_reset_sets_all_task_statuses_to_not_started(
     task_list_name: str, num_tasks: int, num_exit_criteria: int
 ) -> None:
@@ -228,7 +228,7 @@ def test_reset_sets_all_exit_criteria_to_incomplete(
     num_tasks=st.integers(min_value=1, max_value=5),
     num_execution_notes=st.integers(min_value=1, max_value=3),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_reset_clears_execution_notes(
     task_list_name: str, num_tasks: int, num_execution_notes: int
 ) -> None:

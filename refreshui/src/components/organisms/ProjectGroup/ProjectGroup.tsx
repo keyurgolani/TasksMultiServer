@@ -17,13 +17,11 @@ export type TaskListLayoutType = "list" | "masonry";
 /**
  * Default breakpoints for masonry layout columns
  * - 1 column below 600px
- * - 2 columns 600-1200px
- * - 3 columns above 1200px
+ * - 2 columns above 600px (capped at 2 to fit grouping width)
  */
 const MASONRY_COLUMN_BREAKPOINTS: Record<number, number> = {
   0: 1,
   600: 2,
-  1200: 3,
 };
 
 /**
@@ -105,6 +103,16 @@ export interface ProjectGroupProps {
    * Only used when taskListLayout is "masonry"
    */
   masonryBreakpoints?: Record<number, number>;
+  /**
+   * Enable parallax tilt effect on TaskListCards
+   * @default false
+   */
+  enableCardTilt?: boolean;
+  /**
+   * Enable spotlight effect on TaskListCards
+   * @default false
+   */
+  enableCardSpotlight?: boolean;
   /** Additional CSS classes */
   className?: string;
 }
@@ -143,6 +151,8 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
   onTaskListDelete,
   taskListLayout = "list",
   masonryBreakpoints = MASONRY_COLUMN_BREAKPOINTS,
+  enableCardTilt = false,
+  enableCardSpotlight = false,
   className,
 }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
@@ -212,18 +222,19 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
 
   return (
     <div
-      className={cn("space-y-[var(--space-3)]", className)}
+      className={cn("space-y-2", className)} // Reduced margin-bottom: 8px per Requirements 21.3
       data-testid="project-group"
     >
-      {/* Collapsible Header */}
+      {/* Collapsible Header - Compact styling per Requirements 21.1, 21.3 */}
       <Card
         variant="glass"
-        padding="md"
+        padding="none"
         className={cn(
           "cursor-pointer",
           "hover:shadow-lg",
           "transition-all",
-          "duration-[var(--duration-normal)]"
+          "duration-[var(--duration-normal)]",
+          "py-2 px-3" // Compact padding: 8px 12px
         )}
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
@@ -236,10 +247,10 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
       >
         <div className="flex items-center justify-between">
           {/* Left side: Chevron and Project Name */}
-          <div className="flex items-center gap-[var(--space-3)]">
+          <div className="flex items-center gap-[var(--space-2)]">
             <Icon
               name={isExpanded ? "ChevronDown" : "ChevronRight"}
-              size="md"
+              size="sm"
               className={cn(
                 "text-[var(--text-muted)]",
                 "transition-transform",
@@ -249,9 +260,9 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
             />
             <div>
               <Typography
-                variant="h5"
+                variant="body-sm"
                 color="primary"
-                className="line-clamp-1"
+                className="line-clamp-1 font-semibold"
                 data-testid="project-group-name"
               >
                 {project.name}
@@ -260,7 +271,7 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
                 <Typography
                   variant="caption"
                   color="muted"
-                  className="line-clamp-1 mt-1"
+                  className="line-clamp-1 text-xs"
                   data-testid="project-group-description"
                 >
                   {project.description}
@@ -269,16 +280,16 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
             </div>
           </div>
 
-          {/* Right side: Task List Count and Stats */}
-          <div className="flex items-center gap-[var(--space-4)]">
+          {/* Right side: Task List Count and Stats - Compact styling */}
+          <div className="flex items-center gap-[var(--space-3)]">
             {/* Task List Count Badge */}
             <div
               className={cn(
                 "flex",
                 "items-center",
-                "gap-[var(--space-2)]",
-                "px-[var(--space-3)]",
-                "py-[var(--space-1)]",
+                "gap-[var(--space-1)]",
+                "px-2",
+                "py-0.5",
                 "rounded-full",
                 "bg-[var(--bg-surface)]",
                 "border",
@@ -291,7 +302,7 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
                 size="sm"
                 className="text-[var(--text-muted)]"
               />
-              <Typography variant="body-sm" color="secondary">
+              <Typography variant="caption" color="secondary">
                 {taskListCount} {taskListCount === 1 ? "list" : "lists"}
               </Typography>
             </div>
@@ -299,11 +310,11 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
             {/* Progress indicator (when stats available) */}
             {stats && stats.totalTasks > 0 && (
               <div
-                className="flex items-center gap-[var(--space-2)]"
+                className="flex items-center gap-[var(--space-1)]"
                 data-testid="project-group-progress"
               >
                 <div
-                  className="w-16 h-2 bg-[var(--progress-bar-bg)] rounded-full overflow-hidden"
+                  className="w-12 h-1.5 bg-[var(--progress-bar-bg)] rounded-full overflow-hidden"
                   data-testid="project-group-progress-bar"
                 >
                   <div
@@ -322,6 +333,7 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
                 <Typography
                   variant="caption"
                   color="muted"
+                  className="text-xs"
                   data-testid="project-group-completion-text"
                 >
                   {completionPercentage}%
@@ -337,7 +349,6 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
         <div
           id={`project-group-content-${project.id}`}
           className={cn(
-            "pl-[var(--space-6)]",
             "animate-in",
             "fade-in",
             "slide-in-from-top-2",
@@ -349,7 +360,7 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
             taskListLayout === "masonry" ? (
               /* Masonry Grid Layout */
               <div
-                className="flex gap-[var(--space-3)]"
+                className="flex gap-[var(--space-3)] w-fit"
                 data-testid="project-group-masonry-grid"
                 data-layout="masonry"
                 data-columns={columnCount}
@@ -357,7 +368,7 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
                 {columns.map((column, columnIndex) => (
                   <div
                     key={`column-${columnIndex}`}
-                    className="flex-1 flex flex-col gap-[var(--space-3)] min-w-0"
+                    className="flex flex-col gap-[var(--space-3)] w-[425px]"
                     data-testid={`project-group-masonry-column-${columnIndex}`}
                   >
                     {column.items.map((item) => (
@@ -368,8 +379,8 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
                         onClick={() => onTaskListClick?.((item as TaskListMasonryItem).taskList.id)}
                         onEdit={onTaskListEdit}
                         onDelete={onTaskListDelete}
-                        spotlight={false}
-                        tilt={false}
+                        spotlight={enableCardSpotlight}
+                        tilt={enableCardTilt}
                       />
                     ))}
                   </div>
@@ -390,8 +401,8 @@ export const ProjectGroup: React.FC<ProjectGroupProps> = ({
                     onClick={() => onTaskListClick?.(taskList.id)}
                     onEdit={onTaskListEdit}
                     onDelete={onTaskListDelete}
-                    spotlight={false}
-                    tilt={false}
+                    spotlight={enableCardSpotlight}
+                    tilt={enableCardTilt}
                   />
                 ))}
               </div>

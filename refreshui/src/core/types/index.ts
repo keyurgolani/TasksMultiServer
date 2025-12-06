@@ -11,6 +11,7 @@ export type {
   TaskDependency,
   ExitCriterion,
   Note,
+  ActionPlanItem,
   TaskStatus,
   TaskPriority,
 } from './entities';

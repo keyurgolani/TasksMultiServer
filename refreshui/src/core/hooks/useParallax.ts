@@ -105,15 +105,20 @@ export const calculateParallaxRotation = (
 };
 
 /**
- * Convert theme parallax strength (0-100) to max rotation degrees (0-15)
+ * Convert theme parallax strength (0-100) to max rotation degrees (0-10)
+ * 
+ * Requirements: 1.18, 3.7, 4.9, 5.7, 6.9, 7.8
+ * - Maximum tilt capped at ~8-10 degrees (avoid excessive rotation)
+ * - Default parallax strength of 20-30 out of 100
  * 
  * @param parallaxStrength - Theme parallax strength value (0-100)
- * @returns Maximum rotation angle in degrees
+ * @returns Maximum rotation angle in degrees (0-10)
  */
 export const parallaxStrengthToMaxRotation = (parallaxStrength: number): number => {
-  // Convert 0-100 range to 0-15 degrees
-  // This provides a reasonable range where 100 = 15 degrees max tilt
-  return (parallaxStrength / 100) * 15;
+  // Convert 0-100 range to 0-10 degrees
+  // This provides a professional range where 100 = 10 degrees max tilt
+  // At default strength 25, max tilt is 2.5 degrees (subtle and professional)
+  return (parallaxStrength / 100) * 10;
 };
 
 /**

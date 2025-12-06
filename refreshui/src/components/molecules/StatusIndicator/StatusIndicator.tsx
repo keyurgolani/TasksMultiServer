@@ -40,22 +40,26 @@ const sizeStyles = {
   lg: "w-4 h-4",
 };
 
-const statusColors: Record<StatusType, { bg: string; shadow: string }> = {
+const statusColors: Record<StatusType, { bg: string; shadow: string; border?: string }> = {
   not_started: {
-    bg: "bg-gray-400",
+    bg: "bg-[var(--status-not-started-bg,#9ca3af)]",
     shadow: "shadow-[0_0_4px_rgba(156,163,175,0.5)]",
+    border: "ring-1 ring-[var(--status-indicator-border,rgba(0,0,0,0.15))]",
   },
   in_progress: {
     bg: "bg-[var(--warning)]",
     shadow: "shadow-[0_0_8px_var(--warning)]",
+    border: "ring-1 ring-[var(--status-indicator-border,transparent)]",
   },
   completed: {
     bg: "bg-[var(--success)]",
     shadow: "shadow-[0_0_8px_var(--success)]",
+    border: "ring-1 ring-[var(--status-indicator-border,transparent)]",
   },
   blocked: {
     bg: "bg-[var(--error)]",
     shadow: "shadow-[0_0_8px_var(--error)]",
+    border: "ring-1 ring-[var(--status-indicator-border,transparent)]",
   },
 };
 
@@ -93,6 +97,8 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         // Color
         colors.bg,
         colors.shadow,
+        // Border for contrast in light themes
+        colors.border,
         // Additional classes
         className
       )}

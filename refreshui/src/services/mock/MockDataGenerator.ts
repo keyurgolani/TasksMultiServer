@@ -16,6 +16,7 @@ import type {
   TaskPriority,
   ExitCriterion,
   Note,
+  ActionPlanItem,
 } from '../../core/types';
 
 // ============================================================================
@@ -217,6 +218,21 @@ const NOTE_TEMPLATES = [
   'Completed successfully',
 ];
 
+const ACTION_PLAN_TEMPLATES = [
+  'Review requirements and acceptance criteria',
+  'Set up local development environment',
+  'Create initial implementation',
+  'Write unit tests',
+  'Run integration tests',
+  'Update documentation',
+  'Submit for code review',
+  'Address review feedback',
+  'Deploy to staging environment',
+  'Verify in staging',
+  'Deploy to production',
+  'Monitor for issues',
+];
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -319,6 +335,17 @@ function generateNotes(count: number, baseTimestamp: string): Note[] {
   }
 
   return notes;
+}
+
+/**
+ * Generate action plan items for a task.
+ */
+function generateActionPlan(count: number): ActionPlanItem[] {
+  const items = randomItems(ACTION_PLAN_TEMPLATES, count);
+  return items.map((content, index) => ({
+    sequence: index + 1,
+    content,
+  }));
 }
 
 // ============================================================================
@@ -483,6 +510,7 @@ export class MockDataGenerator {
               ? generateNotes(randomInt(1, 3), createdAt)
               : [],
           tags: randomItems(TAGS, randomInt(1, 4)),
+          actionPlan: Math.random() < 0.6 ? generateActionPlan(randomInt(2, 6)) : [], // 60% of tasks have action plans
           createdAt,
           updatedAt: timestampAfter(createdAt),
         };
