@@ -9,8 +9,14 @@
 ## Build Images
 
 ```bash
+# Build API image
 docker build -f Dockerfile.api -t tasks-multiserver-api:0.1.0 .
-docker build -f ui/Dockerfile -t tasks-multiserver-ui:0.1.0 ui/
+
+# Build UI image with production settings
+docker build -f ui/Dockerfile \
+  --build-arg VITE_API_BASE_URL=http://rest-api:8000 \
+  --build-arg VITE_USE_MOCK_DATA=false \
+  -t tasks-multiserver-ui:0.1.0 ui/
 ```
 
 For minikube, load images:
@@ -114,6 +120,33 @@ Edit `api-configmap.yaml` and reapply:
 ```bash
 kubectl apply -f k8s/api-configmap.yaml
 kubectl rollout restart -n task-manager deployment/rest-api
+```
+
+### Update UI Configuration
+
+The UI uses Vite, which embeds environment variables at build time. To change the API URL or mock data setting:
+
+1. Edit `ui-configmap.yaml` with the desired values:
+
+   - `VITE_API_BASE_URL`: The REST API endpoint URL
+   - `VITE_USE_MOCK_DATA`: Set to "false" for production (uses real API)
+
+2. Rebuild the Docker image with the new build arguments:
+
+```bash
+docker build -f ui/Dockerfile \
+  --build-arg VITE_API_BASE_URL=http://rest-api:8000 \
+  --build-arg VITE_USE_MOCK_DATA=false \
+  -t tasks-multiserver-ui:0.1.0 ui/
+```
+
+3. Reload the image and restart the deployment:
+
+```bash
+# For minikube
+minikube image load tasks-multiserver-ui:0.1.0
+
+kubectl rollout restart -n task-manager deployment/ui
 ```
 
 ## Scaling

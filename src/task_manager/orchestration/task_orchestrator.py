@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 from task_manager.data.delegation.data_store import DataStore
 from task_manager.models.entities import ActionPlanItem, Dependency, ExitCriteria, Note, Task
 from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
+from task_manager.orchestration.blocking_detector import BlockingDetector
 from task_manager.orchestration.dependency_orchestrator import DependencyOrchestrator
 
 
@@ -49,6 +50,7 @@ class TaskOrchestrator:
         """
         self.data_store = data_store
         self.dependency_orchestrator = DependencyOrchestrator(data_store)
+        self.blocking_detector = BlockingDetector(data_store)
 
     def validate_exit_criteria_for_completion(self, task: Task) -> None:
         """Validate that all exit criteria are complete before allowing task completion.
@@ -497,10 +499,15 @@ class TaskOrchestrator:
         return self.data_store.update_task(task)
 
     def update_status(self, task_id: UUID, status: Status) -> Task:
-        """Update task status with exit criteria validation.
+        """Update task status with exit criteria and dependency validation.
 
-        Updates the task status, validating that if the new status is COMPLETED,
-        all exit criteria must be marked as COMPLETE.
+        Updates the task status, validating that:
+        - If the new status is COMPLETED, all exit criteria must be marked as COMPLETE
+        - If the new status is IN_PROGRESS, all dependencies must be COMPLETED
+
+        Additionally, when a task's status changes:
+        - When marked COMPLETED: dependent tasks may become unblocked
+        - When marked NOT_STARTED or IN_PROGRESS (from COMPLETED): dependent tasks become BLOCKED
 
         Args:
             task_id: The UUID of the task to update
@@ -511,25 +518,105 @@ class TaskOrchestrator:
 
         Raises:
             ValueError: If the task does not exist
-            BusinessLogicError: If attempting to mark complete with incomplete exit criteria
+            BusinessLogicError: If attempting to mark complete with incomplete exit criteria,
+                               or attempting to start a task with incomplete dependencies
 
-        Requirements: 7.1, 7.2, 7.4, 7.5
+        Requirements: 7.1, 7.2, 7.4, 7.5, 6.1, 6.2
         """
         # Retrieve existing task
         task = self.data_store.get_task(task_id)
         if task is None:
             raise ValueError(f"Task with id '{task_id}' does not exist")
 
+        old_status = task.status
+
         # If marking as complete, validate exit criteria
         if status == Status.COMPLETED:
             self.validate_exit_criteria_for_completion(task)
+
+        # If transitioning to IN_PROGRESS, validate dependencies are complete
+        if status == Status.IN_PROGRESS:
+            self._validate_dependencies_for_start(task)
 
         # Update status
         task.status = status
         task.updated_at = datetime.now(timezone.utc)
 
         # Persist changes
-        return self.data_store.update_task(task)
+        updated_task = self.data_store.update_task(task)
+
+        # Handle cascading status updates for dependent tasks
+        self._update_dependent_tasks_blocking(task_id, old_status, status)
+
+        return updated_task
+
+    def _validate_dependencies_for_start(self, task: Task) -> None:
+        """Validate that all dependencies are complete before allowing task to start.
+
+        Args:
+            task: The task being started
+
+        Raises:
+            BusinessLogicError: If any dependencies are not COMPLETED
+
+        Requirements: 6.1, 6.2
+        """
+        block_reason = self.blocking_detector.detect_blocking(task)
+        if block_reason is not None:
+            raise BusinessLogicError(
+                f"Cannot start task: {block_reason.message}. "
+                f"All dependencies must be COMPLETED before the task can be started."
+            )
+
+    def _update_dependent_tasks_blocking(
+        self, task_id: UUID, old_status: Status, new_status: Status
+    ) -> None:
+        """Update blocking status of tasks that depend on this task.
+
+        When a task is marked COMPLETED, tasks that depend on it may become unblocked.
+        When a task is marked NOT_STARTED or IN_PROGRESS (from COMPLETED), tasks that
+        depend on it should be marked BLOCKED.
+
+        Args:
+            task_id: The UUID of the task whose status changed
+            old_status: The previous status of the task
+            new_status: The new status of the task
+
+        Requirements: 6.1, 6.2
+        """
+        # Find all tasks that depend on this task
+        all_tasks = self.list_tasks()
+        dependent_tasks = [
+            t for t in all_tasks if any(dep.task_id == task_id for dep in t.dependencies)
+        ]
+
+        if not dependent_tasks:
+            return
+
+        # Case 1: Task was marked COMPLETED - check if dependent tasks can be unblocked
+        if new_status == Status.COMPLETED:
+            for dependent_task in dependent_tasks:
+                # Only consider unblocking tasks that are currently BLOCKED
+                if dependent_task.status == Status.BLOCKED:
+                    # Check if all dependencies are now complete
+                    block_reason = self.blocking_detector.detect_blocking(dependent_task)
+                    if block_reason is None:
+                        # All dependencies complete, unblock the task
+                        dependent_task.status = Status.NOT_STARTED
+                        dependent_task.updated_at = datetime.now(timezone.utc)
+                        self.data_store.update_task(dependent_task)
+
+        # Case 2: Task was COMPLETED but is now NOT_STARTED or IN_PROGRESS - block dependent tasks
+        elif old_status == Status.COMPLETED and new_status in (
+            Status.NOT_STARTED,
+            Status.IN_PROGRESS,
+        ):
+            for dependent_task in dependent_tasks:
+                # Only block tasks that are NOT_STARTED or IN_PROGRESS
+                if dependent_task.status in (Status.NOT_STARTED, Status.IN_PROGRESS):
+                    dependent_task.status = Status.BLOCKED
+                    dependent_task.updated_at = datetime.now(timezone.utc)
+                    self.data_store.update_task(dependent_task)
 
     def update_exit_criteria(self, task_id: UUID, exit_criteria: list[ExitCriteria]) -> Task:
         """Update exit criteria for a task.

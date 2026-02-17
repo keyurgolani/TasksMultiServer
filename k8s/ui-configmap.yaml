@@ -4,4 +4,8 @@ metadata:
   name: ui-config
   namespace: task-manager
 data:
-  VITE_API_BASE_URL: "http://localhost:8000"
+  # Note: Vite environment variables are embedded at build time.
+  # These values are used as build arguments when building the Docker image.
+  # For production, set VITE_API_BASE_URL to the actual API endpoint.
+  VITE_API_BASE_URL: "http://rest-api:8000"
+  VITE_USE_MOCK_DATA: "false"

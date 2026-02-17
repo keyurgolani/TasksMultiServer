@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 
-from task_manager.models.entities import ExitCriteria, Project, Task, TaskList
+from task_manager.models.entities import Dependency, ExitCriteria, Project, Task, TaskList
 from task_manager.models.enums import ExitCriteriaStatus, Priority, Status
 from task_manager.orchestration.task_orchestrator import BusinessLogicError, TaskOrchestrator
 
@@ -30,10 +30,17 @@ def mock_dependency_orchestrator():
 
 
 @pytest.fixture
-def task_orchestrator(mock_data_store, mock_dependency_orchestrator):
+def mock_blocking_detector():
+    """Create a mock blocking detector for testing."""
+    return Mock()
+
+
+@pytest.fixture
+def task_orchestrator(mock_data_store, mock_dependency_orchestrator, mock_blocking_detector):
     """Create a TaskOrchestrator instance with mocked dependencies."""
     orchestrator = TaskOrchestrator(mock_data_store)
     orchestrator.dependency_orchestrator = mock_dependency_orchestrator
+    orchestrator.blocking_detector = mock_blocking_detector
     return orchestrator
 
 
@@ -509,7 +516,7 @@ class TestTaskOrchestratorUpdateTask:
             task_orchestrator.update_status(task_id=sample_task.id, status=Status.COMPLETED)
 
     def test_update_task_status_to_completed_with_complete_exit_criteria_succeeds(
-        self, task_orchestrator, mock_data_store, sample_task
+        self, task_orchestrator, mock_data_store, mock_blocking_detector, sample_task
     ):
         """Test updating task status to COMPLETED with complete exit criteria succeeds.
 
@@ -521,6 +528,7 @@ class TestTaskOrchestratorUpdateTask:
         ]
         sample_task.status = Status.NOT_STARTED
         mock_data_store.get_task.return_value = sample_task
+        mock_data_store.list_task_lists.return_value = []  # No task lists, so no dependent tasks
 
         def update_task_side_effect(task):
             return task
@@ -869,7 +877,9 @@ class TestTaskOrchestratorNoteOperations:
         with pytest.raises(ValueError, match=f"Task with id '{task_id}' does not exist"):
             task_orchestrator.update_action_plan(task_id=task_id, action_plan=[])
 
-    def test_update_status(self, task_orchestrator, mock_data_store, sample_task):
+    def test_update_status(
+        self, task_orchestrator, mock_data_store, mock_blocking_detector, sample_task
+    ):
         """Test updating task status.
 
         Requirements: 7.3
@@ -878,6 +888,8 @@ class TestTaskOrchestratorNoteOperations:
 
         # Setup
         mock_data_store.get_task.return_value = sample_task
+        mock_data_store.list_task_lists.return_value = []  # No task lists, so no dependent tasks
+        mock_blocking_detector.detect_blocking.return_value = None  # No blocking dependencies
 
         def update_task_side_effect(task):
             return task
@@ -907,3 +919,169 @@ class TestTaskOrchestratorNoteOperations:
         # Execute and verify
         with pytest.raises(ValueError, match=f"Task with id '{task_id}' does not exist"):
             task_orchestrator.update_status(task_id=task_id, status=Status.IN_PROGRESS)
+
+
+class TestTaskOrchestratorBlockingBehavior:
+    """Test task status transition blocking behavior."""
+
+    def test_update_status_to_in_progress_with_incomplete_dependencies_raises_error(
+        self, task_orchestrator, mock_data_store, mock_blocking_detector, sample_task
+    ):
+        """Test that transitioning to IN_PROGRESS with incomplete dependencies raises error.
+
+        Requirements: 6.1, 6.2
+        """
+        from task_manager.models.entities import BlockReason
+
+        # Setup - task has incomplete dependencies
+        mock_data_store.get_task.return_value = sample_task
+        mock_blocking_detector.detect_blocking.return_value = BlockReason(
+            is_blocked=True,
+            blocking_task_ids=[uuid4()],
+            blocking_task_titles=["Blocking Task"],
+            message="This task is blocked by 1 incomplete dependency: Blocking Task",
+        )
+
+        # Execute and verify
+        with pytest.raises(BusinessLogicError, match="Cannot start task"):
+            task_orchestrator.update_status(task_id=sample_task.id, status=Status.IN_PROGRESS)
+
+    def test_update_status_to_in_progress_with_complete_dependencies_succeeds(
+        self, task_orchestrator, mock_data_store, mock_blocking_detector, sample_task
+    ):
+        """Test that transitioning to IN_PROGRESS with complete dependencies succeeds.
+
+        Requirements: 6.1, 6.2
+        """
+        # Setup - task has no blocking dependencies
+        mock_data_store.get_task.return_value = sample_task
+        mock_data_store.list_task_lists.return_value = []
+        mock_blocking_detector.detect_blocking.return_value = None
+
+        def update_task_side_effect(task):
+            return task
+
+        mock_data_store.update_task.side_effect = update_task_side_effect
+
+        # Execute
+        updated_task = task_orchestrator.update_status(
+            task_id=sample_task.id, status=Status.IN_PROGRESS
+        )
+
+        # Verify
+        assert updated_task.status == Status.IN_PROGRESS
+
+    def test_completing_task_unblocks_dependent_tasks(
+        self,
+        task_orchestrator,
+        mock_data_store,
+        mock_blocking_detector,
+        sample_task,
+        sample_task_list,
+    ):
+        """Test that completing a task unblocks dependent tasks.
+
+        Requirements: 6.1, 6.2
+        """
+        # Setup - create a dependent task that is BLOCKED
+        dependent_task = Task(
+            id=uuid4(),
+            task_list_id=sample_task_list.id,
+            title="Dependent Task",
+            description="Depends on sample task",
+            status=Status.BLOCKED,
+            priority=Priority.MEDIUM,
+            dependencies=[Dependency(task_id=sample_task.id, task_list_id=sample_task_list.id)],
+            exit_criteria=[
+                ExitCriteria(criteria="Test criteria", status=ExitCriteriaStatus.INCOMPLETE)
+            ],
+            notes=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        # Setup sample_task with complete exit criteria
+        sample_task.exit_criteria = [
+            ExitCriteria(criteria="Test", status=ExitCriteriaStatus.COMPLETE)
+        ]
+        sample_task.status = Status.IN_PROGRESS
+
+        mock_data_store.get_task.return_value = sample_task
+        mock_data_store.list_task_lists.return_value = [sample_task_list]
+        mock_data_store.list_tasks.return_value = [sample_task, dependent_task]
+
+        # When checking if dependent_task is blocked after sample_task is completed,
+        # it should return None (not blocked)
+        mock_blocking_detector.detect_blocking.return_value = None
+
+        updated_tasks = []
+
+        def update_task_side_effect(task):
+            updated_tasks.append(task)
+            return task
+
+        mock_data_store.update_task.side_effect = update_task_side_effect
+
+        # Execute - complete the sample task
+        task_orchestrator.update_status(task_id=sample_task.id, status=Status.COMPLETED)
+
+        # Verify - dependent task should be unblocked (status changed to NOT_STARTED)
+        assert len(updated_tasks) == 2  # sample_task and dependent_task
+        # The dependent task should have been updated to NOT_STARTED
+        dependent_task_update = [t for t in updated_tasks if t.id == dependent_task.id]
+        assert len(dependent_task_update) == 1
+        assert dependent_task_update[0].status == Status.NOT_STARTED
+
+    def test_uncompleting_task_blocks_dependent_tasks(
+        self,
+        task_orchestrator,
+        mock_data_store,
+        mock_blocking_detector,
+        sample_task,
+        sample_task_list,
+    ):
+        """Test that uncompleting a task blocks dependent tasks.
+
+        Requirements: 6.1, 6.2
+        """
+        # Setup - create a dependent task that is IN_PROGRESS
+        dependent_task = Task(
+            id=uuid4(),
+            task_list_id=sample_task_list.id,
+            title="Dependent Task",
+            description="Depends on sample task",
+            status=Status.IN_PROGRESS,
+            priority=Priority.MEDIUM,
+            dependencies=[Dependency(task_id=sample_task.id, task_list_id=sample_task_list.id)],
+            exit_criteria=[
+                ExitCriteria(criteria="Test criteria", status=ExitCriteriaStatus.INCOMPLETE)
+            ],
+            notes=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        # Setup sample_task as COMPLETED
+        sample_task.status = Status.COMPLETED
+
+        mock_data_store.get_task.return_value = sample_task
+        mock_data_store.list_task_lists.return_value = [sample_task_list]
+        mock_data_store.list_tasks.return_value = [sample_task, dependent_task]
+
+        updated_tasks = []
+
+        def update_task_side_effect(task):
+            updated_tasks.append(task)
+            return task
+
+        mock_data_store.update_task.side_effect = update_task_side_effect
+
+        # Execute - uncomplete the sample task (change to NOT_STARTED)
+        task_orchestrator.update_status(task_id=sample_task.id, status=Status.NOT_STARTED)
+
+        # Verify - dependent task should be blocked
+        assert len(updated_tasks) == 2  # sample_task and dependent_task
+        # The dependent task should have been updated to BLOCKED
+        dependent_task_update = [t for t in updated_tasks if t.id == dependent_task.id]
+        assert len(dependent_task_update) == 1
+        assert dependent_task_update[0].status == Status.BLOCKED

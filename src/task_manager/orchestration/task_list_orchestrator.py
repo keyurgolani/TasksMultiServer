@@ -164,6 +164,7 @@ class TaskListOrchestrator:
         task_list_id: UUID,
         name: Optional[str] = None,
         agent_instructions_template: Optional[str] = None,
+        project_id: Optional[UUID] = None,
     ) -> TaskList:
         """Update an existing task list with timestamp update.
 
@@ -174,14 +175,16 @@ class TaskListOrchestrator:
             task_list_id: The UUID of the task list to update
             name: Optional new name for the task list
             agent_instructions_template: Optional new template (use empty string to clear)
+            project_id: Optional new project UUID to move the task list to
 
         Returns:
             The updated task list
 
         Raises:
-            ValueError: If the task list does not exist or the new name is invalid
+            ValueError: If the task list does not exist, the new name is invalid,
+                       or the target project does not exist
 
-        Requirements: 4.7
+        Requirements: 4.7, 2.1, 2.2, 2.3
         """
         # Retrieve existing task list
         task_list = self.data_store.get_task_list(task_list_id)
@@ -198,6 +201,13 @@ class TaskListOrchestrator:
             task_list.agent_instructions_template = (
                 agent_instructions_template if agent_instructions_template else None
             )
+
+        if project_id is not None:
+            # Validate target project exists
+            target_project = self.data_store.get_project(project_id)
+            if target_project is None:
+                raise ValueError(f"Project with id '{project_id}' does not exist")
+            task_list.project_id = project_id
 
         # Update timestamp
         task_list.updated_at = datetime.now(timezone.utc)

@@ -407,7 +407,7 @@ async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse
         )
     elif (
         ("already exists" in error_message and "Invalid" not in error_message)
-        or "Cannot" in error_message
+        or ("Cannot" in error_message and "Invalid" not in error_message)
         or "is not under" in error_message
     ):
         # Business logic constraint violation
@@ -435,28 +435,65 @@ async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse
 async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle unexpected exceptions.
 
-    Catches all unhandled exceptions and returns a generic error response with
-    HTTP 500 status code.
+    Catches all unhandled exceptions and returns an error response with
+    appropriate status code and error categorization based on exception type.
+
+    Error Type Categorization:
+    - TypeError: Returns 400 VALIDATION_ERROR with type mismatch details
+    - KeyError: Returns 400 VALIDATION_ERROR with invalid value and valid options hint
+    - Other: Returns 500 STORAGE_ERROR for unexpected errors
 
     Args:
         request: The incoming request
         exc: The exception
 
     Returns:
-        JSONResponse with error details
+        JSONResponse with error details including error_type in details
 
-    Requirements: 8.4, 8.5, 9.5
+    Requirements: 3.1, 3.2, 3.3, 3.4, 8.4, 8.5, 9.5
     """
+    # Log full error details including stack trace for debugging
     logger.error(f"Unexpected error: {exc}", exc_info=True)
 
-    return JSONResponse(
-        status_code=500,
-        content=format_error_response(
-            code="STORAGE_ERROR",
-            message="An unexpected error occurred. Please try again later.",
-            details={"error_type": type(exc).__name__},
-        ),
-    )
+    # Categorize error type for response
+    if isinstance(exc, TypeError):
+        # TypeError indicates type mismatch in request processing
+        return JSONResponse(
+            status_code=400,
+            content=format_error_response(
+                code="VALIDATION_ERROR",
+                message=f"Type mismatch in request processing: {exc}",
+                details={
+                    "error_type": "TypeError",
+                    "error_category": "type_mismatch",
+                },
+            ),
+        )
+    elif isinstance(exc, KeyError):
+        # KeyError typically occurs during enum parsing with invalid values
+        invalid_value = str(exc).strip("'\"")
+        return JSONResponse(
+            status_code=400,
+            content=format_error_response(
+                code="VALIDATION_ERROR",
+                message=f"Invalid value: {invalid_value}. Please check the valid options for this field.",
+                details={
+                    "error_type": "KeyError",
+                    "error_category": "invalid_value",
+                    "invalid_value": invalid_value,
+                },
+            ),
+        )
+    else:
+        # Generic storage/unexpected error
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(
+                code="STORAGE_ERROR",
+                message="An unexpected error occurred. Please try again later.",
+                details={"error_type": type(exc).__name__},
+            ),
+        )
 
 
 # ============================================================================
@@ -1050,6 +1087,124 @@ async def delete_project(project_id: str) -> Dict[str, Any]:
         )
 
 
+@app.get(
+    "/projects/{project_id}/stats",
+    tags=["Projects"],
+    responses={
+        200: {
+            "description": "Project statistics",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "task_list_count": 3,
+                        "total_tasks": 15,
+                        "ready_tasks": 5,
+                        "completed_tasks": 8,
+                        "in_progress_tasks": 2,
+                        "blocked_tasks": 0,
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Project not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": {
+                            "code": "NOT_FOUND",
+                            "message": "Project with ID 550e8400-e29b-41d4-a716-446655440000 does not exist",
+                            "details": {},
+                        }
+                    }
+                }
+            },
+        },
+    },
+)
+async def get_project_stats(project_id: str) -> Dict[str, Any]:
+    """Get statistics for a project.
+
+    Returns aggregated statistics for a project including task counts by status
+    and ready task count.
+
+    Args:
+        project_id: UUID of the project to get statistics for
+
+    Returns:
+        Dictionary with project statistics:
+        - task_list_count: Number of task lists in the project
+        - total_tasks: Total number of tasks across all task lists
+        - ready_tasks: Number of tasks ready for execution
+        - completed_tasks: Number of tasks with COMPLETED status
+        - in_progress_tasks: Number of tasks with IN_PROGRESS status
+        - blocked_tasks: Number of tasks with BLOCKED status
+
+    Raises:
+        400 VALIDATION_ERROR: If project_id format is invalid
+        404 NOT_FOUND: If project does not exist
+
+    Requirements: 1.1, 1.3, 1.4
+    """
+    from uuid import UUID
+
+    try:
+        # Parse UUID
+        try:
+            project_uuid = UUID(project_id)
+        except ValueError:
+            raise ValueError(f"Invalid project ID format: {project_id}")
+
+        # Get project from orchestrator to verify it exists
+        project = orchestrators["project"].get_project(project_uuid)
+        if project is None:
+            raise ValueError(f"Project with ID {project_id} does not exist")
+
+        # Get all task lists for this project
+        task_lists = orchestrators["task_list"].list_task_lists(project_uuid)
+        task_list_count = len(task_lists)
+
+        # Get all tasks from all task lists in this project
+        all_tasks = []
+        for task_list in task_lists:
+            tasks = orchestrators["task"].list_tasks(task_list.id)
+            all_tasks.extend(tasks)
+
+        # Count tasks by status
+        from task_manager.models.enums import Status
+
+        total_tasks = len(all_tasks)
+        completed_tasks = sum(1 for t in all_tasks if t.status == Status.COMPLETED)
+        in_progress_tasks = sum(1 for t in all_tasks if t.status == Status.IN_PROGRESS)
+        blocked_tasks = sum(1 for t in all_tasks if t.status == Status.BLOCKED)
+
+        # Count ready tasks (NOT_STARTED or IN_PROGRESS with all dependencies completed)
+        ready_tasks = orchestrators["blocking"].get_ready_tasks(
+            scope_type="project",
+            scope_id=project_uuid,
+        )
+        ready_task_count = len(ready_tasks)
+
+        return {
+            "task_list_count": task_list_count,
+            "total_tasks": total_tasks,
+            "ready_tasks": ready_task_count,
+            "completed_tasks": completed_tasks,
+            "in_progress_tasks": in_progress_tasks,
+            "blocked_tasks": blocked_tasks,
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
+    except Exception as e:
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in get_project_stats: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
+
+
 # ============================================================================
 # TaskList Endpoints
 # ============================================================================
@@ -1061,10 +1216,18 @@ async def create_task_list(
         ...,
         openapi_examples={
             "basic": {
-                "summary": "Basic task list",
+                "summary": "Basic task list with project_id",
                 "value": {
                     "name": "Sprint 1 Tasks",
                     "project_id": "550e8400-e29b-41d4-a716-446655440000",
+                },
+            },
+            "with_project_name": {
+                "summary": "Task list with project_name",
+                "description": "Create a task list using project name instead of ID",
+                "value": {
+                    "name": "Sprint 1 Tasks",
+                    "project_name": "My Project",
                 },
             },
             "with_template": {
@@ -1080,30 +1243,50 @@ async def create_task_list(
 ) -> Dict[str, Any]:
     """Create a new task list.
 
-    Creates a new task list within a project using the project's UUID.
+    Creates a new task list within a project using either the project's UUID or name.
     Task list names must be unique within the system.
 
+    Either project_id or project_name must be provided. If both are provided,
+    project_id takes precedence.
+
     Args:
-        request: Task list creation request with name, project_id, and optional template
+        request: Task list creation request with name, project_id or project_name, and optional template
 
     Returns:
         Dictionary with message and created task list
 
     Raises:
-        400 VALIDATION_ERROR: If name is empty or project_id is invalid
-        404 NOT_FOUND: If project_id does not exist
+        400 VALIDATION_ERROR: If name is empty, project_id is invalid, or neither project reference is provided
+        404 NOT_FOUND: If project_id or project_name does not exist
         409 BUSINESS_LOGIC_ERROR: If task list with same name already exists
 
-    Requirements: 2.2, 1.1, 9.1, 9.3
+    Requirements: 2.1, 2.2, 2.3, 2.4, 1.1, 9.1, 9.3
     """
     from uuid import UUID
 
     try:
-        # Parse project UUID
-        try:
-            project_uuid = UUID(request.project_id)
-        except ValueError:
-            raise ValueError(f"Invalid project ID format: {request.project_id}")
+        # Resolve project - project_id takes precedence over project_name
+        if request.project_id:
+            # Parse project UUID
+            try:
+                project_uuid = UUID(request.project_id)
+            except ValueError:
+                raise ValueError(f"Invalid project ID format: {request.project_id}")
+
+            # Verify project exists
+            project = orchestrators["project"].get_project(project_uuid)
+            if project is None:
+                raise ValueError(f"Project with ID '{request.project_id}' does not exist")
+        elif request.project_name:
+            # Look up project by name
+            projects = orchestrators["project"].list_projects()
+            matching_project = next((p for p in projects if p.name == request.project_name), None)
+            if matching_project is None:
+                raise ValueError(f"Project '{request.project_name}' does not exist")
+            project_uuid = matching_project.id
+        else:
+            # This should be caught by model validation, but handle it just in case
+            raise ValueError("Either project_id or project_name is required")
 
         # Create task list via orchestrator
         task_list = orchestrators["task_list"].create_task_list(
@@ -1202,16 +1385,21 @@ async def list_task_lists(
 
 
 @app.get("/task-lists/{task_list_id}", tags=["Task Lists"])
-async def get_task_list(task_list_id: str) -> Dict[str, Any]:
+async def get_task_list(
+    task_list_id: str,
+    include_tasks: bool = Query(False, description="Include tasks in the response"),
+) -> Dict[str, Any]:
     """Get a single task list by ID.
 
-    Retrieves a specific task list by its UUID.
+    Retrieves a specific task list by its UUID. Optionally includes all tasks
+    within the task list.
 
     Args:
         task_list_id: UUID of the task list to retrieve
+        include_tasks: If true, includes all tasks in the task list
 
     Returns:
-        Dictionary with the task list
+        Dictionary with the task list and optionally its tasks
 
     Raises:
         400 VALIDATION_ERROR: If task_list_id format is invalid
@@ -1244,9 +1432,86 @@ async def get_task_list(task_list_id: str) -> Dict[str, Any]:
             updated_at=task_list.updated_at.isoformat(),
         )
 
-        return {
+        response: Dict[str, Any] = {
             "task_list": task_list_response.model_dump(),
         }
+
+        # Optionally include tasks
+        if include_tasks:
+            tasks = orchestrators["task"].list_tasks(task_list_uuid)
+            blocking_detector = orchestrators["blocking"]
+
+            def block_reason_to_dict(br):
+                """Convert BlockReason dataclass to dict for JSON serialization."""
+                if br is None:
+                    return None
+                return {
+                    "is_blocked": br.is_blocked,
+                    "blocking_task_ids": [str(tid) for tid in br.blocking_task_ids],
+                    "blocking_task_titles": br.blocking_task_titles,
+                    "message": br.message,
+                }
+
+            task_responses = []
+            for task in tasks:
+                # Compute block reason for each task
+                block_reason = blocking_detector.detect_blocking(task)
+
+                task_response = TaskResponse(
+                    id=str(task.id),
+                    task_list_id=str(task.task_list_id),
+                    title=task.title,
+                    description=task.description,
+                    status=task.status.name,
+                    priority=task.priority.name,
+                    dependencies=[
+                        DependencyModel(
+                            task_id=str(dep.task_id),
+                            task_list_id=str(dep.task_list_id),
+                        )
+                        for dep in task.dependencies
+                    ],
+                    exit_criteria=[
+                        ExitCriteriaModel(
+                            criteria=ec.criteria,
+                            status=ec.status.name,
+                            comment=ec.comment,
+                        )
+                        for ec in task.exit_criteria
+                    ],
+                    notes=[note_to_model(note) for note in task.notes],
+                    research_notes=(
+                        [note_to_model(note) for note in task.research_notes]
+                        if task.research_notes
+                        else None
+                    ),
+                    action_plan=(
+                        [
+                            ActionPlanItemModel(
+                                sequence=item.sequence,
+                                content=item.content,
+                            )
+                            for item in task.action_plan
+                        ]
+                        if task.action_plan
+                        else None
+                    ),
+                    execution_notes=(
+                        [note_to_model(note) for note in task.execution_notes]
+                        if task.execution_notes
+                        else None
+                    ),
+                    agent_instructions_template=task.agent_instructions_template,
+                    tags=task.tags if task.tags else [],
+                    block_reason=block_reason_to_dict(block_reason),
+                    created_at=task.created_at.isoformat(),
+                    updated_at=task.updated_at.isoformat(),
+                )
+                task_responses.append(task_response.model_dump())
+
+            response["tasks"] = task_responses
+
+        return response
     except ValueError:
         # Let ValueError handler catch it
         raise
@@ -1273,42 +1538,56 @@ async def update_task_list(
                 "summary": "Update agent instructions",
                 "value": {"agent_instructions_template": "Complete: {task_title}"},
             },
+            "move_to_project": {
+                "summary": "Move task list to another project",
+                "value": {"project_id": "550e8400-e29b-41d4-a716-446655440000"},
+            },
         },
     ),
 ) -> Dict[str, Any]:
     """Update a task list.
 
-    Updates a task list's name and/or agent instructions template.
+    Updates a task list's name, agent instructions template, and/or project assignment.
     Use empty string for agent_instructions_template to clear it.
+    Use project_id to move the task list to a different project.
 
     Args:
         task_list_id: UUID of the task list to update
-        request: Task list update request with optional name and template
+        request: Task list update request with optional name, template, and project_id
 
     Returns:
         Dictionary with message and updated task list
 
     Raises:
-        400 VALIDATION_ERROR: If task_list_id format is invalid
-        404 NOT_FOUND: If task list does not exist
+        400 VALIDATION_ERROR: If task_list_id or project_id format is invalid
+        404 NOT_FOUND: If task list or target project does not exist
         409 BUSINESS_LOGIC_ERROR: If new name conflicts with existing task list
 
-    Requirements: 2.2, 9.1, 9.3
+    Requirements: 2.1, 2.2, 2.3, 9.1, 9.3
     """
     from uuid import UUID
 
     try:
-        # Parse UUID
+        # Parse task list UUID
         try:
             task_list_uuid = UUID(task_list_id)
         except ValueError:
             raise ValueError(f"Invalid task list ID format: {task_list_id}")
+
+        # Parse project UUID if provided
+        project_uuid = None
+        if request.project_id is not None:
+            try:
+                project_uuid = UUID(request.project_id)
+            except ValueError:
+                raise ValueError(f"Invalid project ID format: {request.project_id}")
 
         # Update task list via orchestrator
         task_list = orchestrators["task_list"].update_task_list(
             task_list_id=task_list_uuid,
             name=request.name,
             agent_instructions_template=request.agent_instructions_template,
+            project_id=project_uuid,
         )
 
         # Convert to response model
@@ -1446,6 +1725,120 @@ async def reset_task_list(task_list_id: str) -> Dict[str, Any]:
         )
 
 
+@app.get(
+    "/task-lists/{task_list_id}/stats",
+    tags=["Task Lists"],
+    responses={
+        200: {
+            "description": "Task list statistics",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "task_count": 10,
+                        "ready_tasks": 3,
+                        "completed_tasks": 5,
+                        "in_progress_tasks": 2,
+                        "blocked_tasks": 0,
+                        "completion_percentage": 50,
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Task list not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": {
+                            "code": "NOT_FOUND",
+                            "message": "Task list with ID 550e8400-e29b-41d4-a716-446655440000 does not exist",
+                            "details": {},
+                        }
+                    }
+                }
+            },
+        },
+    },
+)
+async def get_task_list_stats(task_list_id: str) -> Dict[str, Any]:
+    """Get statistics for a task list.
+
+    Returns aggregated statistics for a task list including task counts by status
+    and completion percentage.
+
+    Args:
+        task_list_id: UUID of the task list to get statistics for
+
+    Returns:
+        Dictionary with task list statistics:
+        - task_count: Total number of tasks in the task list
+        - ready_tasks: Number of tasks ready for execution
+        - completed_tasks: Number of tasks with COMPLETED status
+        - in_progress_tasks: Number of tasks with IN_PROGRESS status
+        - blocked_tasks: Number of tasks with BLOCKED status
+        - completion_percentage: Percentage of completed tasks (rounded to nearest integer)
+
+    Raises:
+        400 VALIDATION_ERROR: If task_list_id format is invalid
+        404 NOT_FOUND: If task list does not exist
+
+    Requirements: 1.2, 1.3
+    """
+    from uuid import UUID
+
+    try:
+        # Parse UUID
+        try:
+            task_list_uuid = UUID(task_list_id)
+        except ValueError:
+            raise ValueError(f"Invalid task list ID format: {task_list_id}")
+
+        # Get task list from orchestrator to verify it exists
+        task_list = orchestrators["task_list"].get_task_list(task_list_uuid)
+        if task_list is None:
+            raise ValueError(f"Task list with ID {task_list_id} does not exist")
+
+        # Get all tasks in this task list
+        tasks = orchestrators["task"].list_tasks(task_list_uuid)
+
+        # Count tasks by status
+        from task_manager.models.enums import Status
+
+        task_count = len(tasks)
+        completed_tasks = sum(1 for t in tasks if t.status == Status.COMPLETED)
+        in_progress_tasks = sum(1 for t in tasks if t.status == Status.IN_PROGRESS)
+        blocked_tasks = sum(1 for t in tasks if t.status == Status.BLOCKED)
+
+        # Count ready tasks (NOT_STARTED or IN_PROGRESS with all dependencies completed)
+        ready_tasks = orchestrators["blocking"].get_ready_tasks(
+            scope_type="task_list",
+            scope_id=task_list_uuid,
+        )
+        ready_task_count = len(ready_tasks)
+
+        # Calculate completion percentage
+        completion_percentage = round((completed_tasks / task_count) * 100) if task_count > 0 else 0
+
+        return {
+            "task_count": task_count,
+            "ready_tasks": ready_task_count,
+            "completed_tasks": completed_tasks,
+            "in_progress_tasks": in_progress_tasks,
+            "blocked_tasks": blocked_tasks,
+            "completion_percentage": completion_percentage,
+        }
+    except ValueError:
+        # Let ValueError handler catch it
+        raise
+    except Exception as e:
+        # Explicitly handle storage errors
+        logger.error(f"Storage error in get_task_list_stats: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=format_error_response(code="STORAGE_ERROR", message=str(e), details={}),
+        )
+
+
 # ============================================================================
 # Task Endpoints
 # ============================================================================
@@ -1523,18 +1916,25 @@ async def get_ready_tasks(
                 ],
                 exit_criteria=[
                     ExitCriteriaModel(
-                        criteria=ec["criteria"],
-                        status=ec["status"],
-                        comment=ec.get("comment"),
+                        criteria=ec.criteria,
+                        status=ec.status.value if hasattr(ec.status, "value") else ec.status,
+                        comment=ec.comment,
                     )
                     for ec in t.exit_criteria
                 ],
                 notes=[
-                    NoteModel(content=n["content"], timestamp=n.get("timestamp")) for n in t.notes
+                    NoteModel(
+                        content=n.content,
+                        timestamp=n.timestamp.isoformat() if n.timestamp else None,
+                    )
+                    for n in t.notes
                 ],
                 research_notes=(
                     [
-                        NoteModel(content=n["content"], timestamp=n.get("timestamp"))
+                        NoteModel(
+                            content=n.content,
+                            timestamp=n.timestamp.isoformat() if n.timestamp else None,
+                        )
                         for n in t.research_notes
                     ]
                     if t.research_notes is not None
@@ -1543,8 +1943,8 @@ async def get_ready_tasks(
                 action_plan=(
                     [
                         ActionPlanItemModel(
-                            sequence=item["sequence"],
-                            content=item["content"],
+                            sequence=item.sequence,
+                            content=item.content,
                         )
                         for item in t.action_plan
                     ]
@@ -1553,7 +1953,10 @@ async def get_ready_tasks(
                 ),
                 execution_notes=(
                     [
-                        NoteModel(content=n["content"], timestamp=n.get("timestamp"))
+                        NoteModel(
+                            content=n.content,
+                            timestamp=n.timestamp.isoformat() if n.timestamp else None,
+                        )
                         for n in t.execution_notes
                     ]
                     if t.execution_notes is not None
@@ -2777,12 +3180,23 @@ async def update_task(
             except KeyError:
                 raise ValueError(f"Invalid priority: {request.priority}")
 
-        # Update task via orchestrator
+        # If status is being updated, use update_status for proper validation
+        # This ensures exit criteria validation when marking as COMPLETED
+        if status is not None:
+            from task_manager.orchestration.task_orchestrator import BusinessLogicError
+
+            try:
+                orchestrators["task"].update_status(task_id=task_uuid, status=status)
+            except BusinessLogicError as e:
+                # Convert BusinessLogicError to ValueError for consistent error handling
+                raise ValueError(str(e.message))
+
+        # Update other task fields via orchestrator (excluding status which was handled above)
         task = orchestrators["task"].update_task(
             task_id=task_uuid,
             title=request.title,
             description=request.description,
-            status=status,
+            status=None,  # Status already handled above with validation
             priority=priority,
             agent_instructions_template=request.agent_instructions_template,
         )
@@ -3848,17 +4262,19 @@ async def search_tasks(
     status_list = None
     if request.status:
         try:
-            status_list = [Status[s] for s in request.status]
-        except KeyError as e:
-            raise ValueError(f"Invalid status value: {e}")
+            status_list = [Status(s) for s in request.status]
+        except ValueError as e:
+            valid_values = ", ".join([s.value for s in Status])
+            raise ValueError(f"Invalid status value: {e}. Valid values: {valid_values}")
 
     # Parse priority values
     priority_list = None
     if request.priority:
         try:
-            priority_list = [Priority[p] for p in request.priority]
-        except KeyError as e:
-            raise ValueError(f"Invalid priority value: {e}")
+            priority_list = [Priority(p) for p in request.priority]
+        except ValueError as e:
+            valid_values = ", ".join([p.value for p in Priority])
+            raise ValueError(f"Invalid priority value: {e}. Valid values: {valid_values}")
 
     # Parse project_id
     project_uuid = None
@@ -3902,19 +4318,25 @@ async def search_tasks(
             ],
             exit_criteria=[
                 ExitCriteriaModel(
-                    criteria=ec["criteria"],
-                    status=ec["status"],
-                    comment=ec.get("comment"),
+                    criteria=ec.criteria,
+                    status=ec.status.value if hasattr(ec.status, "value") else ec.status,
+                    comment=ec.comment,
                 )
                 for ec in task.exit_criteria
             ],
             notes=[
-                NoteModel(content=note["content"], timestamp=note.get("timestamp"))
+                NoteModel(
+                    content=note.content,
+                    timestamp=note.timestamp.isoformat() if note.timestamp else None,
+                )
                 for note in task.notes
             ],
             research_notes=(
                 [
-                    NoteModel(content=note["content"], timestamp=note.get("timestamp"))
+                    NoteModel(
+                        content=note.content,
+                        timestamp=note.timestamp.isoformat() if note.timestamp else None,
+                    )
                     for note in task.research_notes
                 ]
                 if task.research_notes
@@ -3923,8 +4345,8 @@ async def search_tasks(
             action_plan=(
                 [
                     ActionPlanItemModel(
-                        sequence=item["sequence"],
-                        content=item["content"],
+                        sequence=item.sequence,
+                        content=item.content,
                     )
                     for item in task.action_plan
                 ]
@@ -3933,7 +4355,10 @@ async def search_tasks(
             ),
             execution_notes=(
                 [
-                    NoteModel(content=note["content"], timestamp=note.get("timestamp"))
+                    NoteModel(
+                        content=note.content,
+                        timestamp=note.timestamp.isoformat() if note.timestamp else None,
+                    )
                     for note in task.execution_notes
                 ]
                 if task.execution_notes

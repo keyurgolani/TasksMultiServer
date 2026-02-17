@@ -268,6 +268,86 @@ class TaskManagerMCPServer:
                     inputSchema={"type": "object", "properties": {}, "required": []},
                 ),
                 Tool(
+                    name="create_project",
+                    description="Create a new project with a name and optional agent instructions template",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "The name of the project (must be unique and non-empty)",
+                            },
+                            "agent_instructions_template": {
+                                "type": "string",
+                                "description": "Optional template for generating agent instructions for tasks in this project",
+                            },
+                        },
+                        "required": ["name"],
+                    },
+                ),
+                Tool(
+                    name="get_project",
+                    description="Retrieve a project by its ID or name",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "project_id": {
+                                "type": "string",
+                                "description": "The UUID of the project to retrieve",
+                            },
+                            "project_name": {
+                                "type": "string",
+                                "description": "The name of the project to retrieve (alternative to project_id)",
+                            },
+                        },
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="update_project",
+                    description="Update an existing project's name and/or agent instructions template",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "project_id": {
+                                "type": "string",
+                                "description": "The UUID of the project to update",
+                            },
+                            "project_name": {
+                                "type": "string",
+                                "description": "The name of the project to update (alternative to project_id)",
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "The new name for the project",
+                            },
+                            "agent_instructions_template": {
+                                "type": "string",
+                                "description": "The new agent instructions template (use empty string to clear)",
+                            },
+                        },
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="delete_project",
+                    description="Delete a project and all its task lists and tasks. Default projects (Chore, Repeatable) cannot be deleted.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "project_id": {
+                                "type": "string",
+                                "description": "The UUID of the project to delete",
+                            },
+                            "project_name": {
+                                "type": "string",
+                                "description": "The name of the project to delete (alternative to project_id)",
+                            },
+                        },
+                        "required": [],
+                    },
+                ),
+                Tool(
                     name="get_task_list",
                     description="Retrieve a task list by its ID, including all its tasks",
                     inputSchema={
@@ -853,6 +933,14 @@ class TaskManagerMCPServer:
 
             if name == "list_projects":
                 return await self._handle_list_projects()
+            elif name == "create_project":
+                return await self._handle_create_project(arguments)
+            elif name == "get_project":
+                return await self._handle_get_project(arguments)
+            elif name == "update_project":
+                return await self._handle_update_project(arguments)
+            elif name == "delete_project":
+                return await self._handle_delete_project(arguments)
             elif name == "get_task_list":
                 return await self._handle_get_task_list(arguments)
             elif name == "create_task_list":
@@ -924,6 +1012,280 @@ class TaskManagerMCPServer:
             return [TextContent(type="text", text=result)]
         except Exception as e:
             return self._format_error_response(e, "list_projects")
+
+    async def _handle_create_project(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle create_project tool call.
+
+        Creates a new project with the specified name and optional template.
+
+        Args:
+            arguments: Dictionary containing 'name' (required) and
+                      'agent_instructions_template' (optional)
+
+        Returns:
+            List containing a single TextContent with created project information
+
+        Requirements: 3.1
+        """
+        try:
+            # Extract arguments
+            name = arguments.get("name")
+            if not name:
+                return [TextContent(type="text", text="Error: name is required")]
+
+            agent_instructions_template = arguments.get("agent_instructions_template")
+
+            # Create project through orchestrator
+            project = self.project_orchestrator.create_project(
+                name=name,
+                agent_instructions_template=agent_instructions_template,
+            )
+
+            # Format result
+            lines = [f"Project '{project.name}' created successfully"]
+            lines.append(f"ID: {project.id}")
+            if project.agent_instructions_template:
+                lines.append(f"Template: {project.agent_instructions_template[:50]}...")
+            lines.append(f"Created: {project.created_at.isoformat()}")
+
+            result = "\n".join(lines)
+            return [TextContent(type="text", text=result)]
+        except Exception as e:
+            return self._format_error_response(e, "create_project")
+
+    async def _handle_get_project(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle get_project tool call.
+
+        Retrieves a project by ID or name.
+
+        Args:
+            arguments: Dictionary containing 'project_id' or 'project_name'
+
+        Returns:
+            List containing a single TextContent with project information
+
+        Requirements: 3.2
+        """
+        try:
+            from uuid import UUID
+
+            project_id_str = arguments.get("project_id")
+            project_name = arguments.get("project_name")
+
+            if not project_id_str and not project_name:
+                return [
+                    TextContent(
+                        type="text",
+                        text="Error: Either project_id or project_name is required",
+                    )
+                ]
+
+            project = None
+
+            # Try to get by ID first
+            if project_id_str:
+                try:
+                    project_id = UUID(project_id_str)
+                except ValueError:
+                    return [
+                        TextContent(
+                            type="text", text=f"Error: Invalid UUID format: {project_id_str}"
+                        )
+                    ]
+                project = self.project_orchestrator.get_project(project_id)
+
+            # If not found by ID or ID not provided, try by name
+            if project is None and project_name:
+                projects = self.project_orchestrator.list_projects()
+                for p in projects:
+                    if p.name == project_name:
+                        project = p
+                        break
+
+            if project is None:
+                identifier = project_id_str if project_id_str else project_name
+                return [TextContent(type="text", text=f"Project '{identifier}' not found")]
+
+            # Format project as text
+            default_marker = " [DEFAULT]" if project.is_default_project() else ""
+            lines = [f"Project: {project.name}{default_marker}"]
+            lines.append(f"ID: {project.id}")
+            if project.agent_instructions_template:
+                lines.append(f"Template: {project.agent_instructions_template}")
+            lines.append(f"Created: {project.created_at.isoformat()}")
+            lines.append(f"Updated: {project.updated_at.isoformat()}")
+
+            # Get task lists for this project
+            task_lists = self.data_store.list_task_lists(project.id)
+            if task_lists:
+                lines.append("")
+                lines.append(f"Task Lists ({len(task_lists)}):")
+                for tl in task_lists:
+                    lines.append(f"  - {tl.name} (ID: {tl.id})")
+
+            result = "\n".join(lines)
+            return [TextContent(type="text", text=result)]
+        except Exception as e:
+            return self._format_error_response(e, "get_project")
+
+    async def _handle_update_project(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle update_project tool call.
+
+        Updates an existing project's name and/or template.
+
+        Args:
+            arguments: Dictionary containing 'project_id' or 'project_name' for lookup,
+                      and optional 'name' and 'agent_instructions_template' for updates
+
+        Returns:
+            List containing a single TextContent with updated project information
+
+        Requirements: 3.3
+        """
+        try:
+            from uuid import UUID
+
+            project_id_str = arguments.get("project_id")
+            project_name_lookup = arguments.get("project_name")
+
+            if not project_id_str and not project_name_lookup:
+                return [
+                    TextContent(
+                        type="text",
+                        text="Error: Either project_id or project_name is required to identify the project",
+                    )
+                ]
+
+            # Find the project ID
+            project_id = None
+
+            if project_id_str:
+                try:
+                    project_id = UUID(project_id_str)
+                except ValueError:
+                    return [
+                        TextContent(
+                            type="text", text=f"Error: Invalid UUID format: {project_id_str}"
+                        )
+                    ]
+            else:
+                # Find by name
+                projects = self.project_orchestrator.list_projects()
+                for p in projects:
+                    if p.name == project_name_lookup:
+                        project_id = p.id
+                        break
+
+                if project_id is None:
+                    return [
+                        TextContent(
+                            type="text", text=f"Project with name '{project_name_lookup}' not found"
+                        )
+                    ]
+
+            # Get update values
+            new_name = arguments.get("name")
+            agent_instructions_template = arguments.get("agent_instructions_template")
+
+            if new_name is None and agent_instructions_template is None:
+                return [
+                    TextContent(
+                        type="text",
+                        text="Error: At least one of 'name' or 'agent_instructions_template' must be provided for update",
+                    )
+                ]
+
+            # Update project through orchestrator
+            project = self.project_orchestrator.update_project(
+                project_id=project_id,
+                name=new_name,
+                agent_instructions_template=agent_instructions_template,
+            )
+
+            # Format result
+            lines = [f"Project '{project.name}' updated successfully"]
+            lines.append(f"ID: {project.id}")
+            if project.agent_instructions_template:
+                lines.append(f"Template: {project.agent_instructions_template[:50]}...")
+            else:
+                lines.append("Template: (none)")
+            lines.append(f"Updated: {project.updated_at.isoformat()}")
+
+            result = "\n".join(lines)
+            return [TextContent(type="text", text=result)]
+        except Exception as e:
+            return self._format_error_response(e, "update_project")
+
+    async def _handle_delete_project(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle delete_project tool call.
+
+        Deletes a project and all its task lists and tasks.
+        Default projects (Chore, Repeatable) cannot be deleted.
+
+        Args:
+            arguments: Dictionary containing 'project_id' or 'project_name'
+
+        Returns:
+            List containing a single TextContent with deletion confirmation
+
+        Requirements: 2.3, 2.4, 3.4
+        """
+        try:
+            from uuid import UUID
+
+            project_id_str = arguments.get("project_id")
+            project_name = arguments.get("project_name")
+
+            if not project_id_str and not project_name:
+                return [
+                    TextContent(
+                        type="text",
+                        text="Error: Either project_id or project_name is required",
+                    )
+                ]
+
+            # Find the project ID
+            project_id = None
+            project_display_name = None
+
+            if project_id_str:
+                try:
+                    project_id = UUID(project_id_str)
+                except ValueError:
+                    return [
+                        TextContent(
+                            type="text", text=f"Error: Invalid UUID format: {project_id_str}"
+                        )
+                    ]
+                # Get project name for display
+                project = self.project_orchestrator.get_project(project_id)
+                if project:
+                    project_display_name = project.name
+                else:
+                    project_display_name = str(project_id)
+            else:
+                # Find by name
+                projects = self.project_orchestrator.list_projects()
+                for p in projects:
+                    if p.name == project_name:
+                        project_id = p.id
+                        project_display_name = p.name
+                        break
+
+                if project_id is None:
+                    return [
+                        TextContent(
+                            type="text", text=f"Project with name '{project_name}' not found"
+                        )
+                    ]
+
+            # Delete project through orchestrator
+            self.project_orchestrator.delete_project(project_id)
+
+            result = f"Project '{project_display_name}' (ID: {project_id}) deleted successfully"
+            return [TextContent(type="text", text=result)]
+        except Exception as e:
+            return self._format_error_response(e, "delete_project")
 
     async def _handle_get_task_list(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle get_task_list tool call.

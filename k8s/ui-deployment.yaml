@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: ui
   namespace: task-manager
+  labels:
+    app: ui
+    component: frontend
 spec:
   replicas: 2
   selector:
@@ -12,6 +15,7 @@ spec:
     metadata:
       labels:
         app: ui
+        component: frontend
     spec:
       containers:
       - name: ui
@@ -20,6 +24,10 @@ spec:
         ports:
         - containerPort: 80
           name: http
+        # Note: Vite environment variables are embedded at build time.
+        # The configmap values (VITE_API_BASE_URL, VITE_USE_MOCK_DATA) are used
+        # as build arguments when building the Docker image, not as runtime env vars.
+        # To change API URL, rebuild the image with updated build args.
         resources:
           requests:
             memory: "128Mi"

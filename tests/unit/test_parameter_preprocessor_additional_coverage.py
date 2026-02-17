@@ -203,3 +203,26 @@ class TestParameterPreprocessorAdditionalCoverage:
         # Try to convert incompatible type
         result = preprocessor.preprocess(42, list)
         assert result == 42
+
+    def test_preprocess_with_none_value(self):
+        """Test preprocess returns None when value is None."""
+        preprocessor = ParameterPreprocessor()
+
+        result = preprocessor.preprocess(None, int)
+        assert result is None
+
+        result = preprocessor.preprocess(None, str)
+        assert result is None
+
+        result = preprocessor.preprocess(None, list)
+        assert result is None
+
+    def test_convert_to_number_string_to_float(self):
+        """Test _convert_to_number with string to float conversion."""
+        preprocessor = ParameterPreprocessor()
+
+        result = preprocessor._convert_to_number("3.14", float)
+        assert result == 3.14
+
+        result = preprocessor._convert_to_number("  42.5  ", float)
+        assert result == 42.5

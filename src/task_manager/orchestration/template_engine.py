@@ -135,43 +135,59 @@ class TemplateEngine:
 
         return json.dumps(task_dict, indent=2)
 
-    def render_template(self, template: str, task: Task) -> str:
+    def render_template(
+        self,
+        template: str,
+        task: Task,
+        task_list: Optional[TaskList] = None,
+        project: Optional[Project] = None,
+    ) -> str:
         """Render template with placeholder substitution.
 
         Replaces placeholders in the template with corresponding task property values.
-        Placeholders use the format {property_name}.
+        Placeholders use the format {{property_name}} (double braces).
 
         Supported placeholders:
-        - {id}: Task ID
-        - {title}: Task title
-        - {description}: Task description
-        - {status}: Task status
-        - {priority}: Task priority
-        - {task_list_id}: Task list ID
+        - {{task_title}}: Task title
+        - {{task_description}}: Task description
+        - {{task_status}}: Task status
+        - {{task_priority}}: Task priority
+        - {{project_name}}: Project name
+        - {{task_list_name}}: Task list name
 
         Args:
             template: The template string with placeholders
             task: The task to extract property values from
+            task_list: Optional task list for context
+            project: Optional project for context
 
         Returns:
             The rendered template with placeholders replaced
 
         Requirements: 10.5
         """
+        # Fetch task list if not provided
+        if task_list is None:
+            task_list = self.data_store.get_task_list(task.task_list_id)
+
+        # Fetch project if not provided
+        if project is None and task_list:
+            project = self.data_store.get_project(task_list.project_id)
+
         # Create mapping of placeholder names to values
         placeholders = {
-            "id": str(task.id),
-            "title": task.title,
-            "description": task.description,
-            "status": task.status.value,
-            "priority": task.priority.value,
-            "task_list_id": str(task.task_list_id),
+            "task_title": task.title,
+            "task_description": task.description,
+            "task_status": task.status.value,
+            "task_priority": task.priority.value,
+            "project_name": project.name if project else "",
+            "task_list_name": task_list.name if task_list else "",
         }
 
-        # Replace placeholders in template
+        # Replace placeholders in template (double braces format)
         rendered = template
         for key, value in placeholders.items():
-            placeholder = f"{{{key}}}"
+            placeholder = f"{{{{{key}}}}}"  # {{key}}
             rendered = rendered.replace(placeholder, value)
 
         return rendered
@@ -190,8 +206,14 @@ class TemplateEngine:
 
         Requirements: 10.1, 10.2, 10.3, 10.4, 10.5
         """
+        # Fetch task list and project for context
+        task_list = self.data_store.get_task_list(task.task_list_id)
+        project = None
+        if task_list:
+            project = self.data_store.get_project(task_list.project_id)
+
         # Resolve template using scope hierarchy
-        template = self.resolve_template(task)
+        template = self.resolve_template(task, task_list, project)
 
         # Check if template is serialized JSON (fallback) by attempting to parse it
         # This is more robust than checking if it starts with "{"
@@ -204,4 +226,4 @@ class TemplateEngine:
             pass
 
         # Render template with placeholders
-        return self.render_template(template, task)
+        return self.render_template(template, task, task_list, project)

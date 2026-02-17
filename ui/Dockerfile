@@ -11,12 +11,14 @@ RUN npm ci
 # Copy application files
 COPY . .
 
-# Build argument for API URL
+# Build arguments for Vite environment variables
 ARG VITE_API_BASE_URL=http://localhost:8000
+ARG VITE_USE_MOCK_DATA=false
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_USE_MOCK_DATA=${VITE_USE_MOCK_DATA}
 
-# Build the application
-RUN npm run build
+# Build the application (use build:prod to skip tests - tests run in CI)
+RUN npm run build:prod
 
 # Production stage
 FROM nginx:alpine
