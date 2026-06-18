@@ -17,6 +17,15 @@
 
 TasksMultiServer provides hierarchical task management through multiple interfaces, designed for both human users and AI agents. Store tasks in PostgreSQL or filesystem, access via MCP protocol, REST API, or web UI.
 
+![TasksMultiServer dashboard](docs/screenshots/01-dashboard.png)
+
+<p align="center">
+  <img src="docs/screenshots/02-tasks.png" alt="Task board with exit criteria and dependencies" width="49%" />
+  <img src="docs/screenshots/03-projects.png" alt="Projects overview" width="49%" />
+</p>
+
+<p align="center"><strong>📸 <a href="SHOWCASE.md">See the full visual showcase »</a></strong> — dashboard, tasks, projects, lists, and the REST API.</p>
+
 **For developers**: See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for development setup and contribution guidelines.
 
 ## Features
